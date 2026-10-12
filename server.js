@@ -5,6 +5,7 @@ const http = require('http'), fs = require('fs'), path = require('path'), crypto
 const SH = require('./public/js/shared.js');
 const { WEAPONS, ITEMS, ECON, P } = SH;
 const AUTH = require('./server/auth.js');
+const STORE = require('./server/store.js');
 const GIM = require('./server/gimmicks.js');
 // 맵 파일 (public/js/maps/*.js) 등록
 for (const f of fs.readdirSync(path.join(__dirname, 'public', 'js', 'maps')).sort()) if (f.endsWith('.js')) require(path.join(__dirname, 'public', 'js', 'maps', f));
@@ -19,6 +20,7 @@ function lanIPs() { return Object.values(os.networkInterfaces()).flat().filter(n
 /* ---------- HTTP ---------- */
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
+  if (p === '/healthz') { res.writeHead(200); return res.end('ok'); }
   if (p === '/auth-config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify(AUTH.publicConfig())); }
   if (p === '/info') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ port: PORT, ips: lanIPs() })); }
   if (p === '/') p = '/index.html';
@@ -112,14 +114,15 @@ const isPractice = (r) => r.cfg.mode === 'practice';
 
 const rooms = new Map();
 
-/* ---------- 랭킹 (data/rank.json 에 저장) ---------- */
-const RANK_DIR = path.join(__dirname, 'data'), RANK_FILE = path.join(RANK_DIR, 'rank.json');
+/* ---------- 랭킹 (계정 저장소의 '__rank' 칸에 저장: Supabase 또는 data/users.json) ---------- */
+const RANK_ID = '__rank';
 let rankDb = {};
-try { rankDb = JSON.parse(fs.readFileSync(RANK_FILE, 'utf8')) || {}; } catch (e) { rankDb = {}; }
-function saveRank() {
-  clearTimeout(saveRank.t);
-  saveRank.t = setTimeout(() => { try { fs.mkdirSync(RANK_DIR, { recursive: true }); fs.writeFileSync(RANK_FILE, JSON.stringify(rankDb)); } catch (e) { console.error(e); } }, 800);
-}
+STORE.get(RANK_ID).then(d => {
+  if (d) rankDb = Object.assign(d, rankDb);
+  else { try { Object.assign(rankDb, JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'rank.json'), 'utf8'))); } catch (e) { /* 옛 랭킹 파일 없음 */ } }
+  STORE.set(RANK_ID, rankDb);
+}).catch(e => console.log('랭킹 불러오기 실패: ' + e.message));
+function saveRank() { STORE.set(RANK_ID, rankDb); }
 function recordMatch(r, rank, win) {
   if (isPractice(r)) return;
   const first = rank[0] && rank[0].id;
@@ -1540,8 +1543,12 @@ setInterval(() => {
   }
 }, TICK);
 
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { console.log('종료 중... 저장'); await STORE.flush(); process.exit(0); });
+
 server.listen(PORT, () => {
   console.log(`픽셀 스트라이크 서버: http://localhost:${PORT}`);
+  console.log(AUTH.publicConfig().clientId ? '구글 로그인: 켜짐' : '구글 로그인: 클라이언트 ID 없음 (README 참고)');
+  STORE.check().then(k => console.log('계정 저장소: ' + (k === 'supabase' ? 'Supabase (DB)' : 'data/users.json (이 컴퓨터)'))).catch(e => console.log('계정 저장소 연결 실패: ' + e.message));
   const ips = lanIPs();
   if (ips.length) console.log('같은 와이파이 친구는: ' + ips.map(ip => `http://${ip}:${PORT}`).join('  '));
 });
