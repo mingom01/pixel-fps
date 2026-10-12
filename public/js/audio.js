@@ -71,3 +71,7 @@ export function sfxFanfare() { if (!ctx) return; const t = ctx.currentTime; cons
 export function sfxBeep(f, vol) { if (!ctx) return; const t = ctx.currentTime; out([tone(t, 0.07, f, f, 0.4, 'square')], 0.25 * (vol == null ? 1 : vol)); }
 
 export function sfxSpray(vol) { if (!ctx) return; const t = ctx.currentTime; out([noise(t, 0.45, 6000, 3000, 0.6, 0.5, 'highpass')], 0.3 * (vol == null ? 1 : vol)); }
+
+// 스킨 효과음(skins/skinSounds.js)에서 쓰는 합성 도구
+export const actx = () => ctx;
+export { noise as aNoise, tone as aTone, out as aOut };

@@ -1,5 +1,6 @@
 // 픽셀 텍스처 생성 (16x16 블록 아틀라스, 캐릭터 스킨)
 import * as THREE from '../lib/three.module.min.js';
+import { CHAR_SKINS } from './skins/charSkins.js';
 const { B } = window.SH;
 
 const T = 16, COLS = 8;
@@ -195,32 +196,7 @@ function dither(ctx, base, w, h, r, amt) {
 function hexs(c) { return '#' + c.toString(16).padStart(6, '0'); }
 
 // 캐릭터 스킨 (꾸미기 상점)
-export const CHAR_SKINS = {
-  default: { name: '기본', price: 0, lv: 1 },
-  soldier: { name: '군인', price: 300, lv: 1 },
-  pirate: { name: '해적', price: 450, lv: 2 },
-  zombie: { name: '좀비', price: 500, lv: 3 },
-  ninja: { name: '닌자', price: 600, lv: 4 },
-  pumpkin: { name: '호박머리', price: 700, lv: 5 },
-  robot: { name: '로봇', price: 900, lv: 7 },
-  astro: { name: '우주인', price: 1200, lv: 9 },
-  king: { name: '임금님', price: 2000, lv: 12 },
-  police: { name: '경찰', price: 500, lv: 2 },
-  clown: { name: '광대', price: 700, lv: 4 },
-  santa: { name: '산타', price: 900, lv: 4 },
-  firefighter: { name: '소방관', price: 600, lv: 3 },
-  cowboy: { name: '카우보이', price: 800, lv: 5 },
-  skeleton: { name: '해골', price: 800, lv: 5 },
-  knight: { name: '기사', price: 1000, lv: 6 },
-  panda: { name: '판다', price: 1000, lv: 6 },
-  wizard: { name: '마법사', price: 1100, lv: 7 },
-  alien: { name: '외계인', price: 1300, lv: 8 },
-  samurai: { name: '사무라이', price: 1500, lv: 10 },
-  hero: { name: '슈퍼히어로', price: 1800, lv: 11 },
-  shadow: { name: '그림자 암살자', gold: 80, lv: 1, legend: true },
-  dragon: { name: '드래곤 전사', gold: 150, lv: 1, legend: true },
-  golden: { name: '황금 전사', gold: 250, lv: 1, legend: true },
-};
+export { CHAR_SKINS };
 const toN = (arr) => arr.reduce((a, v) => a * 256 + v, 0);
 function camo(ctx, cols, w, h, r) {
   dither(ctx, cols[0], w, h, r, 0.08);

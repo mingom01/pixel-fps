@@ -88,7 +88,7 @@ server.on('upgrade', (req, socket) => {
 /* ---------- 유틸 ---------- */
 const BOT_NAMES = ['픽셀킹', '블록헤드', '네모난총잡이', '도트전사', '큐브맨', '8비트', '조준왕', '헤드샷러', '캠핑족', '뉴비봇', '고인물', '야생의봇', '총알받이', '저격수김씨', '돌격대장', '숨바꼭질', '점프맨', '탄창부족'];
 const BOT_SKINS = ['default', 'default', 'default', 'soldier', 'ninja', 'robot', 'zombie', 'pirate', 'astro', 'pumpkin', 'king', 'police', 'clown', 'santa', 'firefighter', 'cowboy', 'skeleton', 'knight', 'panda', 'wizard', 'alien', 'samurai', 'hero'];
-const BOT_GSKINS = ['default', 'default', 'default', 'gold', 'camo', 'pink', 'fire', 'neon', 'diamond', 'desert', 'arctic', 'toxic', 'blood', 'ocean', 'cyber', 'bone'];
+const BOT_GSKINS = ['default', 'default', 'default', 'camo', 'desert', 'arctic', 'urban', 'pink', 'mint', 'blood', 'gold', 'fire', 'ice', 'toxic', 'ocean', 'bone', 'neon', 'cyber', 'diamond', 'void', 'thunder', 'lava'];
 const BOT_TITLES = ['rookie', 'rookie', 'lv5', 'k1', 'w1', 'pixel', 'camper', 'lv10', 'k100', 'hunter', 'shadow'];
 const COLORS = 12;
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }

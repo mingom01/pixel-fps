@@ -2,7 +2,7 @@
 import * as THREE from '../lib/three.module.min.js';
 import { initTouch } from './touch.js';
 import { FACES, ATLAS_COLS, makeAtlas, PCOLORS, flashTex, smokeTex, holeTex, textSprite, BLOCK_COLOR, skinMats, CHAR_SKINS } from './tex.js';
-import { makeGun, makeChar, setCharGun, animChar, gunIcon, GUNS, GUN_SKINS } from './models.js';
+import { makeGun, makeChar, setCharGun, animChar, gunIcon, gunLength, GUNS, GUN_SKINS } from './models.js';
 import { buildWorld, buildSky, rebuildBlocks, disposeWorld } from './world.js';
 import { profile, saveProfile, levelInfo, myLevel, grantMatch, buyItem, equip, addGold, stats, dailyMissions, missionEvent, ACHIEVEMENTS, checkAchievements, GACHA_COST, RARITY, rollGacha } from './cosmetics.js';
 import * as A from './audio.js';
@@ -12,6 +12,10 @@ import { drawCross, getCross } from './settings/crosshair.js';
 import { toGame, resetBindsCache } from './settings/keybinds.js';
 import { showKillBanner, clearKillBanner } from './hud/killbanner.js';
 import { TITLES, titleOwned, titleHow, buyTitle, equipTitle, myTitle, titleHtml } from './titles.js';
+import { tickSkins } from './skins/gunMaterial.js';
+import { tickAuras, decorateGun, fxColor, killEffect } from './skins/skinFx.js';
+import { sfxSkinShot, sfxSkinKill, sfxFinisher, sfxEquip, sfxSkinStep } from './skins/skinSounds.js';
+import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
 
 const SH = window.SH;
 const { WEAPONS, ITEMS, P, ECON } = SH;
@@ -181,9 +185,21 @@ const pv = { r: new THREE.WebGLRenderer({ canvas: $('preview'), alpha: true, ant
 pv.r.setPixelRatio(1);
 pv.scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.8)); const pvl = new THREE.DirectionalLight(0xffffff, 1.3); pvl.position.set(1, 2, -2); pv.scene.add(pvl);
 pv.cam.position.set(0, 1.2, -4.3); pv.cam.lookAt(0, 0.95, 0);
-function refreshPreview() {
-  if (pv.ch) pv.scene.remove(pv.ch);
-  pv.ch = makeChar(CFG.color, profile.skin); setCharGun(pv.ch, 'rifle', profile.gskin); pv.ch.userData.shadow.visible = false; pv.scene.add(pv.ch);
+// o = { skin, gskin, gunShow } — 상점에서 안 산 스킨도 미리보기. gunShow 면 총만 크게 돌려 보여줌
+function refreshPreview(o) {
+  o = o || {};
+  if (pv.ch) { pv.scene.remove(pv.ch); pv.ch = null; }
+  if (pv.gun) { pv.scene.remove(pv.gun); pv.gun = null; }
+  const skin = o.skin || profile.skin, gskin = o.gskin || profile.gskin;
+  if (o.gunShow) {
+    const sc = 0.05, len = gunLength('rifle', sc), g = makeGun('rifle', sc, gskin);
+    decorateGun(g, GUN_SKINS[gskin], len);
+    g.position.set(0, -0.12, len * 0.18);
+    const holder = new THREE.Group(); holder.add(g); holder.position.set(0, 1.0, 0); holder.rotation.z = 0.12;
+    pv.gun = holder; pv.scene.add(holder);
+    return;
+  }
+  pv.ch = makeChar(CFG.color, skin); setCharGun(pv.ch, 'rifle', gskin); pv.ch.userData.shadow.visible = false; pv.scene.add(pv.ch);
 }
 refreshPreview();
 
@@ -200,7 +216,7 @@ function updateProfileUI() {
 updateProfileUI();
 let lockerTab = 'skin';
 $('lockerBtn').onclick = () => { A.initAudio(); $('locker').classList.remove('hidden'); $('lockerPrevSlot').appendChild($('preview')); renderLocker(); };
-$('lockerClose').onclick = () => { $('locker').classList.add('hidden'); $('previewSlot').appendChild($('preview')); };
+$('lockerClose').onclick = () => { $('locker').classList.add('hidden'); $('previewSlot').appendChild($('preview')); refreshPreview(); };
 $('lockerTabs').querySelectorAll('button').forEach(b => b.onclick = () => { lockerTab = b.dataset.tab; renderLocker(); });
 const skinThumbCache = {};
 function skinThumb(id) {
@@ -213,31 +229,16 @@ function renderLocker() {
   updateProfileUI();
   $('lockerTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === lockerTab));
   if (lockerTab === 'spray') {
+    refreshPreview();
     $('lockerGrid').innerHTML = SPRAYS.map((sp, i) => `<div class="lcard ${(profile.spray || 0) === i ? 'eq' : ''}" data-s="${i}"><div class="th"><img src="${sprayCanvas(i, 4).toDataURL()}"></div><div class="nm">${sp.name}</div><div class="pr own">${(profile.spray || 0) === i ? '사용 중' : '무료 · 눌러서 선택'}</div></div>`).join('') + '<div class="dim" style="grid-column:1/-1">게임 중 T 키로 벽에 스프레이를 뿌려요 · Y 키로 감정표현</div>';
     $('lockerGrid').querySelectorAll('[data-s]').forEach(c => c.onclick = () => { profile.spray = +c.dataset.s; saveProfile(); A.sfxSpray(1); renderLocker(); });
     return;
   }
-  if (lockerTab === 'title') { renderTitles(); return; }
-  if (lockerTab === 'gacha') { renderGacha(); $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`; return; }
-  const isSkin = lockerTab === 'skin', list = isSkin ? CHAR_SKINS : GUN_SKINS, owned = isSkin ? profile.skins : profile.gskins, cur = isSkin ? profile.skin : profile.gskin;
-  const lv = myLevel();
-  $('lockerGrid').innerHTML = Object.entries(list).map(([id, it]) => {
-    const own = owned.includes(id), lock = !own && lv < it.lv;
-    const th = isSkin ? skinThumb(id) : gunIcon('rifle', 2, id);
-    const pr = own ? `<div class="pr own">${id === cur ? '장착 중' : '보유 · 눌러서 장착'}</div>` : lock ? `<div class="pr lv">Lv.${it.lv} 필요</div>` : it.gold ? `<div class="pr gold"><i class="goldc"></i> ${it.gold} 골드</div>` : `<div class="pr"><i class="coin"></i> ${it.price}</div>`;
-    return `<div class="lcard ${id === cur ? 'eq' : ''} ${lock ? 'lock' : ''} ${it.legend ? 'legend' : ''}" data-id="${id}"><div class="th"><img src="${th}"></div><div class="nm">${it.name}</div>${pr}</div>`;
-  }).join('');
-  $('lockerGrid').querySelectorAll('.lcard').forEach(c => c.onclick = () => {
-    const id = c.dataset.id, kind = lockerTab;
-    if (!(kind === 'skin' ? profile.skins : profile.gskins).includes(id)) {
-      const res = buyItem(kind, id);
-      if (res !== 'ok') { A.sfxDeny(); toast({ coins: '코인이 부족해요', gold: '골드가 부족해요 (킬하면 모여요)', level: '레벨이 부족해요' }[res] || '살 수 없어요'); return; }
-      A.sfxBuy();
-    }
-    equip(kind, id); refreshPreview(); renderLocker();
-  });
-  $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`;
+  if (lockerTab === 'title') { refreshPreview(); renderTitles(); return; }
+  if (lockerTab === 'gacha') { refreshPreview(); renderGacha(); $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`; return; }
+  renderSkinShop(lockerTab);
 }
+initSkinShop({ thumb: (id) => skinThumb(id), preview: (o) => refreshPreview(o), toast, changed: () => updateProfileUI() });
 
 // 칭호 탭
 function renderTitles() {
@@ -886,7 +887,14 @@ function updateMe(dt) {
   me.eye = lerp(me.eye, me.crouch ? P.EYEC : P.EYE, Math.min(1, dt * 14));
   // 발소리
   const hs = Math.hypot(me.vx, me.vz);
-  if (me.ground && hs > 2 && !me.crouch) { stepAcc += dt * hs; if (stepAcc > 2.6) { stepAcc = 0; A.sfxStep(sprint ? 1 : 0.7); } }
+  if (me.ground && hs > 2 && !me.crouch) {
+    stepAcc += dt * hs;
+    if (stepAcc > 2.6) {
+      stepAcc = 0; A.sfxStep(sprint ? 1 : 0.7);
+      const cf = me.zombie ? null : (CHAR_SKINS[profile.skin] || {}).fx; // 레어+ 캐릭터: 발소리·발자국 효과
+      if (cf) { sfxSkinStep(cf.step, sprint ? 1 : 0.7); for (let i = 0; i < 4; i++) spawnParticle(me.x + (Math.random() - 0.5) * 0.4, me.y + 0.05, me.z + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 1.2, Math.random() * 1.2, (Math.random() - 0.5) * 1.2, cf.dust, 0.4, 0.05, 4); }
+    }
+  }
   WS.bob = (WS.bob || 0) + dt * (me.ground ? hs : 0) * 1.6;
   if (me.y < -10) { send({ t: 'suicide' }); me.alive = false; }
   tryPick(false);
@@ -923,6 +931,10 @@ function setViewModel(id, look) {
   vm.arms = arms; vm.holder.add(arms);
   const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: FLASH, transparent: true, depthTest: false }));
   fl.scale.set(0.22, 0.22, 1); fl.position.copy(gun.userData.muzzle); fl.visible = false; gun.add(fl); vm.flash = fl;
+  // 스킨: 총구 섬광 색 + 전설 오라
+  const gsk = GUN_SKINS[look.gskin];
+  if (gsk && gsk.fx && typeof gsk.fx.flash === 'number') fl.material.color.setHex(gsk.fx.flash);
+  if (id !== 'nade' && id !== 'claw') decorateGun(gun, gsk, gunLength(id, VMS));
   vm.flashT = 0;
 }
 function switchTo(w, force) {
@@ -933,6 +945,8 @@ function switchTo(w, force) {
   if (w !== 'knife' && w !== 'nade' && !ammo[w]) fullAmmo(w);
   setViewModel(w);
   A.sfxSwitch();
+  const gsk = GUN_SKINS[profile.gskin];
+  if (gsk && gsk.r === 'legend' && !me.zombie && w !== 'nade') sfxEquip(gsk.fx.snd);
 }
 function cycleWeapon(dir) {
   const list = [me.primary, me.secondary, meleeId(), me.nades > 0 ? 'nade' : null].filter(Boolean);
@@ -1013,6 +1027,9 @@ function fireGun(W) {
   vm.flashT = 0.05;
   muzzleLight(start);
   A.sfxShot(WS.cur, 1, 0);
+  const myFx = me.zombie ? null : (GUN_SKINS[profile.gskin] || {}).fx;
+  if (myFx) sfxSkinShot(myFx.snd, 1, 0);
+  const trc = W.tracer || (myFx ? fxColor(myFx.tracer) : 0);
   if (W.proj) {
     send({ t: 'proj', kind: 'rocket', x: eye.x + fwd.x * 0.6, y: eye.y + fwd.y * 0.6 - 0.1, z: eye.z + fwd.z * 0.6, dx: fwd.x, dy: fwd.y, dz: fwd.z });
   } else {
@@ -1034,8 +1051,8 @@ function fireGun(W) {
           const h2 = hits.get(nx.ent.id) || { dmg: 0, head: false, ent: nx.ent };
           h2.dmg += W.dmg * SH.falloff(W, nx.t) * (W.partMul || SH.PART_MUL)[nx.part]; if (nx.part === 'head') h2.head = true; hits.set(nx.ent.id, h2); blood(nx.p, d);
         }
-        tracer(start, last.p, W.tracer);
-      } else tracer(start, res.p, W.tracer);
+        tracer(start, last.p, trc);
+      } else tracer(start, res.p, trc);
       ends.push([+res.p.x.toFixed(2), +res.p.y.toFixed(2), +res.p.z.toFixed(2), res.ent ? 1 : 0]);
       if (res.ent) {
         const pm = (W.partMul || SH.PART_MUL)[res.part];
@@ -1050,7 +1067,7 @@ function fireGun(W) {
         res.tur.dmgAcc = (res.tur.dmgAcc || 0) + W.dmg * SH.falloff(W, res.t);
         hitTurs.add(res.tur);
         puff(res.p, 0xffd040, 5);
-      } else if (res.wall) impact(res.p, res.wall, d);
+      } else if (res.wall) impact(res.p, res.wall, d, myFx && fxColor(myFx.impact));
     }
     send({ t: 'shot', w: WS.cur, e: ends.slice(0, 12) });
     logShot(S.myId, WS.cur, ends);
@@ -1192,10 +1209,12 @@ function onRemoteShot(m) {
   const d = Math.hypot(st.x - me.x, st.y - me.y, st.z - me.z);
   const ang = Math.atan2(-(st.x - me.x), -(st.z - me.z)) - me.yaw;
   A.sfxShot(m.w, clamp(1 - d / 90, 0.06, 0.9), -Math.sin(ang) * 0.8);
+  const rr = S.roster.get(m.id), rfx = rr && !rr.zombie ? (GUN_SKINS[rr.gskin] || {}).fx : null;
+  if (rfx) sfxSkinShot(rfx.snd, clamp(1 - d / 90, 0.06, 0.9), -Math.sin(ang) * 0.8);
   flashAt(st, 0.35);
   for (const p of m.e || []) {
     const end = new THREE.Vector3(p[0], p[1], p[2]);
-    tracer(st, end, (WEAPONS[m.w] || {}).tracer);
+    tracer(st, end, (WEAPONS[m.w] || {}).tracer || (rfx ? fxColor(rfx.tracer) : 0));
     const dir = end.clone().sub(st).normalize();
     if (p[3]) blood(end, dir);
     else puff(end, 0xcccccc, 4);
@@ -1229,6 +1248,8 @@ function onKill(m) {
   while ($('killfeed').children.length > 6) $('killfeed').lastChild.remove();
   setTimeout(() => kf.remove(), 7000);
   const ve = S.ents.get(m.v);
+  const vsk = CHAR_SKINS[(vr || {}).skin];
+  if (ve && vsk && vsk.death) killEffect(spawnParticle, { x: ve.rx, y: ve.ry - 0.3, z: ve.rz }, vsk.death, null);
   if (ve) { ve.alive = false; ve.deadT = 0; ve.buf.push({ t: serverNow(), x: ve.rx, y: ve.ry, z: ve.rz, yaw: ve.ryaw, pitch: 0, fl: 0, w: '', hp: 0 }); for (let i = 0; i < 18; i++) spawnParticle(ve.rx, ve.ry + 1, ve.rz, (Math.random() - 0.5) * 5, Math.random() * 5, (Math.random() - 0.5) * 5, 0xb3201a, 0.8, 0.1, 14); }
   if (m.k === S.myId && m.v !== S.myId) {
     S.streak = m.streak;
@@ -1237,7 +1258,13 @@ function onKill(m) {
     c.innerHTML = `${m.hs ? '헤드샷! ' : ''}${esc(vn)} 처치 <span class="reward">+$${m.reward}</span>`;
     $('center').prepend(c); while ($('center').children.length > 3) $('center').lastChild.remove();
     setTimeout(() => c.remove(), 2600);
-    showKillBanner({ streak: m.streak || 1, hs: !!m.hs });
+    const gsk = GUN_SKINS[profile.gskin], csk = CHAR_SKINS[profile.skin];
+    showKillBanner({ streak: m.streak || 1, hs: !!m.hs, theme: (gsk && gsk.banner) || (csk && csk.banner) });
+    // 영웅: 처치 파편 + 처치음 / 전설: 피니셔
+    if (gsk && (gsk.r === 'epic' || gsk.r === 'legend') && !me.zombie) {
+      if (ve) killEffect(spawnParticle, { x: ve.rx, y: ve.ry, z: ve.rz }, gsk.fx.kill, gsk.finisher, flashAt);
+      if (gsk.finisher) sfxFinisher(gsk.finisher); else sfxSkinKill(gsk.fx.snd);
+    }
     onMyKill(m); trackKill(m);
     if (S.mode === 'practice' && S.pst) S.pst.kills++;
   }
@@ -1299,8 +1326,9 @@ function puff(p, color, n) { for (let i = 0; i < n; i++) spawnParticle(p.x, p.y,
 function blood(p, d) { for (let i = 0; i < 8; i++) spawnParticle(p.x, p.y, p.z, d.x * 2 + (Math.random() - 0.5) * 3, Math.random() * 3, d.z * 2 + (Math.random() - 0.5) * 3, Math.random() < 0.5 ? 0xc01e1e : 0x8a1010, 0.5 + Math.random() * 0.3, 0.07, 12); }
 const holes = []; const holeGeo = new THREE.PlaneGeometry(0.13, 0.13);
 const holeMat = new THREE.MeshBasicMaterial({ map: HOLE, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-function impact(p, wall, d) {
+function impact(p, wall, d, fxc) {
   const col = BLOCK_COLOR[wall.b] || 0x999999;
+  if (fxc) for (let i = 0; i < 5; i++) spawnParticle(p.x + wall.nx * 0.05, p.y + wall.ny * 0.05, p.z + wall.nz * 0.05, wall.nx * 3 + (Math.random() - 0.5) * 4, wall.ny * 3 + Math.random() * 3, wall.nz * 3 + (Math.random() - 0.5) * 4, fxc, 0.35 + Math.random() * 0.3, 0.06, 6);
   for (let i = 0; i < 6; i++) spawnParticle(p.x + wall.nx * 0.05, p.y + wall.ny * 0.05, p.z + wall.nz * 0.05, wall.nx * 2 + (Math.random() - 0.5) * 3, wall.ny * 2 + Math.random() * 2.5, wall.nz * 2 + (Math.random() - 0.5) * 3, col, 0.5 + Math.random() * 0.4, 0.07, 14);
   smoke(p.x + wall.nx * 0.1, p.y + wall.ny * 0.1, p.z + wall.nz * 0.1, 0.35, 0.5);
   let h = holes.length < 90 ? null : holes.shift();
@@ -2856,12 +2884,17 @@ function frame(dt) {
   } else {
     if (ED.on) { editorFrame(dt); return; }
     renderer.clear();
-    if (!$('menu').classList.contains('hidden') && pv.ch) { pv.ch.rotation.y += dt * 0.8; animChar(pv.ch, dt, 0, 0, false, false, false); pv.r.render(pv.scene, pv.cam); }
+    if (!$('menu').classList.contains('hidden') && (pv.ch || pv.gun)) {
+      if (pv.ch) { pv.ch.rotation.y += dt * 0.8; animChar(pv.ch, dt, 0, 0, false, false, false); }
+      if (pv.gun) pv.gun.rotation.y += dt * 0.6;
+      pv.r.render(pv.scene, pv.cam);
+    }
   }
 }
 function loop() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  tickSkins(now / 1000); tickAuras(dt);
   frame(dt);
   requestAnimationFrame(loop);
 }

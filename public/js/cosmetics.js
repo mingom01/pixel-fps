@@ -1,6 +1,8 @@
 // 프로필: 레벨 / XP / 코인 / 보유 스킨 (브라우저에 저장)
-import { CHAR_SKINS } from './tex.js';
-import { GUN_SKINS } from './models.js';
+import { CHAR_SKINS } from './skins/charSkins.js';
+import { GUN_SKINS } from './skins/gunSkins.js';
+import { RARITY, rarityOf } from './skins/rarity.js';
+export { RARITY, rarityOf };
 
 const KEY = 'pf_profile';
 const DEF = { gold: 0, xp: 0, coins: 300, skins: ['default'], gskins: ['default'], skin: 'default', gskin: 'default', games: 0, kills: 0, wins: 0 };
@@ -9,7 +11,11 @@ export const profile = (() => {
   try { p = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* */ }
   return Object.assign({}, DEF, p);
 })();
+// 이름이 바뀐 옛 스킨 → 새 스킨
+const RENAMED = { rainbow: 'prism' };
 function fixProfile() {
+  profile.gskins = [...new Set(profile.gskins.map(id => RENAMED[id] || id))];
+  if (RENAMED[profile.gskin]) profile.gskin = RENAMED[profile.gskin];
   if (!CHAR_SKINS[profile.skin] || !profile.skins.includes(profile.skin)) profile.skin = 'default';
   if (!GUN_SKINS[profile.gskin] || !profile.gskins.includes(profile.gskin)) profile.gskin = 'default';
 }
@@ -167,13 +173,6 @@ export function checkAchievements() {
 
 /* ================= 골드 뽑기 상자 ================= */
 export const GACHA_COST = 30;
-export const RARITY = [
-  { id: 'common', name: '일반', color: '#c9ced9', w: 50 },
-  { id: 'rare', name: '희귀', color: '#3d8bf0', w: 30 },
-  { id: 'epic', name: '영웅', color: '#b05ae8', w: 15 },
-  { id: 'legend', name: '전설', color: '#f4c22b', w: 5 },
-];
-export function rarityOf(it) { if (it.legend) return 'legend'; const p = it.price || 0; return p < 600 ? 'common' : p < 1100 ? 'rare' : 'epic'; }
 export function rollGacha() {
   if (profile.gold < GACHA_COST) return { err: 'gold' };
   profile.gold -= GACHA_COST;
@@ -186,7 +185,7 @@ export function rollGacha() {
   const pickd = pool[Math.floor(Math.random() * pool.length)];
   const owned = (pickd.kind === 'skin' ? profile.skins : profile.gskins);
   let dup = false;
-  if (owned.includes(pickd.id)) { dup = true; profile.coins += tier === 'legend' ? 1500 : tier === 'epic' ? 700 : tier === 'rare' ? 400 : 250; }
+  if (owned.includes(pickd.id)) { dup = true; profile.coins += RARITY.find(t => t.id === tier).dup; }
   else owned.push(pickd.id);
   saveProfile();
   return Object.assign({ dup }, pickd);
