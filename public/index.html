@@ -10,15 +10,26 @@
 <body>
 <canvas id="cv"></canvas>
 
+<!-- 로그인 (로그인해야 메뉴 이용 가능) -->
+<div id="login">
+  <div class="login-box">
+    <div class="logo"><span class="l1">PIXEL</span><span class="l2">STRIKE</span><div class="sub">픽셀 스트라이크 · 온라인 FPS</div></div>
+    <div class="login-msg">구글 계정으로 로그인하면 레벨 · 코인 · 스킨이 계정에 저장돼요</div>
+    <div id="gBtn"></div>
+    <div id="devLogin" class="hidden"><input id="devName" maxlength="10" placeholder="개발용 아이디"><button id="devLoginBtn" class="btn tiny">개발자 로그인</button></div>
+    <div id="loginStatus"></div>
+  </div>
+</div>
+
 <!-- 메인 메뉴 -->
 <div id="menu" class="screen">
   <div class="menu-wrap">
     <div class="logo"><span class="l1">PIXEL</span><span class="l2">STRIKE</span><div class="sub">픽셀 스트라이크 · 온라인 FPS</div></div>
     <div class="menu-cols">
       <div class="panel">
-        <div class="ptitle">내 캐릭터</div>
+        <div class="ptitle">내 캐릭터 <span class="acct"><span id="acctMail" class="dim"></span> <button id="logoutBtn" class="btn tiny">로그아웃</button></span></div>
         <div class="prof">
-          <span class="lvbadge" id="lvBadge">Lv.1</span>
+          <span class="lvbadge" id="lvBadge">Lv.1</span><span id="myTitle"></span>
           <div class="xpbar"><div id="xpFill"></div><span id="xpText">0 / 300</span></div>
         </div>
         <div class="coins"><i class="coin"></i><b id="coinNum">0</b> 코인 <i class="goldc"></i><b id="goldNum" class="goldtxt">0</b> <span class="goldtxt">골드</span></div>
@@ -33,6 +44,7 @@
         <div class="ptitle">플레이</div>
         <button id="quickBtn" class="btn big yellow">빠른 시작 <small>봇과 바로 대전 (모드 무작위)</small></button>
         <div class="row"><button id="hubBtn" class="btn green grow">미션 · 업적 <span id="missionDot"></span></button><button id="rankBtn" class="btn blue grow">전적 · 랭킹</button></div>
+        <button id="settingsBtn" class="btn wide">설정 <small>· 조준선 · 조작키 · 감도</small></button>
         <button id="editorBtn" class="btn wide">맵 에디터 <small>· 블록으로 나만의 맵 만들기</small></button>
         <button id="practiceBtn" class="btn blue wide">연습장 <small>· 사격장 과녁 · 허수아비 · 모든 총 무료</small></button>
         <div class="row">
@@ -46,7 +58,7 @@
           <b>WASD</b> 이동 · <b>Shift</b> 달리기 · <b>Space</b> 점프(2단) · <b>C</b> 앉기(달리면서 누르면 슬라이딩)<br>
           <b>좌클릭</b> 사격 · <b>우클릭</b> 조준 · <b>R</b> 재장전 · <b>1~4/휠</b> 무기 · <b>G</b> 수류탄 · <b>V</b> 칼<br>
           <b>B</b> 상점(부활 후 8초) · 빨간 받침대 = 힐팩 · 파란 받침대 = 갑옷 상자 (시간 지나면 다시 생겨요) · <b>Z</b> 포탑 설치 · <b>X</b> 공습 · <b>Y</b> 감정표현 · <b>T</b> 스프레이 · <b>F</b>(길게) 스파이크 설치 · <b>E</b>(길게) 해체 / 보급상자 열기 · <b>E</b> 무기 줍기 · <b>Tab</b> 점수 · <b>Enter</b> 채팅 · <b>Esc</b> 메뉴<br>
-          로켓·수류탄으로 벽을 부술 수 있어요 · 죽으면 <b>킬캠</b> (Space로 건너뛰기)
+          로켓·수류탄으로 벽을 부술 수 있어요 · 죽으면 <b>킬캠</b> (Space로 건너뛰기) · 키는 <b>설정</b>에서 바꿀 수 있어요
         </div>
       </div>
     </div>
@@ -60,9 +72,9 @@
     <div class="locker-cols">
       <div class="locker-prev"><div id="lockerPrevSlot"></div><div id="lockerSel" class="dim"></div></div>
       <div class="grow">
-        <div class="seg tabs" id="lockerTabs"><button data-tab="skin" class="on">캐릭터 스킨</button><button data-tab="gskin">총 스킨</button><button data-tab="spray">스프레이</button><button data-tab="gacha">골드 뽑기</button></div>
+        <div class="seg tabs" id="lockerTabs"><button data-tab="skin" class="on">캐릭터 스킨</button><button data-tab="gskin">총 스킨</button><button data-tab="title">칭호</button><button data-tab="spray">스프레이</button><button data-tab="gacha">골드 뽑기</button></div>
         <div id="lockerGrid"></div>
-        <div class="dim">매치를 끝까지 하면 XP와 코인을 받아요 (킬, 깃발 득점, 승리, 1등 보너스). 레벨이 오르면 +200 코인!</div>
+        <div class="dim">매치를 끝까지 하면 XP와 코인을 받아요 (킬, 깃발 득점, 승리, 1등 보너스). 레벨이 오르면 +100 코인!</div>
       </div>
     </div>
   </div>
@@ -98,10 +110,11 @@
 
 <!-- 게임 HUD -->
 <div id="hud" class="hidden">
-  <div id="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
+  <canvas id="cross"></canvas>
   <div id="hitmark"></div>
   <div id="scope"><div class="scope-hole"></div><div class="scope-dot"></div></div>
   <div id="vignette"></div>
+  <div id="gimTint"></div>
   <div id="dmgDirs"></div>
   <div id="topbar">
     <div id="teamBar" class="hidden"><span class="ts red"><b id="scoreR">0</b></span><div id="timerT">5:00</div><span class="ts blue"><b id="scoreB">0</b></span></div>
@@ -121,6 +134,7 @@
   <div id="killfeed"></div>
   <div id="center"></div>
   <div id="streak"></div>
+  <div id="killBanner"></div>
   <div id="bigMsg"></div>
   <div id="hint"></div>
   <div id="buyHint"></div>
@@ -162,6 +176,7 @@
     <label class="lbl">시야(FOV) <b id="fovVal"></b></label><input type="range" id="fov" min="60" max="110" step="1">
     <label class="lbl">볼륨 <b id="volVal"></b></label><input type="range" id="vol" min="0" max="1" step="0.05">
     <label class="chk"><input type="checkbox" id="kcToggle"> 죽으면 킬캠 보기</label>
+    <button id="pauseSetBtn" class="btn blue">조준선 · 조작키 설정</button>
     <div id="botMgr" class="hidden"><div class="ptitle small">봇 관리 <span class="dim">(방장)</span></div><div id="botMgrList" class="botlist"></div><div id="botMgrBtns" class="botbtns"></div></div>
     <button id="resumeBtn" class="btn big yellow">계속하기</button>
     <button id="endBtn" class="btn red hidden">매치 끝내기 (방장)</button>
@@ -177,6 +192,13 @@
     <div class="ptitle">내 기록 <button id="hubClose" class="btn tiny red right">닫기</button></div>
     <div class="seg tabs" id="hubTabs"><button data-tab="mission">일일 미션</button><button data-tab="ach">업적</button><button data-tab="stats">전적</button><button data-tab="rank">랭킹</button></div>
     <div id="hubBody"></div>
+  </div>
+</div>
+<div id="settings" class="modal hidden">
+  <div class="panel set-panel">
+    <div class="ptitle">설정 <button id="setClose" class="btn tiny red right">닫기</button></div>
+    <div class="seg tabs" id="setTabs"><button data-tab="cross">조준선</button><button data-tab="keys">조작키</button><button data-tab="gen">감도 · 화면</button></div>
+    <div id="setBody"><div id="setCross"></div><div id="setKeys" class="hidden"></div><div id="setGen" class="hidden"></div></div>
   </div>
 </div>
 <div id="notices"></div>
@@ -197,6 +219,16 @@
 <div id="toast"></div>
 
 <script src="js/shared.js"></script>
+<script src="js/maps/carnival.js"></script>
+<script src="js/maps/glacier.js"></script>
+<script src="js/maps/neon.js"></script>
+<script src="js/maps/powerplant.js"></script>
+<script src="js/maps/pyramid.js"></script>
+<script src="js/maps/reactor.js"></script>
+<script src="js/maps/skygarden.js"></script>
+<script src="js/maps/skyport.js"></script>
+<script src="js/maps/temple.js"></script>
+<script src="js/maps/volcano.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

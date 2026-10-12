@@ -4,6 +4,11 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), os = require('os');
 const SH = require('./public/js/shared.js');
 const { WEAPONS, ITEMS, ECON, P } = SH;
+const AUTH = require('./server/auth.js');
+const STORE = require('./server/store.js');
+const GIM = require('./server/gimmicks.js');
+// 맵 파일 (public/js/maps/*.js) 등록
+for (const f of fs.readdirSync(path.join(__dirname, 'public', 'js', 'maps')).sort()) if (f.endsWith('.js')) require(path.join(__dirname, 'public', 'js', 'maps', f));
 
 const PORT = Number(process.env.PORT) || 8230;
 const ROOT = path.join(__dirname, 'public');
@@ -15,6 +20,8 @@ function lanIPs() { return Object.values(os.networkInterfaces()).flat().filter(n
 /* ---------- HTTP ---------- */
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
+  if (p === '/healthz') { res.writeHead(200); return res.end('ok'); }
+  if (p === '/auth-config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify(AUTH.publicConfig())); }
   if (p === '/info') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ port: PORT, ips: lanIPs() })); }
   if (p === '/') p = '/index.html';
   const file = path.join(ROOT, p);
@@ -41,7 +48,7 @@ let nextId = 1;
 class Client {
   constructor(socket) {
     this.socket = socket; this.buf = Buffer.alloc(0); this.alive = true;
-    this.id = 'p' + (nextId++); this.room = null;
+    this.id = 'p' + (nextId++); this.room = null; this.user = null;
     socket.on('data', d => this.onData(d));
     socket.on('close', () => this.onClose());
     socket.on('error', () => this.onClose());
@@ -86,7 +93,8 @@ server.on('upgrade', (req, socket) => {
 /* ---------- 유틸 ---------- */
 const BOT_NAMES = ['픽셀킹', '블록헤드', '네모난총잡이', '도트전사', '큐브맨', '8비트', '조준왕', '헤드샷러', '캠핑족', '뉴비봇', '고인물', '야생의봇', '총알받이', '저격수김씨', '돌격대장', '숨바꼭질', '점프맨', '탄창부족'];
 const BOT_SKINS = ['default', 'default', 'default', 'soldier', 'ninja', 'robot', 'zombie', 'pirate', 'astro', 'pumpkin', 'king', 'police', 'clown', 'santa', 'firefighter', 'cowboy', 'skeleton', 'knight', 'panda', 'wizard', 'alien', 'samurai', 'hero'];
-const BOT_GSKINS = ['default', 'default', 'default', 'gold', 'camo', 'pink', 'fire', 'neon', 'diamond', 'desert', 'arctic', 'toxic', 'blood', 'ocean', 'cyber', 'bone'];
+const BOT_GSKINS = ['default', 'default', 'default', 'camo', 'desert', 'arctic', 'urban', 'pink', 'mint', 'blood', 'gold', 'fire', 'ice', 'toxic', 'ocean', 'bone', 'neon', 'cyber', 'diamond', 'void', 'thunder', 'lava'];
+const BOT_TITLES = ['rookie', 'rookie', 'lv5', 'k1', 'w1', 'pixel', 'camper', 'lv10', 'k100', 'hunter', 'shadow'];
 const COLORS = 12;
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 function cleanName(s) { return String(s || '').replace(/[<>&"'`]/g, '').trim().slice(0, 10) || '플레이어'; }
@@ -106,14 +114,15 @@ const isPractice = (r) => r.cfg.mode === 'practice';
 
 const rooms = new Map();
 
-/* ---------- 랭킹 (data/rank.json 에 저장) ---------- */
-const RANK_DIR = path.join(__dirname, 'data'), RANK_FILE = path.join(RANK_DIR, 'rank.json');
+/* ---------- 랭킹 (계정 저장소의 '__rank' 칸에 저장: Supabase 또는 data/users.json) ---------- */
+const RANK_ID = '__rank';
 let rankDb = {};
-try { rankDb = JSON.parse(fs.readFileSync(RANK_FILE, 'utf8')) || {}; } catch (e) { rankDb = {}; }
-function saveRank() {
-  clearTimeout(saveRank.t);
-  saveRank.t = setTimeout(() => { try { fs.mkdirSync(RANK_DIR, { recursive: true }); fs.writeFileSync(RANK_FILE, JSON.stringify(rankDb)); } catch (e) { console.error(e); } }, 800);
-}
+STORE.get(RANK_ID).then(d => {
+  if (d) rankDb = Object.assign(d, rankDb);
+  else { try { Object.assign(rankDb, JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'rank.json'), 'utf8'))); } catch (e) { /* 옛 랭킹 파일 없음 */ } }
+  STORE.set(RANK_ID, rankDb);
+}).catch(e => console.log('랭킹 불러오기 실패: ' + e.message));
+function saveRank() { STORE.set(RANK_ID, rankDb); }
 function recordMatch(r, rank, win) {
   if (isPractice(r)) return;
   const first = rank[0] && rank[0].id;
@@ -175,7 +184,7 @@ function createRoom(c, cfg, isPublic) {
   return r;
 }
 function broadcast(r, obj, except) { const s = JSON.stringify(obj); for (const c of r.clients) if (c !== except) c.send(s); }
-function roster(r) { return [...r.ents.values()].map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, skin: e.skin, gskin: e.gskin, lv: e.lv, caps: e.caps, boss: !!e.boss, zombie: !!e.zombie, gg: e.gg || 0 })); }
+function roster(r) { return [...r.ents.values()].map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, skin: e.skin, gskin: e.gskin, title: e.title, lv: e.lv, caps: e.caps, boss: !!e.boss, zombie: !!e.zombie, gg: e.gg || 0 })); }
 function roomMsg(r) { return { t: 'room', customName: r.custom ? r.custom.name : null, code: r.code, host: r.hostId, cfg: r.cfg, state: r.state, endAt: r.endAt, score: r.score, players: roster(r) }; }
 function pushRoom(r) { broadcast(r, roomMsg(r)); }
 function meMsg(e) { return { t: 'me', hp: Math.ceil(e.hp), armor: Math.ceil(e.armor), money: e.money, primary: e.primary, secondary: e.secondary, nades: e.nades, alive: e.alive, buyUntil: e.buyUntil, respawnAt: e.respawnAt, zombie: !!e.zombie, gg: e.gg || 0, helmet: e.helmet, perks: Object.keys(e.perks), sup: e.sup, maxHp: e.maxHp }; }
@@ -186,7 +195,7 @@ function joinRoom(c, r, m) {
   leaveRoom(c);
   c.room = r; r.clients.add(c);
   const e = newEnt(c.id, cleanName(m.name), clamp(Math.round(num(m.color, 0)), 0, COLORS - 1), false);
-  e.skin = cleanId(m.skin); e.gskin = cleanId(m.gskin); e.lv = clamp(Math.round(num(m.lv, 1)), 1, 999);
+  e.skin = cleanId(m.skin); e.gskin = cleanId(m.gskin); e.title = cleanId(m.title); e.lv = clamp(Math.round(num(m.lv, 1)), 1, 999);
   r.ents.set(c.id, e);
   fitBots(r);
   c.send(roomMsg(r));
@@ -217,7 +226,7 @@ function addBot(r, team) {
   let i = 1, id; do { id = 'b' + (i++); } while (r.ents.has(id));
   const name = pick(BOT_NAMES.filter(n => !used.has(n))) || ('봇' + i);
   const b = newEnt(id, name, Math.floor(Math.random() * COLORS), true);
-  b.skin = pick(BOT_SKINS); b.gskin = pick(BOT_GSKINS); b.lv = 1 + Math.floor(Math.random() * 30);
+  b.skin = pick(BOT_SKINS); b.gskin = pick(BOT_GSKINS); b.lv = 1 + Math.floor(Math.random() * 30); b.title = pick(BOT_TITLES);
   b.skill = skillFor(r);
   if (team === 0 || team === 1) { b.team = team; b.teamLock = true; }
   if (isPractice(r)) { b.dummy = true; b.name = '허수아비 ' + i; b.skin = 'default'; }
@@ -253,13 +262,14 @@ function ensureTeams(r) {
 
 /* ---------- 매치 ---------- */
 function startMsg(r) {
-  return { t: 'start', custom: r.cfg.map === 'custom' && r.custom ? r.custom.obj : null, map: r.cfg.map, mode: r.cfg.mode, endAt: r.endAt, target: SH.targetOf(r.cfg), now: Date.now(), drops: [...r.drops.values()], broken: r.broken, score: r.score, pk: (r.pickups || []).map(p => [p.id, p.readyAt]) };
+  return { t: 'start', custom: r.cfg.map === 'custom' && r.custom ? r.custom.obj : null, map: r.cfg.map, mode: r.cfg.mode, endAt: r.endAt, target: SH.targetOf(r.cfg), now: Date.now(), drops: [...r.drops.values()], broken: r.broken, score: r.score, pk: (r.pickups || []).map(p => [p.id, p.readyAt]), gim: GIM.snapshot(r) };
 }
 function startMatch(r) {
   r.state = 'play'; r.projs = []; r.drops.clear(); r.broken = []; r.score = [0, 0]; r.turrets = []; r.strikes = []; r.crates = []; r.sp = null;
   r.nextCrate = Date.now() + 35000;
   if (r.cfg.map === 'custom' && !r.custom) r.cfg.map = 'village';
   r.map = r.cfg.map === 'custom' ? r.custom.map.clone() : SH.getMap(r.cfg.map).clone();
+  GIM.start(r);
   r.pickups = isSpike(r) || isPractice(r) ? [] : r.map.pickups.map(p => Object.assign({ readyAt: 0 }, p));
   r.endAt = Date.now() + (isSpike(r) || isPractice(r) ? 3 * 3600 : r.cfg.time) * 1000;
   fitBots(r);
@@ -284,7 +294,7 @@ function endMatch(r) {
   r.state = 'end';
   const key = (e) => isGG(r) ? (e.gg || 0) * 1000 + e.kills : isBR(r) ? -(e.place || 99) * 1000 + e.kills : isBoss(r) ? (e.bossDmg || 0) : 0;
   const rank = [...r.ents.values()].filter(e => !e.boss && !e.minion).sort((a, b) => key(b) - key(a) || (b.caps - a.caps) * (r.cfg.mode === 'ctf' ? 1 : 0) || b.kills - a.kills || a.deaths - b.deaths)
-    .map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, caps: e.caps, lv: e.lv, gg: e.gg, place: e.place, dmg: Math.round(e.bossDmg || 0), zombie: !!e.zombie }));
+    .map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, caps: e.caps, lv: e.lv, title: e.title, gg: e.gg, place: e.place, dmg: Math.round(e.bossDmg || 0), zombie: !!e.zombie }));
   for (const e of r.ents.values()) if (e.origSkin) { e.skin = e.origSkin; e.origSkin = null; }
   for (const e of [...r.ents.values()]) if (e.boss || e.minion) { r.ents.delete(e.id); broadcast(r, { t: 'gone', id: e.id }); }
   const win = teamMode(r) ? (r.score[0] > r.score[1] ? 0 : r.score[1] > r.score[0] ? 1 : -1) : null;
@@ -292,7 +302,7 @@ function endMatch(r) {
   broadcast(r, { t: 'end', rank, mode: r.cfg.mode, win, score: r.score });
   log(`방 ${r.code} 매치 종료 — ${teamMode(r) ? '점수 ' + r.score.join(':') : '1위 ' + (rank[0] && rank[0].name)}`);
   clearTimeout(r.timer);
-  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; pushRoom(r); }, 12000);
+  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; pushRoom(r); }, 6000);
 }
 function addScore(r, team, n) {
   r.score[team] += n;
@@ -464,9 +474,12 @@ function explode(r, x, y, z, owner, kind) {
 
 function buy(r, e, item) {
   const now = Date.now();
-  if (r.state !== 'play' || !e.alive) return 'dead';
-  if (isGG(r) || isBR(r) || e.zombie) return 'mode';
-  if (now > e.buyUntil && !nearShop(r, e) && !isPractice(r)) return 'time';
+  const dead = !e.alive;
+  if (r.state !== 'play') return 'dead';
+  if (isGG(r) || isBR(r) || e.zombie || (dead && isZombie(r))) return 'mode';
+  // 죽어 있는 동안에도 다음 부활 때 쓸 장비를 살 수 있어요 (스파이크는 라운드제라 제외)
+  if (dead && (isSpike(r) || item === 'medkit' || item === 'ammo')) return 'dead';
+  if (!dead && now > e.buyUntil && !nearShop(r, e) && !isPractice(r)) return 'time';
   const W = WEAPONS[item], I = ITEMS[item];
   if (!W && (!I || !I.price)) return 'bad';
   const price = isPractice(r) ? 0 : W ? W.price : I.price;
@@ -740,7 +753,7 @@ function modeStart(r) {
   if (isBR(r)) {
     r.endAt = now + 3600 * 1000;
     // 바닥에 무기 뿌리기
-    const pool = ['pistol', 'pistol', 'magnum', 'smg', 'smg', 'shotgun', 'shotgun', 'rifle', 'rifle', 'carbine', 'lmg', 'sniper', 'rocket'];
+    const pool = ['pistol', 'pistol', 'magnum', 'uzi', 'smg', 'smg', 'shotgun', 'shotgun', 'dbarrel', 'rifle', 'rifle', 'burst', 'carbine', 'dmr', 'scout', 'lmg', 'sniper', 'rail', 'rocket'];
     const cells = r.map.spawns.concat(r.map.pickups.map(p => [p.x, p.y, p.z]));
     for (let i = 0; i < 30; i++) {
       const c = pick(cells), x = c[0] + (Math.random() - 0.5) * 5, z = c[2] + (Math.random() - 0.5) * 5;
@@ -950,7 +963,7 @@ function openCrate(r, e, id) {
   const kinds = new Set([rollLoot(), rollLoot()]);
   for (const k of kinds) {
     if (k === 'weapon') {
-      const w = pick(['rocket', 'minigun', 'lmg', 'sniper', 'carbine']);
+      const w = pick(['rocket', 'minigun', 'lmg', 'sniper', 'carbine', 'rail', 'dmr']);
       if (e.primary && e.primary !== w) { const nd = { id: 'd' + (r.pid++), w: e.primary, x: e.x, y: e.y + 0.3, z: e.z, until: Date.now() + 40000 }; r.drops.set(nd.id, nd); broadcast(r, { t: 'drop', d: nd }); }
       e.primary = w; e.w = w; got.push('w:' + w);
       const cl = clientOf(r, e.id); if (cl) cl.send({ t: 'got', w });
@@ -967,7 +980,21 @@ function openCrate(r, e, id) {
 }
 
 /* ---------- 메시지 ---------- */
+// 로그인 전에는 'auth' 만 받아요
+function handleAuth(c, m) {
+  if (m.t === 'logout') { if (c.user) AUTH.logout(c.user.token); c.user = null; leaveRoom(c); return; }
+  if (m.t === 'profile') { if (c.user && !AUTH.saveProfile(c.user.sub, m.p)) c.send({ t: 'err', text: '프로필 저장 실패' }); return; }
+  AUTH.login(m).then(u => {
+    if (!c.alive) return;
+    c.user = u;
+    c.send({ t: 'authed', sub: u.sub, token: u.token, email: u.email, name: u.name, profile: u.profile });
+    log(`로그인: ${u.email || u.sub}`);
+  }).catch(e => c.send({ t: 'autherr', text: e.message || '로그인 실패', token: !!m.token }));
+}
+
 function handle(c, m) {
+  if (m.t === 'auth' || m.t === 'logout' || m.t === 'profile') return handleAuth(c, m);
+  if (!c.user) { c.send({ t: 'needauth' }); return; }
   const r = c.room;
   switch (m.t) {
     case 'list':
@@ -1207,14 +1234,16 @@ function botSpawn(r, b) {
   const rich = b.skill > 0.7 ? 1.4 : 1;
   const prefs = [];
   if (b.money >= 4750 && Math.random() < 0.22 * rich) prefs.push('sniper');
+  if (b.money >= 3600 && Math.random() < 0.25 * rich) prefs.push(pick(['dmr', 'rail']));
+  if (b.money >= 2300 && Math.random() < 0.3) prefs.push(pick(['burst', 'scout']));
   if (b.money >= 4200 && Math.random() < 0.25) prefs.push('lmg');
   if (b.money >= 3100 && Math.random() < 0.5 * rich) prefs.push('carbine');
   if (b.money >= 2700) prefs.push('rifle');
-  if (b.money >= 1600 && Math.random() < 0.4) prefs.push('shotgun');
+  if (b.money >= 1600 && Math.random() < 0.4) prefs.push(pick(['shotgun', 'dbarrel']));
   if (b.money >= 1250) prefs.push('smg');
   if (!b.primary && prefs.length) buy(r, b, prefs[0]);
   if (b.money >= 650 + 1000 && Math.random() < 0.7) buy(r, b, 'armor');
-  if (b.secondary === 'pistol' && b.money >= 1500 && Math.random() < 0.4) buy(r, b, 'magnum');
+  if (b.secondary === 'pistol' && b.money >= 1500 && Math.random() < 0.4) buy(r, b, pick(['magnum', 'uzi']));
   if (b.money >= 900 && Math.random() < 0.5) buy(r, b, 'helmet');
   if (b.money >= 3500 && Math.random() < 0.35) buy(r, b, pick(['perk_speed', 'perk_hp', 'perk_reload']));
   if (b.money >= 4500 && Math.random() < 0.18) { buy(r, b, 'turret'); b.deployAt = Date.now() + 2000 + Math.random() * 4000; }
@@ -1404,6 +1433,12 @@ function botThink(r, b, dt, now) {
   if (isBR(r) && (!b.primary || !b.secondary)) for (const d of r.drops.values()) { if (Math.hypot(d.x - bd.x, d.z - bd.z) < 1.5 && Math.abs(d.y - bd.y) < 2) { const sl = WEAPONS[d.w].slot === 'secondary' ? 'secondary' : 'primary'; if (!b[sl]) { takeDrop(r, b, d); b.w = b.primary || b.secondary; break; } } }
   const l = Math.hypot(mvx, mvz);
   if (l > 0.01) { mvx /= l; mvz /= l; }
+  // 낭떠러지 맵: 앞에 발 디딜 곳이 없으면 멈춤 (구름 바다로 떨어지지 않게)
+  if (m.gim && m.gim.voidY && l > 0.01 && !(bd.launchT > 0)) {
+    const fx = Math.floor(bd.x + mvx * 0.9), fz = Math.floor(bd.z + mvz * 0.9);
+    let safe = false; for (let y = Math.floor(bd.y) - 1; y >= Math.floor(bd.y) - 4 && y > 1; y--) if (m.solid(fx, y, fz) && !SH.HAZARD_FLOOR.has(m.get(fx, y, fz))) { safe = true; break; }
+    if (!safe) { mvx = 0; mvz = 0; bd.vx *= 0.3; bd.vz *= 0.3; b.path = null; }
+  }
   const acc = bd.ground ? 40 : 10;
   bd.vx += clamp(mvx * sp - bd.vx, -acc * dt, acc * dt);
   bd.vz += clamp(mvz * sp - bd.vz, -acc * dt, acc * dt);
@@ -1450,6 +1485,8 @@ function botFire(r, b, t, dist, W) {
   if (total > 0) damage(r, t, b, total, b.w, head ? 'head' : 'body');
 }
 
+GIM.init({ broadcast, explode, damage, topY });
+
 /* ---------- 틱 ---------- */
 setInterval(() => {
   const now = Date.now(), dt = TICK / 1000;
@@ -1467,6 +1504,8 @@ setInterval(() => {
     turretTick(r, dt, now);
     if (r.state !== 'play') continue;
     strikeTick(r, now);
+    if (r.state !== 'play') continue;
+    GIM.tick(r, now, dt);
     if (r.state !== 'play') continue;
     if (isSpike(r)) { spikeTick(r, now); if (r.state !== 'play') continue; }
     crateTick(r, now);
@@ -1504,8 +1543,12 @@ setInterval(() => {
   }
 }, TICK);
 
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { console.log('종료 중... 저장'); await STORE.flush(); process.exit(0); });
+
 server.listen(PORT, () => {
   console.log(`픽셀 스트라이크 서버: http://localhost:${PORT}`);
+  console.log(AUTH.publicConfig().clientId ? '구글 로그인: 켜짐' : '구글 로그인: 클라이언트 ID 없음 (README 참고)');
+  STORE.check().then(k => console.log('계정 저장소: ' + (k === 'supabase' ? 'Supabase (DB)' : 'data/users.json (이 컴퓨터)'))).catch(e => console.log('계정 저장소 연결 실패: ' + e.message));
   const ips = lanIPs();
   if (ips.length) console.log('같은 와이파이 친구는: ' + ips.map(ip => `http://${ip}:${PORT}`).join('  '));
 });

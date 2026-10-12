@@ -14,7 +14,13 @@
     DARKWOOD: 28, CYELLOW: 29,
     SNOW: 30, ICE: 31, PINE: 32, MOSSY: 33, STONEBRICK: 34, ORE_COAL: 35, ORE_GOLD: 36, ORE_DIA: 37, REGOLITH: 38, MOONROCK: 39,
     PANEL: 40, WINDOW: 41, WOOL_R: 42, WOOL_B: 43, WOOL_W: 44, WOOL_Y: 45, GOLD: 46, GLOWC: 47,
+    // 기믹 블록 (맵 특수 바닥)
+    LAVA: 48, JUMPPAD: 49, PORTAL: 50, CONVEYOR: 51, QUICKSAND: 52, ELECTRIC: 53, VOIDB: 54,
+    BASALT: 55, NEON_P: 56, NEON_B: 57, OBSIDIAN: 58, TRAMPOLINE: 59, CLOUD: 60, MARBLE: 61,
   };
+  // 밟으면 위험한 바닥 (봇 길찾기·스폰에서 제외)
+  const HAZARD_FLOOR = new Set([B.LAVA, B.VOIDB, B.ELECTRIC]);
+  const NOSPAWN = new Set([B.JUMPPAD, B.PORTAL, B.TRAMPOLINE, B.CONVEYOR, B.QUICKSAND]);
 
   function rng(seed) {
     return function () {
@@ -42,7 +48,7 @@
     }
     clone() {
       const m = new VMap(this.W, this.H, this.D); m.d.set(this.d);
-      m.id = this.id; m.spawns = this.spawns; m.bases = this.bases; m.teamSpawns = this.teamSpawns; m.shops = this.shops; m.pickups = this.pickups; m.grav = this.grav; m.spike = this.spike; m.range = this.range;
+      m.id = this.id; m.spawns = this.spawns; m.bases = this.bases; m.teamSpawns = this.teamSpawns; m.shops = this.shops; m.pickups = this.pickups; m.grav = this.grav; m.spike = this.spike; m.range = this.range; m.gim = this.gim;
       return m;
     }
     free(x0, y0, z0, x1, y1, z1) {
@@ -647,6 +653,9 @@
       range: { spawn: [4, 43, 40, 53], dummy: [44, 4, 61, 38], targets: [[7, 30], [17, 30], [27, 30], [36.5, 30], [7, 20], [17, 20], [27, 20], [36.5, 20], [7, 7], [17, 7], [27, 7], [36.5, 7]] } },
     arena: { name: '픽셀 아레나', build: buildArena, sky: [0x2a1a4a, 0x8a5ac0], fog: 0x5a3a8a, sun: 1, stars: true, noClouds: true, fogNear: 50, fogFar: 150 },
   };
+  // maps/*.js 에서 새 맵을 등록 (빌더 도구 공유)
+  const MAPKIT = { VMap, B, G, rng, ground, border, house, roofStairs, stairs, tree, scatter, crateStack, pineTree, bigTree, mound };
+  function registerMap(id, def) { MAPS[id] = def; }
   const mapCache = {};
   function getMap(id) {
     if (!MAPS[id]) id = 'village';
@@ -680,6 +689,7 @@
         m.shops = [];
       }
       if (def.range) m.range = { spawn: cellsIn(m, def.range.spawn), dummy: cellsIn(m, def.range.dummy), targets: def.range.targets };
+      if (def.gim) m.gim = def.gim;
       mapCache[id] = m;
     }
     return mapCache[id];
@@ -727,7 +737,7 @@
     return m;
   }
 
-  function walkable(m, x, y, z) { return m.solid(x, y - 1, z) && !m.solid(x, y, z) && !m.solid(x, y + 1, z); }
+  function walkable(m, x, y, z) { return m.solid(x, y - 1, z) && !HAZARD_FLOOR.has(m.get(x, y - 1, z)) && !m.solid(x, y, z) && !m.solid(x, y + 1, z); }
   function openSky(m, x, y, z) { for (let yy = y; yy < m.H; yy++) if (m.solid(x, yy, z)) return false; return true; }
 
   // 힐팩 / 갑옷 상자 고정 위치 (스폰 근처는 피하고 서로 멀리)
@@ -760,7 +770,7 @@
     for (let z = 3; z < m.D - 3; z++) for (let x = 3; x < m.W - 3; x++) {
       const y = G;
       let ok = true;
-      for (let dz = -1; dz <= 1 && ok; dz++) for (let dx = -1; dx <= 1 && ok; dx++) if (!walkable(m, x + dx, y, z + dz) || m.solid(x + dx, y + 2, z + dz)) ok = false;
+      for (let dz = -1; dz <= 1 && ok; dz++) for (let dx = -1; dx <= 1 && ok; dx++) if (!walkable(m, x + dx, y, z + dz) || m.solid(x + dx, y + 2, z + dz) || NOSPAWN.has(m.get(x + dx, y - 1, z + dz))) ok = false;
       if (ok && openSky(m, x, y, z)) c.push([x + 0.5, y, z + 0.5]);
     }
     const r = rng(id.length * 97 + 5), out = [];
@@ -792,6 +802,8 @@
 
   // b: {x,y,z,vx,vy,vz,h,ground}  → 1블록 자동 오르기 (b.stepDy 누적)
   function moveBody(m, b, dt) {
+    // 점프대로 날아가는 중엔 공중 조작 무시
+    if (b.launchT > 0) { b.vx = b.lvx; b.vz = b.lvz; b.launchT -= dt; }
     const wasGround = b.ground;
     b.ground = false;
     const sp = Math.max(Math.abs(b.vx), Math.abs(b.vy), Math.abs(b.vz)) * dt;
@@ -806,9 +818,42 @@
       }
       b.y = ny;
       const g = wasGround || b.ground;
-      moveH(m, b, b.vx * sdt, 0, g);
-      moveH(m, b, 0, b.vz * sdt, g);
+      const slow = m.gim && g && floorAt(m, b) === B.QUICKSAND ? 0.45 : 1;
+      moveH(m, b, b.vx * sdt * slow, 0, g);
+      moveH(m, b, 0, b.vz * sdt * slow, g);
     }
+    if (b.ground && b.launchT > 0) b.launchT = 0;
+    if (m.gim) gimStep(m, b, dt, wasGround);
+  }
+
+  /* ================= 맵 기믹 (점프대·포탈·컨베이어·트램펄린) ================= */
+  function floorAt(m, b) { return m.get(Math.floor(b.x), Math.floor(b.y - 0.05), Math.floor(b.z)); }
+  const inR = (rc, x, z) => x >= rc[0] && x <= rc[2] + 1 && z >= rc[1] && z <= rc[3] + 1;
+  // b.gimEv 에 일어난 일을 남겨요 ('pad' | 'tp' | 'bounce') — 클라가 소리·효과에 씀
+  function gimStep(m, b, dt, wasGround) {
+    const g = m.gim, fl = b.ground ? floorAt(m, b) : 0;
+    b.tpCD = Math.max(0, (b.tpCD || 0) - dt);
+    if (fl === B.JUMPPAD && g.pads) {
+      const pad = g.pads.find(p => inR(p.at, b.x, b.z)) || { h: 6 };
+      const G2 = P.GRAV * (m.grav || 1), vy = Math.sqrt(2 * G2 * pad.h);
+      b.vy = vy; b.ground = false; b.gimEv = 'pad';
+      if (pad.to) {
+        const ty = pad.to[1] != null ? pad.to[1] : b.y, down = Math.max(0.5, b.y + pad.h - ty);
+        const T = vy / G2 + Math.sqrt(2 * down / G2);
+        b.lvx = (pad.to[0] - b.x) / T; b.lvz = (pad.to[2] - b.z) / T; b.vx = b.lvx; b.vz = b.lvz; b.launchT = T;
+      }
+    } else if (fl === B.TRAMPOLINE && !wasGround) {
+      b.vy = Math.max(P.JUMP * 1.6, Math.min(22, (b.lastVy || 0) * -0.92)); b.ground = false; b.gimEv = 'bounce';
+    } else if (fl === B.CONVEYOR && g.conv) {
+      const c = g.conv.find(o => inR(o.at, b.x, b.z));
+      if (c) { moveH(m, b, c.dir[0] * c.sp * dt, 0, true); moveH(m, b, 0, c.dir[1] * c.sp * dt, true); }
+    }
+    if (g.portals && !b.tpCD) {
+      for (const pt of g.portals) {
+        if (inR(pt.at, b.x, b.z) && Math.abs(b.y - pt.y) < 1.2) { b.x = pt.to[0]; b.y = pt.to[1]; b.z = pt.to[2]; b.vx = b.vz = 0; b.tpCD = 1.2; b.gimEv = 'tp'; if (pt.yaw != null) b.tpYaw = pt.yaw; break; }
+      }
+    }
+    b.lastVy = b.vy;
   }
   function moveH(m, b, dx, dz, g) {
     if (!dx && !dz) return;
@@ -917,6 +962,12 @@
     lmg: { name: '블록 기관총', slot: 'primary', price: 4200, dmg: 30, rpm: 720, mag: 100, res: 200, reload: 5.2, spread: 0.034, mspread: 0.05, recoil: 1.7, auto: true, range: [25, 60, 0.75], reward: 300, speed: 0.85, zoom: 1.3, cat: 'heavy' },
     sniper: { name: 'AWB 저격총', slot: 'primary', price: 4750, dmg: 120, rpm: 42, mag: 5, res: 20, reload: 3.4, spread: 0.12, adsSpread: 0.0, mspread: 0.15, recoil: 9, range: [80, 120, 0.9], reward: 100, speed: 0.88, zoom: 4.2, scope: true, partMul: { head: 2, body: 1, legs: 0.75 }, cat: 'rifle' },
     rocket: { name: '로켓 런처', slot: 'primary', price: 5500, dmg: 130, radius: 4.5, proj: 'rocket', rpm: 50, mag: 1, res: 5, reload: 2.6, spread: 0.0, mspread: 0.0, recoil: 7, reward: 300, speed: 0.82, zoom: 1.2, cat: 'heavy' },
+    burst: { name: 'BR-3 버스트', slot: 'primary', price: 2300, dmg: 34, rpm: 900, burst: 3, burstGap: 0.28, mag: 24, res: 72, reload: 2.3, spread: 0.012, mspread: 0.05, recoil: 1.4, range: [25, 60, 0.75], reward: 300, speed: 0.97, zoom: 1.6, cat: 'rifle', desc: '한 번 누르면 3발 점사' },
+    dmr: { name: 'DMR-블록', slot: 'primary', price: 3600, dmg: 58, rpm: 300, mag: 12, res: 48, reload: 2.6, spread: 0.006, mspread: 0.08, recoil: 4, range: [40, 90, 0.85], reward: 200, speed: 0.93, zoom: 2.6, cat: 'rifle', desc: '정확한 반자동 지정사수 소총' },
+    uzi: { name: 'UZ 기관권총', slot: 'secondary', price: 900, dmg: 15, rpm: 950, mag: 22, res: 88, reload: 1.7, spread: 0.035, mspread: 0.02, recoil: 0.8, auto: true, range: [6, 20, 0.5], reward: 400, speed: 1.02, zoom: 1.2, cat: 'pistol', desc: '연사되는 보조무기' },
+    dbarrel: { name: '더블배럴', slot: 'primary', price: 1900, dmg: 16, pellets: 10, rpm: 240, mag: 2, res: 24, reload: 2.2, spread: 0.1, mspread: 0.02, recoil: 8, range: [5, 14, 0.25], reward: 900, speed: 0.98, zoom: 1.15, cat: 'smg', desc: '두 발 연속 근거리 한 방' },
+    scout: { name: '스카우트', slot: 'primary', price: 2600, dmg: 80, rpm: 70, mag: 8, res: 32, reload: 2.6, spread: 0.1, adsSpread: 0.0, mspread: 0.12, recoil: 6, range: [60, 100, 0.85], reward: 300, speed: 1.0, zoom: 3.4, scope: true, partMul: { head: 2.5, body: 1, legs: 0.75 }, cat: 'rifle', desc: '가벼운 저격총 · 헤드샷 한 방' },
+    rail: { name: '레일건', slot: 'primary', price: 5200, dmg: 95, pierce: 3, rpm: 55, mag: 3, res: 15, reload: 3.0, spread: 0.02, adsSpread: 0.0, mspread: 0.1, recoil: 8, range: [100, 140, 1], reward: 200, speed: 0.86, zoom: 2.2, partMul: { head: 1.6, body: 1, legs: 0.8 }, tracer: 0x5fe3ff, cat: 'heavy', desc: '적 3명까지 관통' },
     minigun: { name: '미니건', slot: 'primary', price: 6200, dmg: 16, rpm: 1400, mag: 200, res: 200, reload: 6, spread: 0.045, mspread: 0.03, recoil: 0.6, auto: true, spin: 0.55, range: [20, 50, 0.7], reward: 300, speed: 0.72, zoom: 1.1, cat: 'heavy' },
   };
   const ITEMS = {
@@ -938,7 +989,8 @@
   function maxShotDamage(w) {
     const W = WEAPONS[w]; if (!W) return 0;
     if (W.melee) return W.dmg * 3;
-    return W.dmg * (W.pellets || 1) * 2.2 + 1;
+    const mul = Math.max(2.2, ...Object.values(W.partMul || {}));
+    return W.dmg * (W.pellets || 1) * mul + 1;
   }
   function falloff(W, dist) {
     if (!W.range) return 1;
@@ -977,5 +1029,5 @@
     return null;
   }
 
-  return { encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });

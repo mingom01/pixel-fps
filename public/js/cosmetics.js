@@ -1,18 +1,43 @@
 // 프로필: 레벨 / XP / 코인 / 보유 스킨 (브라우저에 저장)
-import { CHAR_SKINS } from './tex.js';
-import { GUN_SKINS } from './models.js';
+import { CHAR_SKINS } from './skins/charSkins.js';
+import { GUN_SKINS } from './skins/gunSkins.js';
+import { RARITY, rarityOf } from './skins/rarity.js';
+export { RARITY, rarityOf };
 
 const KEY = 'pf_profile';
 const DEF = { gold: 0, xp: 0, coins: 300, skins: ['default'], gskins: ['default'], skin: 'default', gskin: 'default', games: 0, kills: 0, wins: 0 };
 export const profile = (() => {
   let p = {};
   try { p = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* */ }
-  p = Object.assign({}, DEF, p);
-  if (!CHAR_SKINS[p.skin] || !p.skins.includes(p.skin)) p.skin = 'default';
-  if (!GUN_SKINS[p.gskin] || !p.gskins.includes(p.gskin)) p.gskin = 'default';
-  return p;
+  return Object.assign({}, DEF, p);
 })();
-export function saveProfile() { try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (e) { /* */ } }
+// 이름이 바뀐 옛 스킨 → 새 스킨
+const RENAMED = { rainbow: 'prism' };
+function fixProfile() {
+  profile.gskins = [...new Set(profile.gskins.map(id => RENAMED[id] || id))];
+  if (RENAMED[profile.gskin]) profile.gskin = RENAMED[profile.gskin];
+  if (!CHAR_SKINS[profile.skin] || !profile.skins.includes(profile.skin)) profile.skin = 'default';
+  if (!GUN_SKINS[profile.gskin] || !profile.gskins.includes(profile.gskin)) profile.gskin = 'default';
+}
+fixProfile();
+
+// 저장할 때마다 서버로도 보냄 (로그인 후 auth.js 가 연결)
+let syncFn = null, syncT = 0;
+export function setProfileSync(fn) { syncFn = fn; }
+export function saveProfile() {
+  try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (e) { /* */ }
+  if (syncFn) { clearTimeout(syncT); syncT = setTimeout(() => syncFn(profile), 400); }
+}
+// 서버에서 받은 프로필로 교체 (객체는 그대로 두고 내용만 바꿈 — 다른 모듈이 참조 중)
+export function loadProfile(p) {
+  const st = profile.stats;
+  for (const k of Object.keys(profile)) delete profile[k];
+  Object.assign(profile, DEF, JSON.parse(JSON.stringify(p || {})));
+  if (st) { for (const k of Object.keys(st)) delete st[k]; Object.assign(st, profile.stats || {}); profile.stats = st; }
+  fixProfile(); fixStats();
+  if (!profile.ach) profile.ach = {};
+  try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (e) { /* */ }
+}
 
 // 레벨 n → n+1 에 필요한 XP: 300 + 150*(n-1)
 export function levelInfo(xp) {
@@ -26,11 +51,12 @@ export const myLevel = () => levelInfo(profile.xp).lv;
 export function grantMatch({ kills, caps, win, rank }) {
   const before = myLevel();
   const xp = 100 + kills * 25 + caps * 80 + (win ? 150 : 0) + (rank === 0 ? 100 : 0);
-  const coins = 30 + kills * 10 + caps * 40 + (win ? 100 : 0) + (rank === 0 ? 50 : 0);
+  // 코인 획득량 (이전 대비 약 40% 감소)
+  const coins = 18 + kills * 6 + caps * 24 + (win ? 60 : 0) + (rank === 0 ? 30 : 0);
   profile.xp += xp; profile.coins += coins; profile.games++; profile.kills += kills; if (win) { profile.wins++; profile.gold += 5; }
   const after = myLevel();
   // 레벨업 보너스 코인
-  const bonus = (after - before) * 200;
+  const bonus = (after - before) * 100;
   profile.coins += bonus;
   saveProfile();
   return { xp, coins: coins + bonus, before, after, gold: win ? 5 : 0 };
@@ -57,9 +83,12 @@ export function addGold(n) { profile.gold += n; saveProfile(); }
 /* ================= 전적 ================= */
 if (!profile.stats) profile.stats = {};
 const ST = profile.stats;
-for (const k of ['kills', 'deaths', 'hs', 'wins', 'games', 'bestStreak', 'multiMax', 'plants', 'defuses', 'crates', 'caps', 'heals']) if (ST[k] == null) ST[k] = 0;
-if (!ST.weapons) ST.weapons = {};
-if (!ST.modes) ST.modes = {};
+function fixStats() {
+  for (const k of ['kills', 'deaths', 'hs', 'wins', 'games', 'bestStreak', 'multiMax', 'plants', 'defuses', 'crates', 'caps', 'heals']) if (ST[k] == null) ST[k] = 0;
+  if (!ST.weapons) ST.weapons = {};
+  if (!ST.modes) ST.modes = {};
+}
+fixStats();
 export const stats = ST;
 
 /* ================= 일일 미션 ================= */
@@ -93,7 +122,7 @@ export function dailyMissions() {
     const pool = MISSION_POOL.slice(), list = [];
     while (list.length < 3 && pool.length) {
       const m = pool.splice(Math.floor(rnd() * pool.length), 1)[0], n = m.t[Math.floor(rnd() * m.t.length)];
-      list.push({ type: m.type, target: n, name: m.name(n), prog: 0, done: false, coins: 120 + n * (m.type.startsWith('mode') ? 150 : m.type === 'win' ? 120 : 12), gold: m.type === 'win' || m.type.startsWith('mode') || n >= 20 ? 6 : 3 });
+      list.push({ type: m.type, target: n, name: m.name(n), prog: 0, done: false, coins: 70 + n * (m.type.startsWith('mode') ? 90 : m.type === 'win' ? 70 : 7), gold: m.type === 'win' || m.type.startsWith('mode') || n >= 20 ? 6 : 3 });
     }
     profile.daily = { date: d, list };
     saveProfile();
@@ -144,13 +173,6 @@ export function checkAchievements() {
 
 /* ================= 골드 뽑기 상자 ================= */
 export const GACHA_COST = 30;
-export const RARITY = [
-  { id: 'common', name: '일반', color: '#c9ced9', w: 50 },
-  { id: 'rare', name: '희귀', color: '#3d8bf0', w: 30 },
-  { id: 'epic', name: '영웅', color: '#b05ae8', w: 15 },
-  { id: 'legend', name: '전설', color: '#f4c22b', w: 5 },
-];
-export function rarityOf(it) { if (it.legend) return 'legend'; const p = it.price || 0; return p < 600 ? 'common' : p < 1100 ? 'rare' : 'epic'; }
 export function rollGacha() {
   if (profile.gold < GACHA_COST) return { err: 'gold' };
   profile.gold -= GACHA_COST;
@@ -163,7 +185,7 @@ export function rollGacha() {
   const pickd = pool[Math.floor(Math.random() * pool.length)];
   const owned = (pickd.kind === 'skin' ? profile.skins : profile.gskins);
   let dup = false;
-  if (owned.includes(pickd.id)) { dup = true; profile.coins += tier === 'legend' ? 1500 : tier === 'epic' ? 700 : tier === 'rare' ? 400 : 250; }
+  if (owned.includes(pickd.id)) { dup = true; profile.coins += RARITY.find(t => t.id === tier).dup; }
   else owned.push(pickd.id);
   saveProfile();
   return Object.assign({ dup }, pickd);

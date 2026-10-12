@@ -2,10 +2,21 @@
 import * as THREE from '../lib/three.module.min.js';
 import { initTouch } from './touch.js';
 import { FACES, ATLAS_COLS, makeAtlas, PCOLORS, flashTex, smokeTex, holeTex, textSprite, BLOCK_COLOR, skinMats, CHAR_SKINS } from './tex.js';
-import { makeGun, makeChar, setCharGun, animChar, gunIcon, GUNS, GUN_SKINS } from './models.js';
+import { makeGun, makeChar, setCharGun, animChar, gunIcon, gunLength, GUNS, GUN_SKINS } from './models.js';
 import { buildWorld, buildSky, rebuildBlocks, disposeWorld } from './world.js';
 import { profile, saveProfile, levelInfo, myLevel, grantMatch, buyItem, equip, addGold, stats, dailyMissions, missionEvent, ACHIEVEMENTS, checkAchievements, GACHA_COST, RARITY, rollGacha } from './cosmetics.js';
 import * as A from './audio.js';
+import { initAuth, onSocketOpen, handleAuthMsg, isAuthed } from './auth.js';
+import { initSettings, openSettings, closeSettings, settingsOpen } from './settings/panel.js';
+import { drawCross, getCross } from './settings/crosshair.js';
+import { toGame, resetBindsCache } from './settings/keybinds.js';
+import { showKillBanner, clearKillBanner } from './hud/killbanner.js';
+import { TITLES, titleOwned, titleHow, buyTitle, equipTitle, myTitle, titleHtml } from './titles.js';
+import { tickSkins } from './skins/gunMaterial.js';
+import { tickAuras, decorateGun, fxColor, killEffect } from './skins/skinFx.js';
+import { sfxSkinShot, sfxSkinKill, sfxFinisher, sfxEquip, sfxSkinStep } from './skins/skinSounds.js';
+import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
+import { initGimmicks, startGimmicks, setGimMap, stopGimmicks, onGimMsg, updateGimmicks, afterMove, groundAccMul, ENV_KILL } from './gimmicks.js';
 
 const SH = window.SH;
 const { WEAPONS, ITEMS, P, ECON } = SH;
@@ -82,7 +93,7 @@ function fullAmmo(w) { const W = WEAPONS[w]; if (W && W.mag) ammo[w] = { mag: W.
 let ws = null, wsOk = false;
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-  ws.onopen = () => { wsOk = true; $('netState').textContent = '· 서버 연결됨'; send({ t: 'list' }); };
+  ws.onopen = () => { wsOk = true; $('netState').textContent = '· 서버 연결됨'; onSocketOpen(); };
   ws.onclose = () => {
     wsOk = false; $('netState').textContent = '· 연결 끊김, 재접속 중…';
     if (S.inGame || S.room) { leaveGame(); showScreen('menu'); toast('서버 연결이 끊겼어요'); }
@@ -92,9 +103,18 @@ function connect() {
   ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMsg(m); };
 }
 function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
-setInterval(() => { if (wsOk && !S.room) send({ t: 'list' }); }, 3000);
+setInterval(() => { if (wsOk && isAuthed() && !S.room) send({ t: 'list' }); }, 3000);
+
+// 로그인 완료 → 서버 프로필로 화면 갱신
+function onLoggedIn(u) {
+  if (!$('nameIn').value.trim() && u.name) { $('nameIn').value = u.name.slice(0, 10); CFG.name = $('nameIn').value; saveCfg(); }
+  updateProfileUI(); refreshPreview(); updateMissionDot();
+  resetBindsCache(); crossCfg = getCross();
+  send({ t: 'list' });
+}
 
 function onMsg(m) {
+  if (handleAuthMsg(m)) return;
   switch (m.t) {
     case 'hello': S.myId = m.id; break;
     case 'rooms': renderRoomList(m.list); break;
@@ -136,6 +156,7 @@ function onMsg(m) {
     case 'zone': if (m.ev === 'shrink') { showBig('자기장이 줄어들어요!', '#c08aff', 2200); A.sfxSiren(); } break;
     case 'sys': addChat(`<span style="color:#f4c22b">${esc(m.text)}</span>`); break;
     case 'end': onEnd(m); break;
+    case 'gim': onGimMsg(m); break;
   }
 }
 
@@ -150,7 +171,7 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 $('nameIn').value = CFG.name || '';
 $('nameIn').addEventListener('input', () => { CFG.name = $('nameIn').value.trim(); saveCfg(); });
 function myName() { const n = $('nameIn').value.trim(); return n || '플레이어' + (S.myId || '').slice(1); }
-function joinInfo() { return { name: myName(), color: CFG.color, skin: profile.skin, gskin: profile.gskin, lv: myLevel() }; }
+function joinInfo() { return { name: myName(), color: CFG.color, skin: profile.skin, gskin: profile.gskin, title: myTitle(), lv: myLevel() }; }
 function buildSwatches() {
   const box = $('colors'); box.innerHTML = '';
   PCOLORS.forEach((c, i) => {
@@ -166,9 +187,21 @@ const pv = { r: new THREE.WebGLRenderer({ canvas: $('preview'), alpha: true, ant
 pv.r.setPixelRatio(1);
 pv.scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.8)); const pvl = new THREE.DirectionalLight(0xffffff, 1.3); pvl.position.set(1, 2, -2); pv.scene.add(pvl);
 pv.cam.position.set(0, 1.2, -4.3); pv.cam.lookAt(0, 0.95, 0);
-function refreshPreview() {
-  if (pv.ch) pv.scene.remove(pv.ch);
-  pv.ch = makeChar(CFG.color, profile.skin); setCharGun(pv.ch, 'rifle', profile.gskin); pv.ch.userData.shadow.visible = false; pv.scene.add(pv.ch);
+// o = { skin, gskin, gunShow } — 상점에서 안 산 스킨도 미리보기. gunShow 면 총만 크게 돌려 보여줌
+function refreshPreview(o) {
+  o = o || {};
+  if (pv.ch) { pv.scene.remove(pv.ch); pv.ch = null; }
+  if (pv.gun) { pv.scene.remove(pv.gun); pv.gun = null; }
+  const skin = o.skin || profile.skin, gskin = o.gskin || profile.gskin;
+  if (o.gunShow) {
+    const sc = 0.05, len = gunLength('rifle', sc), g = makeGun('rifle', sc, gskin);
+    decorateGun(g, GUN_SKINS[gskin], len);
+    g.position.set(0, -0.12, len * 0.18);
+    const holder = new THREE.Group(); holder.add(g); holder.position.set(0, 1.0, 0); holder.rotation.z = 0.12;
+    pv.gun = holder; pv.scene.add(holder);
+    return;
+  }
+  pv.ch = makeChar(CFG.color, skin); setCharGun(pv.ch, 'rifle', gskin); pv.ch.userData.shadow.visible = false; pv.scene.add(pv.ch);
 }
 refreshPreview();
 
@@ -180,11 +213,12 @@ function updateProfileUI() {
   $('coinNum').textContent = $('lockerCoins').textContent = profile.coins;
   $('goldNum').textContent = $('lockerGold').textContent = profile.gold;
   $('colors').style.opacity = profile.skin === 'default' ? 1 : 0.45;
+  $('myTitle').innerHTML = titleHtml(myTitle());
 }
 updateProfileUI();
 let lockerTab = 'skin';
 $('lockerBtn').onclick = () => { A.initAudio(); $('locker').classList.remove('hidden'); $('lockerPrevSlot').appendChild($('preview')); renderLocker(); };
-$('lockerClose').onclick = () => { $('locker').classList.add('hidden'); $('previewSlot').appendChild($('preview')); };
+$('lockerClose').onclick = () => { $('locker').classList.add('hidden'); $('previewSlot').appendChild($('preview')); refreshPreview(); };
 $('lockerTabs').querySelectorAll('button').forEach(b => b.onclick = () => { lockerTab = b.dataset.tab; renderLocker(); });
 const skinThumbCache = {};
 function skinThumb(id) {
@@ -197,29 +231,36 @@ function renderLocker() {
   updateProfileUI();
   $('lockerTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === lockerTab));
   if (lockerTab === 'spray') {
+    refreshPreview();
     $('lockerGrid').innerHTML = SPRAYS.map((sp, i) => `<div class="lcard ${(profile.spray || 0) === i ? 'eq' : ''}" data-s="${i}"><div class="th"><img src="${sprayCanvas(i, 4).toDataURL()}"></div><div class="nm">${sp.name}</div><div class="pr own">${(profile.spray || 0) === i ? '사용 중' : '무료 · 눌러서 선택'}</div></div>`).join('') + '<div class="dim" style="grid-column:1/-1">게임 중 T 키로 벽에 스프레이를 뿌려요 · Y 키로 감정표현</div>';
     $('lockerGrid').querySelectorAll('[data-s]').forEach(c => c.onclick = () => { profile.spray = +c.dataset.s; saveProfile(); A.sfxSpray(1); renderLocker(); });
     return;
   }
-  if (lockerTab === 'gacha') { renderGacha(); $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`; return; }
-  const isSkin = lockerTab === 'skin', list = isSkin ? CHAR_SKINS : GUN_SKINS, owned = isSkin ? profile.skins : profile.gskins, cur = isSkin ? profile.skin : profile.gskin;
-  const lv = myLevel();
-  $('lockerGrid').innerHTML = Object.entries(list).map(([id, it]) => {
-    const own = owned.includes(id), lock = !own && lv < it.lv;
-    const th = isSkin ? skinThumb(id) : gunIcon('rifle', 2, id);
-    const pr = own ? `<div class="pr own">${id === cur ? '장착 중' : '보유 · 눌러서 장착'}</div>` : lock ? `<div class="pr lv">Lv.${it.lv} 필요</div>` : it.gold ? `<div class="pr gold"><i class="goldc"></i> ${it.gold} 골드</div>` : `<div class="pr"><i class="coin"></i> ${it.price}</div>`;
-    return `<div class="lcard ${id === cur ? 'eq' : ''} ${lock ? 'lock' : ''} ${it.legend ? 'legend' : ''}" data-id="${id}"><div class="th"><img src="${th}"></div><div class="nm">${it.name}</div>${pr}</div>`;
-  }).join('');
-  $('lockerGrid').querySelectorAll('.lcard').forEach(c => c.onclick = () => {
-    const id = c.dataset.id, kind = lockerTab;
-    if (!(kind === 'skin' ? profile.skins : profile.gskins).includes(id)) {
-      const res = buyItem(kind, id);
-      if (res !== 'ok') { A.sfxDeny(); toast({ coins: '코인이 부족해요', gold: '골드가 부족해요 (킬하면 모여요)', level: '레벨이 부족해요' }[res] || '살 수 없어요'); return; }
+  if (lockerTab === 'title') { refreshPreview(); renderTitles(); return; }
+  if (lockerTab === 'gacha') { refreshPreview(); renderGacha(); $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`; return; }
+  renderSkinShop(lockerTab);
+}
+initSkinShop({ thumb: (id) => skinThumb(id), preview: (o) => refreshPreview(o), toast, changed: () => updateProfileUI() });
+
+// 칭호 탭
+function renderTitles() {
+  const cur = myTitle(), order = { common: 0, rare: 1, epic: 2, legend: 3 };
+  const ids = Object.keys(TITLES).sort((a, b) => order[TITLES[a].r] - order[TITLES[b].r]);
+  $('lockerGrid').innerHTML = '<div class="ttl-grid">' + ids.map(id => {
+    const own = titleOwned(id), q = TITLES[id].req, buyable = !own && (q.coins || q.gold);
+    const st = own ? (id === cur ? '장착 중' : '보유 · 눌러서 장착') : buyable ? (q.gold ? `<i class="goldc"></i> ${q.gold} 골드` : `<i class="coin"></i> ${q.coins}`) : titleHow(id);
+    return `<div class="tcard ${id === cur ? 'eq' : ''} ${own ? '' : 'lock'} rr-${TITLES[id].r}" data-t="${id}">${titleHtml(id)}<div class="pr ${own ? 'own' : ''}">${st}</div></div>`;
+  }).join('') + '</div>';
+  $('lockerGrid').querySelectorAll('[data-t]').forEach(c => c.onclick = () => {
+    const id = c.dataset.t;
+    if (!titleOwned(id)) {
+      const res = buyTitle(id);
+      if (res !== 'ok') { A.sfxDeny(); toast({ coins: '코인이 부족해요', gold: '골드가 부족해요', locked: titleHow(id) + '하면 얻어요' }[res] || '얻을 수 없어요'); return; }
       A.sfxBuy();
     }
-    equip(kind, id); refreshPreview(); renderLocker();
+    equipTitle(id); updateProfileUI(); renderLocker();
   });
-  $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`;
+  $('lockerSel').innerHTML = titleHtml(cur);
 }
 
 function renderRoomList(list) {
@@ -335,7 +376,7 @@ function onRoom(m) {
   document.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.map === m.cfg.map));
   $('timeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === m.cfg.time));
   $('killSeg').querySelectorAll('button').forEach(b => { const v = Number(b.dataset.v); b.textContent = SH.targetOf({ mode: md, kills: v }); b.classList.toggle('on', v === m.cfg.kills); });
-  const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${esc(p.name)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
+  const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${esc(p.name)} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
   $('lobbyPlayers').innerHTML = md === 'ffa' ? m.players.map(pl).join('')
     : [0, 1].map(t => `<div class="teamhead" style="color:${TEAMS[t].css}">${TEAMS[t].name} 팀</div>` + m.players.filter(p => p.team === t).map(pl).join('')).join('');
   $('endBtn').classList.toggle('hidden', !host);
@@ -369,6 +410,7 @@ function startGame(m) {
   if (!S.sky) { S.sky = buildSky(def); scene.add(S.sky); }
   S.world.visible = true; S.sky.visible = true;
   scene.fog = new THREE.Fog(def.fog, def.fogNear || 45, def.fogFar || 140);
+  startGimmicks(def, S.map, m.gim);
   setupFlags();
   setupShops();
   for (const id of [...S.turrets.keys()]) removeTurret(id);
@@ -404,7 +446,7 @@ function startGame(m) {
 function leaveGame() {
   S.inGame = false; me.alive = false;
   if (document.pointerLockElement) document.exitPointerLock();
-  closeModals();
+  closeModals(); clearKillBanner(); stopGimmicks();
   $('result').classList.add('hidden');
 }
 function onEnd(m) {
@@ -425,7 +467,7 @@ function onEnd(m) {
   const pod = [r[1], r[0], r[2]].map((p, i) => p ? `<div class="pod p${[2, 1, 3][i]}"><div class="nm" style="color:${pc(p)}">${esc(p.name)}</div><div class="kd">${p.k}킬 / ${p.d}데스</div><div class="blk">${[2, 1, 3][i]}</div></div>` : '').join('');
   $('podium').innerHTML = pod;
   const ctf = m.mode === 'ctf';
-  $('resultTable').innerHTML = `<tr><th>#</th><th>이름</th>${ctf ? '<th class="num">득점</th>' : ''}<th class="num">킬</th><th class="num">데스</th></tr>` + r.map((p, i) => `<tr class="${p.id === S.myId ? 'me' : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${pc(p)}"></span>${esc(p.name)}${p.bot ? ' <span class="dim">봇</span>' : ''}</td>${ctf ? `<td class="num">${p.caps || 0}</td>` : ''}<td class="num">${p.k}</td><td class="num">${p.d}</td></tr>`).join('');
+  $('resultTable').innerHTML = `<tr><th>#</th><th>이름</th>${ctf ? '<th class="num">득점</th>' : ''}<th class="num">킬</th><th class="num">데스</th></tr>` + r.map((p, i) => `<tr class="${p.id === S.myId ? 'me' : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${pc(p)}"></span>${esc(p.name)} ${titleHtml(p.title)}${p.bot ? ' <span class="dim">봇</span>' : ''}</td>${ctf ? `<td class="num">${p.caps || 0}</td>` : ''}<td class="num">${p.k}</td><td class="num">${p.d}</td></tr>`).join('');
   $('result').classList.remove('hidden');
   $('clickToPlay').classList.add('hidden');
   const myRank = r.findIndex(p => p.id === S.myId);
@@ -467,22 +509,27 @@ document.addEventListener('keydown', (e) => {
   }
   if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
   if (ED.on) { editorKey(e); return; }
+  if (settingsOpen()) { if (e.code === 'Escape') closeSettingsPanel(); return; }
   if (!S.inGame) return;
-  if (e.code === 'Tab') { e.preventDefault(); if (!S.modal) openModal('score'); return; }
-  if (e.code === 'KeyB') { toggleBuy(); return; }
-  if (e.code === 'Enter') { openChat(); e.preventDefault(); return; }
+  // 사용자가 바꾼 키 → 게임 기본 키 코드
+  const code = toGame(e.code);
+  if (code === 'Tab') { e.preventDefault(); if (!S.modal) openModal('score'); return; }
+  if (code === 'KeyB') { toggleBuy(); return; }
+  if (code === 'Enter') { openChat(); e.preventDefault(); return; }
   if (S.modal === 'buy' && e.code === 'Escape') { closeModals(); return; }
   if (S.modal) return;
-  if (e.code === 'Space' && S.kc && S.kc.active) { endKc(); e.preventDefault(); return; }
-  if (e.code === 'Space' && !me.alive && (S.mode === 'spike' || S.mode === 'br')) { nextSpectate(); e.preventDefault(); return; }
+  if (code === 'Space' && S.kc && S.kc.active) { endKc(); e.preventDefault(); return; }
+  if (code === 'Space' && !me.alive && (S.mode === 'spike' || S.mode === 'br')) { nextSpectate(); e.preventDefault(); return; }
   if (S.emoteOpen && /^Digit[1-8]$/.test(e.code)) { doEmote(+e.code.slice(5) - 1); e.preventDefault(); return; }
-  if (!keys[e.code]) onPress(e.code);
-  keys[e.code] = true;
-  if (['Space', 'KeyC'].includes(e.code)) e.preventDefault();
+  if (['Space', 'KeyC', 'Tab'].includes(e.code)) e.preventDefault();
+  if (!code) return;
+  if (!keys[code]) onPress(code);
+  keys[code] = true;
 });
 document.addEventListener('keyup', (e) => {
-  keys[e.code] = false;
-  if (e.code === 'Tab' && S.modal === 'score') closeModals();
+  const code = toGame(e.code);
+  if (code) keys[code] = false;
+  if (code === 'Tab' && S.modal === 'score') closeModals();
 });
 function onPress(code) {
   if (!me.alive) return;
@@ -540,24 +587,36 @@ $('vol').oninput = (e) => { CFG.vol = Number(e.target.value); A.setVolume(CFG.vo
 $('buyClose').onclick = () => closeModals();
 $('kcToggle').onchange = (e) => { CFG.killcam = e.target.checked; saveCfg(); };
 
+initGimmicks({ scene, camera, me, world: () => S.world, spawn: (...a) => spawnParticle(...a), showBig: (...a) => showBig(...a) });
+
+/* ---------- 설정 창 (조준선 · 조작키) ---------- */
+let crossCfg = getCross();
+initSettings({ cfg: CFG, save: saveCfg, setVolume: A.setVolume }, toast);
+function closeSettingsPanel() { closeSettings(); crossCfg = getCross(); if (S.modal === 'pause') openModal('pause'); }
+$('setClose').onclick = closeSettingsPanel;
+$('settingsBtn').onclick = () => { A.initAudio(); openSettings(); };
+$('pauseSetBtn').onclick = () => openSettings();
+
 function renderScore() {
   const ctf = S.mode === 'ctf';
   const list = [...S.roster.values()].sort((a, b) => (ctf ? (b.caps || 0) - (a.caps || 0) : 0) || b.k - a.k || a.d - b.d);
   $('scoreMap').textContent = S.mapId ? `${SH.MODES[S.mode].name} · ${S.mapName || ''} · 목표 ${S.target}${ctf ? '점' : '킬'}` : '';
   const head = `<tr><th>#</th><th>이름</th>${ctf ? '<th class="num">득점</th>' : ''}<th class="num">킬</th><th class="num">데스</th><th class="num">K/D</th></tr>`;
-  const row = (p, i) => `<tr class="${p.id === S.myId ? 'me' : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span><span class="lv" style="color:#f4c22b;font-size:11px">Lv${p.lv || 1}</span> ${esc(p.name)}${p.bot ? ' <span class="dim">봇</span>' : ''}</td>${ctf ? `<td class="num">${p.caps || 0}</td>` : ''}<td class="num">${p.k}</td><td class="num">${p.d}</td><td class="num">${(p.k / Math.max(1, p.d)).toFixed(2)}</td></tr>`;
+  const row = (p, i) => `<tr class="${p.id === S.myId ? 'me' : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span><span class="lv" style="color:#f4c22b;font-size:11px">Lv${p.lv || 1}</span> ${esc(p.name)} ${titleHtml(p.title)}${p.bot ? ' <span class="dim">봇</span>' : ''}</td>${ctf ? `<td class="num">${p.caps || 0}</td>` : ''}<td class="num">${p.k}</td><td class="num">${p.d}</td><td class="num">${(p.k / Math.max(1, p.d)).toFixed(2)}</td></tr>`;
   if (!isTeamMode()) { $('scoreTable').innerHTML = `<table>${head}${list.map(row).join('')}</table>`; return; }
   $('scoreTable').innerHTML = [0, 1].map(t => `<h4 style="color:${TEAMS[t].css}">${teamName(t)}${S.mode === 'zombie' || S.mode === 'boss' ? '' : ' 팀 — ' + S.score[t] + '점'}</h4><table>${head}${list.filter(p => p.team === t).map(row).join('')}</table>`).join('');
 }
 
 /* ================= 상점 ================= */
 const SHOP = [
-  ['권총', ['pistol', 'magnum']], ['SMG · 샷건', ['smg', 'shotgun']], ['소총', ['rifle', 'carbine', 'sniper']],
-  ['중화기', ['lmg', 'rocket', 'minigun']], ['장비', ['armor', 'helmet', 'nade']], ['보급', ['medkit', 'ammo']],
+  ['권총', ['pistol', 'magnum', 'uzi']], ['SMG · 샷건', ['smg', 'shotgun', 'dbarrel']], ['소총', ['burst', 'rifle', 'carbine', 'dmr']], ['저격', ['scout', 'sniper']],
+  ['중화기', ['lmg', 'rail', 'rocket', 'minigun']], ['장비', ['armor', 'helmet', 'nade']], ['보급', ['medkit', 'ammo']],
   ['퍽 <small>죽어도 매치 끝까지 유지</small>', ['perk_speed', 'perk_hp', 'perk_reload']], ['지원 <small>Z: 포탑 설치 · X: 공습 지점</small>', ['uav', 'turret', 'air']],
 ];
 function nearShop() { return !!(S.map && S.map.shops && S.map.shops.some(p => Math.hypot(p[0] - me.x, p[2] - me.z) < ECON.SHOP_DIST - 0.3 && Math.abs(p[1] - me.y) < 2.5)); }
-function canBuyNow() { return me.alive && (S.mode === 'practice' || serverNow() < me.buyUntil || nearShop()); }
+// 죽어 있을 때도 다음 부활용으로 구매 가능 (라운드제·특수 모드 제외)
+function deadBuyOk() { return !me.alive && S.inGame && !['spike', 'gungame', 'br', 'zombie'].includes(S.mode); }
+function canBuyNow() { return deadBuyOk() || (me.alive && (S.mode === 'practice' || serverNow() < me.buyUntil || nearShop())); }
 function ownedOf(id) {
   const W = WEAPONS[id], I = ITEMS[id];
   if (W) return me.primary === id || me.secondary === id;
@@ -595,7 +654,7 @@ function itemIcon(id, px) {
 function toggleBuy() {
   if (S.modal === 'buy') { closeModals(); return; }
   if (S.modal) return;
-  if (!me.alive) { toast('살아있을 때만 살 수 있어요'); return; }
+  if (!me.alive && !deadBuyOk()) { toast('이 모드에선 죽은 동안 살 수 없어요'); return; }
   if (!canBuyNow()) { toast('구매 시간이 지났어요 (부활 후 8초 동안만 살 수 있어요)'); A.sfxDeny(); return; }
   openModal('buy');
 }
@@ -635,7 +694,7 @@ function onBuyRes(m) {
     A.sfxBuy();
     S.lastBuy = [...new Set([...(S.lastBuy || []).filter(x => !(WEAPONS[x] && WEAPONS[m.item] && WEAPONS[x].slot === WEAPONS[m.item].slot)), m.item])];
     const W = WEAPONS[m.item];
-    if (W) { fullAmmo(m.item); setTimeout(() => switchTo(m.item, true), 0); }
+    if (W) { fullAmmo(m.item); if (me.alive) setTimeout(() => switchTo(m.item, true), 0); else toast(`부활하면 ${W.name}을(를) 들고 나와요`); }
     else if (m.item === 'ammo') { for (const k in ammo) { const W2 = WEAPONS[k]; if (W2 && W2.res) ammo[k].res = W2.res; } }
     else if (m.item === 'medkit') A.sfxHeal();
     else if (m.item === 'turret') toast('Z 키로 자동 포탑을 설치하세요');
@@ -818,7 +877,7 @@ function updateMe(dt) {
     if (me.slideT <= 0 || Math.hypot(me.vx, me.vz) < 3.5) me.sliding = false;
   } else {
     const tx = wish ? wish[0] * speed : 0, tz = wish ? wish[1] * speed : 0;
-    const acc = (me.ground ? 55 : 14) * dt;
+    const acc = (me.ground ? 55 * groundAccMul(me) : 14) * dt;
     const dx = tx - me.vx, dz = tz - me.vz, dl = Math.hypot(dx, dz);
     if (me.ground || wish) {
       if (dl <= acc) { me.vx = tx; me.vz = tz; } else { me.vx += dx / dl * acc; me.vz += dz / dl * acc; }
@@ -827,13 +886,21 @@ function updateMe(dt) {
   me.vy -= P.GRAV * dt * (S.map.grav || 1);
   const wasGround = me.ground, vyBefore = me.vy;
   SH.moveBody(S.map, me, dt);
+  afterMove(me);
   if (me.ground) { me.jumps = 0; if (!wasGround && vyBefore < -9) A.sfxLand(); }
   if (me.stepDy) { me.camOff -= me.stepDy; me.stepDy = 0; }
   me.camOff *= Math.pow(0.0001, dt); if (Math.abs(me.camOff) < 0.002) me.camOff = 0;
   me.eye = lerp(me.eye, me.crouch ? P.EYEC : P.EYE, Math.min(1, dt * 14));
   // 발소리
   const hs = Math.hypot(me.vx, me.vz);
-  if (me.ground && hs > 2 && !me.crouch) { stepAcc += dt * hs; if (stepAcc > 2.6) { stepAcc = 0; A.sfxStep(sprint ? 1 : 0.7); } }
+  if (me.ground && hs > 2 && !me.crouch) {
+    stepAcc += dt * hs;
+    if (stepAcc > 2.6) {
+      stepAcc = 0; A.sfxStep(sprint ? 1 : 0.7);
+      const cf = me.zombie ? null : (CHAR_SKINS[profile.skin] || {}).fx; // 레어+ 캐릭터: 발소리·발자국 효과
+      if (cf) { sfxSkinStep(cf.step, sprint ? 1 : 0.7); for (let i = 0; i < 4; i++) spawnParticle(me.x + (Math.random() - 0.5) * 0.4, me.y + 0.05, me.z + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 1.2, Math.random() * 1.2, (Math.random() - 0.5) * 1.2, cf.dust, 0.4, 0.05, 4); }
+    }
+  }
   WS.bob = (WS.bob || 0) + dt * (me.ground ? hs : 0) * 1.6;
   if (me.y < -10) { send({ t: 'suicide' }); me.alive = false; }
   tryPick(false);
@@ -860,7 +927,7 @@ function setViewModel(id, look) {
   const arms = new THREE.Group();
   const ra = armMesh(0.55, sm.shirt, sm.skin); ra.position.set(0.015, -0.05, 0.02); ra.rotation.set(0.45, 0.25, 0); arms.add(ra);
   const def = GUNS[id] || GUNS.pistol;
-  const two = !['pistol', 'magnum', 'knife', 'claw', 'nade'].includes(id);
+  const two = !['pistol', 'magnum', 'uzi', 'knife', 'claw', 'nade'].includes(id);
   if (two) {
     const fz = -((def.muz[2] - def.grip[2]) * 0.48) * VMS;
     const la = armMesh(0.6, sm.shirt, sm.skin); la.position.set(-0.02, -0.04, fz); la.rotation.set(0.35, -0.75, 0); arms.add(la);
@@ -870,16 +937,22 @@ function setViewModel(id, look) {
   vm.arms = arms; vm.holder.add(arms);
   const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: FLASH, transparent: true, depthTest: false }));
   fl.scale.set(0.22, 0.22, 1); fl.position.copy(gun.userData.muzzle); fl.visible = false; gun.add(fl); vm.flash = fl;
+  // 스킨: 총구 섬광 색 + 전설 오라
+  const gsk = GUN_SKINS[look.gskin];
+  if (gsk && gsk.fx && typeof gsk.fx.flash === 'number') fl.material.color.setHex(gsk.fx.flash);
+  if (id !== 'nade' && id !== 'claw') decorateGun(gun, gsk, gunLength(id, VMS));
   vm.flashT = 0;
 }
 function switchTo(w, force) {
   if (!w || (!force && w === WS.cur)) return;
   if (!haveWeapon(w)) return;
   if (WS.cur !== w) WS.last = WS.cur;
-  WS.cur = w; WS.reloading = false; WS.switchT = 0.38; WS.spin = 0; WS.fireT = Math.max(WS.fireT, 0);
+  WS.cur = w; WS.reloading = false; WS.switchT = 0.38; WS.spin = 0; WS.burstLeft = 0; WS.fireT = Math.max(WS.fireT, 0);
   if (w !== 'knife' && w !== 'nade' && !ammo[w]) fullAmmo(w);
   setViewModel(w);
   A.sfxSwitch();
+  const gsk = GUN_SKINS[profile.gskin];
+  if (gsk && gsk.r === 'legend' && !me.zombie && w !== 'nade') sfxEquip(gsk.fx.snd);
 }
 function cycleWeapon(dir) {
   const list = [me.primary, me.secondary, meleeId(), me.nades > 0 ? 'nade' : null].filter(Boolean);
@@ -925,10 +998,15 @@ function updateWeapon(dt) {
   if (WS.trigger && !S.modal) {
     if (WEAPONS[WS.cur] && WEAPONS[WS.cur].melee) { if (WS.fireT <= 0) knifeAttack(); }
     else if (WS.cur === 'nade') { if (WS.semiReady) { WS.semiReady = false; throwNade(); } }
+    else if (W && W.burst) { if (WS.semiReady && WS.fireT <= 0 && !WS.burstLeft) { WS.semiReady = false; WS.burstLeft = W.burst; } }
     else if (W && (W.auto || WS.semiReady)) {
       let n = 0;
       while (WS.fireT <= 0 && n++ < 3 && WS.trigger) { if (!fireGun(W)) break; if (!W.auto) { WS.semiReady = false; break; } }
     }
+  }
+  // 점사: 버튼을 떼도 남은 발은 이어서 나감
+  if (WS.burstLeft > 0 && W && W.burst) {
+    while (WS.fireT <= 0 && WS.burstLeft > 0) { if (!fireGun(W)) { WS.burstLeft = 0; break; } if (--WS.burstLeft === 0) WS.fireT += W.burstGap; }
   }
   if (WS.fireT < -0.05) WS.fireT = -0.05;
 }
@@ -955,6 +1033,9 @@ function fireGun(W) {
   vm.flashT = 0.05;
   muzzleLight(start);
   A.sfxShot(WS.cur, 1, 0);
+  const myFx = me.zombie ? null : (GUN_SKINS[profile.gskin] || {}).fx;
+  if (myFx) sfxSkinShot(myFx.snd, 1, 0);
+  const trc = W.tracer || (myFx ? fxColor(myFx.tracer) : 0);
   if (W.proj) {
     send({ t: 'proj', kind: 'rocket', x: eye.x + fwd.x * 0.6, y: eye.y + fwd.y * 0.6 - 0.1, z: eye.z + fwd.z * 0.6, dx: fwd.x, dy: fwd.y, dz: fwd.z });
   } else {
@@ -966,9 +1047,19 @@ function fireGun(W) {
         const r = spread * Math.sqrt(Math.random()), th = Math.random() * Math.PI * 2;
         d.addScaledVector(right, Math.cos(th) * r).addScaledVector(up, Math.sin(th) * r).normalize();
       }
-      const res = hitscan(eye, d, 160);
+      let res = hitscan(eye, d, 160);
+      // 관통 (레일건): 맞은 적을 제외하고 다시 쏴서 뒤의 적도 맞힘
+      if (W.pierce && res.ent) {
+        const skip = new Set([res.ent.id]); let k = 1, last = res;
+        while (k++ < W.pierce) {
+          const nx = hitscan(eye, d, 160, skip); if (!nx.ent) { last = nx; break; }
+          skip.add(nx.ent.id); last = nx;
+          const h2 = hits.get(nx.ent.id) || { dmg: 0, head: false, ent: nx.ent };
+          h2.dmg += W.dmg * SH.falloff(W, nx.t) * (W.partMul || SH.PART_MUL)[nx.part]; if (nx.part === 'head') h2.head = true; hits.set(nx.ent.id, h2); blood(nx.p, d);
+        }
+        tracer(start, last.p, trc);
+      } else tracer(start, res.p, trc);
       ends.push([+res.p.x.toFixed(2), +res.p.y.toFixed(2), +res.p.z.toFixed(2), res.ent ? 1 : 0]);
-      tracer(start, res.p);
       if (res.ent) {
         const pm = (W.partMul || SH.PART_MUL)[res.part];
         const dmg = W.dmg * SH.falloff(W, res.t) * pm;
@@ -982,7 +1073,7 @@ function fireGun(W) {
         res.tur.dmgAcc = (res.tur.dmgAcc || 0) + W.dmg * SH.falloff(W, res.t);
         hitTurs.add(res.tur);
         puff(res.p, 0xffd040, 5);
-      } else if (res.wall) impact(res.p, res.wall, d);
+      } else if (res.wall) impact(res.p, res.wall, d, myFx && fxColor(myFx.impact));
     }
     send({ t: 'shot', w: WS.cur, e: ends.slice(0, 12) });
     logShot(S.myId, WS.cur, ends);
@@ -1002,11 +1093,12 @@ function fireGun(W) {
   if (a.mag <= 0) setTimeout(() => { if (ammo[WS.cur] === a && a.mag <= 0) startReload(); }, 250);
   return true;
 }
-function hitscan(o, d, maxD) {
+function hitscan(o, d, maxD, skip) {
   const wall = SH.raycast(S.map, o.x, o.y, o.z, d.x, d.y, d.z, maxD);
   let best = wall ? wall.t : maxD, ent = null, part = null;
   for (const e of S.ents.values()) {
     if (!e.alive || !e.model.visible && !(e.fl & 16)) continue;
+    if (skip && skip.has(e.id)) continue;
     if (isMate(e.id)) continue; // 아군은 통과
     if (Math.hypot(e.rx - o.x, e.rz - o.z) > best + 2) continue;
     for (const hb of (e.boss ? SH.bossHitboxes(e.rx, e.ry, e.rz) : SH.hitboxes(e.rx, e.ry, e.rz, !!(e.fl & 2)))) {
@@ -1123,10 +1215,12 @@ function onRemoteShot(m) {
   const d = Math.hypot(st.x - me.x, st.y - me.y, st.z - me.z);
   const ang = Math.atan2(-(st.x - me.x), -(st.z - me.z)) - me.yaw;
   A.sfxShot(m.w, clamp(1 - d / 90, 0.06, 0.9), -Math.sin(ang) * 0.8);
+  const rr = S.roster.get(m.id), rfx = rr && !rr.zombie ? (GUN_SKINS[rr.gskin] || {}).fx : null;
+  if (rfx) sfxSkinShot(rfx.snd, clamp(1 - d / 90, 0.06, 0.9), -Math.sin(ang) * 0.8);
   flashAt(st, 0.35);
   for (const p of m.e || []) {
     const end = new THREE.Vector3(p[0], p[1], p[2]);
-    tracer(st, end);
+    tracer(st, end, (WEAPONS[m.w] || {}).tracer || (rfx ? fxColor(rfx.tracer) : 0));
     const dir = end.clone().sub(st).normalize();
     if (p[3]) blood(end, dir);
     else puff(end, 0xcccccc, 4);
@@ -1155,11 +1249,14 @@ function onKill(m) {
   if (kr && m.k !== m.v) kr.k++; if (vr) vr.d++;
   const kf = document.createElement('div'); kf.className = 'kf' + (m.k === S.myId || m.v === S.myId ? ' me' : '');
   const icon = WEAPONS[m.w] || m.w === 'nade' ? `<img src="${gunIcon(m.w === 'nade' ? 'nade' : m.w, 1)}">` : '';
-  kf.innerHTML = m.k === m.v ? `<span>${esc(vn)}</span> ${icon} <span class="dim">자폭</span>` : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span>${icon}${m.hs ? '<span class="hs">헤드</span>' : ''}<span style="color:${nameColor(m.v)}">${esc(vn)}</span>`;
+  kf.innerHTML = !m.k && ENV_KILL[m.w] ? `<span style="color:${nameColor(m.v)}">${esc(vn)}</span> <span class="dim">${ENV_KILL[m.w]}</span>`
+    : m.k === m.v ? `<span>${esc(vn)}</span> ${icon} <span class="dim">자폭</span>` : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span>${icon}${m.hs ? '<span class="hs">헤드</span>' : ''}<span style="color:${nameColor(m.v)}">${esc(vn)}</span>`;
   $('killfeed').prepend(kf);
   while ($('killfeed').children.length > 6) $('killfeed').lastChild.remove();
   setTimeout(() => kf.remove(), 7000);
   const ve = S.ents.get(m.v);
+  const vsk = CHAR_SKINS[(vr || {}).skin];
+  if (ve && vsk && vsk.death) killEffect(spawnParticle, { x: ve.rx, y: ve.ry - 0.3, z: ve.rz }, vsk.death, null);
   if (ve) { ve.alive = false; ve.deadT = 0; ve.buf.push({ t: serverNow(), x: ve.rx, y: ve.ry, z: ve.rz, yaw: ve.ryaw, pitch: 0, fl: 0, w: '', hp: 0 }); for (let i = 0; i < 18; i++) spawnParticle(ve.rx, ve.ry + 1, ve.rz, (Math.random() - 0.5) * 5, Math.random() * 5, (Math.random() - 0.5) * 5, 0xb3201a, 0.8, 0.1, 14); }
   if (m.k === S.myId && m.v !== S.myId) {
     S.streak = m.streak;
@@ -1168,6 +1265,13 @@ function onKill(m) {
     c.innerHTML = `${m.hs ? '헤드샷! ' : ''}${esc(vn)} 처치 <span class="reward">+$${m.reward}</span>`;
     $('center').prepend(c); while ($('center').children.length > 3) $('center').lastChild.remove();
     setTimeout(() => c.remove(), 2600);
+    const gsk = GUN_SKINS[profile.gskin], csk = CHAR_SKINS[profile.skin];
+    showKillBanner({ streak: m.streak || 1, hs: !!m.hs, theme: (gsk && gsk.banner) || (csk && csk.banner) });
+    // 영웅: 처치 파편 + 처치음 / 전설: 피니셔
+    if (gsk && (gsk.r === 'epic' || gsk.r === 'legend') && !me.zombie) {
+      if (ve) killEffect(spawnParticle, { x: ve.rx, y: ve.ry, z: ve.rz }, gsk.fx.kill, gsk.finisher, flashAt);
+      if (gsk.finisher) sfxFinisher(gsk.finisher); else sfxSkinKill(gsk.fx.snd);
+    }
     onMyKill(m); trackKill(m);
     if (S.mode === 'practice' && S.pst) S.pst.kills++;
   }
@@ -1177,7 +1281,7 @@ function onKill(m) {
     me.alive = false; S.dead = true; S.killer = m.k !== m.v ? m.k : null; S.deathPos = { x: me.x, y: me.y, z: me.z, yaw: me.yaw };
     S.deathT = 0; WS.trigger = false; WS.ads = 0;
     $('death').classList.remove('hidden');
-    $('deathBy').innerHTML = m.k === m.v ? '스스로 쓰러졌어요' : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span>${icon}${m.hs ? '<span class="hs" style="color:#ff6a5a">헤드샷</span>' : ''}`;
+    $('deathBy').innerHTML = !m.k && ENV_KILL[m.w] ? `${ENV_KILL[m.w]}(으)로 쓰러졌어요` : m.k === m.v ? '스스로 쓰러졌어요' : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span> ${titleHtml((kr || {}).title)}${icon}${m.hs ? '<span class="hs" style="color:#ff6a5a">헤드샷</span>' : ''}`;
     closeModals(true);
     S.selfBuf.push({ t: serverNow(), x: me.x, y: me.y, z: me.z, yaw: me.yaw, pitch: 0, fl: 0, w: WS.cur });
     if (CFG.killcam !== false && S.killer && S.ents.get(S.killer) && m.w !== 'turret' && m.w !== 'air') S.kc = { killer: S.killer, w: m.w, hs: m.hs, at: serverNow(), start: performance.now() + 800, active: false, lastT: 0, kick: 0, vw: null };
@@ -1229,8 +1333,9 @@ function puff(p, color, n) { for (let i = 0; i < n; i++) spawnParticle(p.x, p.y,
 function blood(p, d) { for (let i = 0; i < 8; i++) spawnParticle(p.x, p.y, p.z, d.x * 2 + (Math.random() - 0.5) * 3, Math.random() * 3, d.z * 2 + (Math.random() - 0.5) * 3, Math.random() < 0.5 ? 0xc01e1e : 0x8a1010, 0.5 + Math.random() * 0.3, 0.07, 12); }
 const holes = []; const holeGeo = new THREE.PlaneGeometry(0.13, 0.13);
 const holeMat = new THREE.MeshBasicMaterial({ map: HOLE, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-function impact(p, wall, d) {
+function impact(p, wall, d, fxc) {
   const col = BLOCK_COLOR[wall.b] || 0x999999;
+  if (fxc) for (let i = 0; i < 5; i++) spawnParticle(p.x + wall.nx * 0.05, p.y + wall.ny * 0.05, p.z + wall.nz * 0.05, wall.nx * 3 + (Math.random() - 0.5) * 4, wall.ny * 3 + Math.random() * 3, wall.nz * 3 + (Math.random() - 0.5) * 4, fxc, 0.35 + Math.random() * 0.3, 0.06, 6);
   for (let i = 0; i < 6; i++) spawnParticle(p.x + wall.nx * 0.05, p.y + wall.ny * 0.05, p.z + wall.nz * 0.05, wall.nx * 2 + (Math.random() - 0.5) * 3, wall.ny * 2 + Math.random() * 2.5, wall.nz * 2 + (Math.random() - 0.5) * 3, col, 0.5 + Math.random() * 0.4, 0.07, 14);
   smoke(p.x + wall.nx * 0.1, p.y + wall.ny * 0.1, p.z + wall.nz * 0.1, 0.35, 0.5);
   let h = holes.length < 90 ? null : holes.shift();
@@ -1258,9 +1363,10 @@ function updateSmoke(dt) {
   }
 }
 const tracers = []; const trGeo = new THREE.BoxGeometry(0.025, 0.025, 1).translate(0, 0, -0.5);
-function tracer(a, b) {
+function tracer(a, b, color) {
   let t = tracers.find(o => o.life <= 0);
   if (!t) { if (tracers.length > 60) return; const m = new THREE.Mesh(trGeo, new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, depthWrite: false })); scene.add(m); t = { m, life: 0 }; tracers.push(t); }
+  t.m.material.color.setHex(color || 0xffe9a0);
   const len = a.distanceTo(b);
   if (len < 0.5) return;
   // 총구에서 일부 구간만 빠르게 지나가는 꼬리
@@ -1519,8 +1625,8 @@ function updateHud(dt) {
   // 구매
   const bl = (me.buyUntil - now) / 1000;
   const atShop = me.alive && nearShop();
-  $('buyHint').textContent = S.mode === 'practice' ? 'B: 상점 (모든 총 무료)' : me.alive && bl > 0 ? `B: 상점 (${Math.ceil(bl)}초)` : '';
-  if (S.modal === 'buy') { $('buyTime').textContent = bl > 0 ? `${Math.ceil(bl)}초 남음` : ''; $('buyMoney').textContent = '$' + me.money; if (bl <= 0 && !atShop && S.mode !== 'practice') closeModals(); }
+  $('buyHint').textContent = S.mode === 'practice' ? 'B: 상점 (모든 총 무료)' : me.alive && bl > 0 ? `B: 상점 (${Math.ceil(bl)}초)` : deadBuyOk() ? 'B: 상점 (부활 전 미리 구매)' : '';
+  if (S.modal === 'buy') { $('buyTime').textContent = deadBuyOk() ? '부활 전 구매' : bl > 0 ? `${Math.ceil(bl)}초 남음` : ''; $('buyMoney').textContent = '$' + me.money; if (bl <= 0 && !atShop && S.mode !== 'practice' && !deadBuyOk()) closeModals(); }
   // 줍기
   const nd = S.nearDrop;
   $('hint').classList.toggle('on', !!(nd && me.alive));
@@ -1532,15 +1638,15 @@ function updateHud(dt) {
   if (kcOn) $('death').classList.add('hidden');
   if (!me.alive && S.dead) $('deathTimer').textContent = me.respawnAt > now ? `${Math.ceil((me.respawnAt - now) / 1000)}초 후 부활` : '부활 중…';
   // 조준선
-  const spread = W ? ((WS.ads > 0.6 ? (W.adsSpread != null ? W.adsSpread : W.spread * 0.35) : W.spread) + Math.hypot(me.vx, me.vz) / P.RUN * (W.mspread || 0) + WS.bloom + (me.ground ? 0 : 0.05)) : 0.01;
-  const gap = 4 + spread * window.innerHeight / (2 * Math.tan(camera.fov * Math.PI / 360));
+  // 이동 오차 / 사격 오차 (픽셀) — 설정에서 켠 선만 벌어져요
+  const pxRad = window.innerHeight / (2 * Math.tan(camera.fov * Math.PI / 360));
+  const moveErr = W ? Math.hypot(me.vx, me.vz) / P.RUN * (W.mspread || 0) * pxRad : 0;
+  const fireErr = W ? (WS.bloom + (me.ground ? 0 : 0.05)) * pxRad : 0;
   const c = $('cross');
-  c.querySelector('.t').style.top = (-gap - 7) + 'px'; c.querySelector('.b').style.top = gap + 'px';
-  c.querySelector('.l').style.left = (-gap - 7) + 'px'; c.querySelector('.r').style.left = gap + 'px';
-  // 조준(줌) 중에도 조준선 표시: 빨간 점 + 촘촘한 십자. 스코프는 스코프 십자선 사용
+  // 스코프는 스코프 십자선 사용
   const scopedNow = !!(W && W.scope && WS.ads > 0.5);
   c.style.display = me.alive && !scopedNow ? '' : 'none';
-  c.classList.toggle('ads', WS.ads > 0.6 && !!W && !W.melee);
+  if (me.alive && !scopedNow) drawCross(c, crossCfg, { move: Math.min(moveErr, 60), fire: Math.min(fireErr, 60) });
 }
 
 /* ================= 네트워크 송신 ================= */
@@ -1780,17 +1886,8 @@ function celebrate(main, sub, tier) {
   const el = $('celebrate');
   el.className = ''; void el.offsetWidth; el.className = 'on ' + (tier || '');
   $('celMain').textContent = main; $('celSub').textContent = sub || '';
-  const cf = $('confetti'); cf.innerHTML = '';
-  const cols = ['#ffd84a', '#ff6af0', '#6af0ff', '#7df07d', '#ff6a5a', '#ffffff', '#3d8bf0'];
-  for (let i = 0; i < 110; i++) {
-    const d = document.createElement('div'); d.className = 'confetto';
-    const sz = 6 + (Math.random() * 9 | 0);
-    d.style.left = (Math.random() * 100) + 'vw'; d.style.width = sz + 'px'; d.style.height = (sz * (0.5 + Math.random())) + 'px';
-    d.style.background = cols[i % cols.length]; d.style.animationDuration = (1.6 + Math.random() * 1.8) + 's'; d.style.animationDelay = (Math.random() * 0.7) + 's';
-    cf.appendChild(d);
-  }
-  A.sfxFanfare(); S.shake = Math.max(S.shake || 0, 0.6);
-  clearTimeout(celT); celT = setTimeout(() => { el.className = ''; cf.innerHTML = ''; }, 3400);
+  A.sfxFanfare();
+  clearTimeout(celT); celT = setTimeout(() => { el.className = ''; }, 2200);
 }
 // 내 처치 → 골드 + 연출
 function onMyKill(m) {
@@ -2595,7 +2692,7 @@ function onRound(m) {
   if (m.reset) {
     // 맵 초기화 (부서진 블록 복구)
     if (S.world) { scene.remove(S.world); disposeWorld(S.world); }
-    S.map = SH.getMap(S.mapId).clone();
+    S.map = SH.getMap(S.mapId).clone(); setGimMap(S.map);
     S.world = buildWorld(S.map, atlas.tex); scene.add(S.world);
     for (const id of [...S.projs.keys()]) removeProj(id);
     for (const id of [...S.drops.keys()]) removeDrop(id);
@@ -2794,16 +2891,23 @@ function frame(dt) {
   } else {
     if (ED.on) { editorFrame(dt); return; }
     renderer.clear();
-    if (!$('menu').classList.contains('hidden') && pv.ch) { pv.ch.rotation.y += dt * 0.8; animChar(pv.ch, dt, 0, 0, false, false, false); pv.r.render(pv.scene, pv.cam); }
+    if (!$('menu').classList.contains('hidden') && (pv.ch || pv.gun)) {
+      if (pv.ch) { pv.ch.rotation.y += dt * 0.8; animChar(pv.ch, dt, 0, 0, false, false, false); }
+      if (pv.gun) pv.gun.rotation.y += dt * 0.6;
+      pv.r.render(pv.scene, pv.cam);
+    }
   }
 }
 function loop() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  tickSkins(now / 1000); tickAuras(dt);
+  if (S.inGame) updateGimmicks(dt);
   frame(dt);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+initAuth({ send, onReady: onLoggedIn });
 connect();
 
 // 테스트/디버그 훅
