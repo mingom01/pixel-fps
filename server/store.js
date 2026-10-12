@@ -6,8 +6,9 @@ const fs = require('fs'), path = require('path'), crypto = require('crypto');
 
 const DATA = path.join(__dirname, '..', 'data');
 const FILE = path.join(DATA, 'users.json');
-const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
-const SB_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+// 주소 뒤에 /rest/v1 같은 경로가 붙어 와도 https://xxxx.supabase.co 부분만 씀 (경로가 있으면 PGRST125 오류)
+const SB_URL = (() => { const v = String(process.env.SUPABASE_URL || '').trim().replace(/^["']+|["']+$/g, ''); try { return v ? new URL(v).origin : ''; } catch (e) { return v.replace(/\/+$/, ''); } })();
+const SB_KEY = String(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/^["']+|["']+$/g, '');
 const TABLE = process.env.SUPABASE_TABLE || 'accounts';
 const remote = !!(SB_URL && SB_KEY);
 const log = (s) => console.log(new Date().toLocaleTimeString() + '  ' + s);
