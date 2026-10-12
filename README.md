@@ -1,5 +1,7 @@
 # 픽셀 스트라이크
 
+**지금 하러 가기: https://pixel-fps.onrender.com** (GitHub Pages 주소 https://mingom01.github.io/pixel-fps/ 로 들어와도 이 주소로 이동해요)
+
 ```
 node server.js   →  http://localhost:8230
 ```
@@ -29,7 +31,6 @@ node server.js   →  http://localhost:8230
 
 ### 3. Render (게임 서버)
 1. https://render.com 에 GitHub 로 가입 → **New → Blueprint** → 이 저장소 선택 (`render.yaml` 대로 만들어짐)
-   - 이 작업이 아직 PR 브랜치에 있으면 먼저 main 에 머지하거나, Blueprint 에서 브랜치를 골라 주세요
 2. 환경변수 입력: `GOOGLE_CLIENT_ID`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (`SESSION_SECRET` 은 자동 생성)
 3. 배포가 끝나면 `https://pixel-fps-xxxx.onrender.com` 같은 주소가 생겨요
 4. 그 주소를 구글 콘솔의 **승인된 JavaScript 원본**에 추가 → 끝! 친구에게 주소를 공유하세요
