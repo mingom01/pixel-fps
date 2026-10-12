@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>픽셀 스트라이크</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.39.3/dist/galmuri.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<!-- 메인 메뉴 -->
+<div id="menu" class="screen">
+  <div class="menu-wrap">
+    <div class="logo"><span class="l1">PIXEL</span><span class="l2">STRIKE</span><div class="sub">픽셀 스트라이크 · 온라인 FPS</div></div>
+    <div class="menu-cols">
+      <div class="panel">
+        <div class="ptitle">내 캐릭터</div>
+        <div class="prof">
+          <span class="lvbadge" id="lvBadge">Lv.1</span>
+          <div class="xpbar"><div id="xpFill"></div><span id="xpText">0 / 300</span></div>
+        </div>
+        <div class="coins"><i class="coin"></i><b id="coinNum">0</b> 코인 <i class="goldc"></i><b id="goldNum" class="goldtxt">0</b> <span class="goldtxt">골드</span></div>
+        <div id="previewSlot"><canvas id="preview" width="180" height="200"></canvas></div>
+        <button id="lockerBtn" class="btn yellow wide">꾸미기 상점</button>
+        <label class="lbl">닉네임</label>
+        <input id="nameIn" maxlength="10" placeholder="닉네임">
+        <label class="lbl">색깔 <span class="dim">(기본 스킨)</span></label>
+        <div id="colors" class="swatches"></div>
+      </div>
+      <div class="panel grow">
+        <div class="ptitle">플레이</div>
+        <button id="quickBtn" class="btn big yellow">빠른 시작 <small>봇과 바로 대전 (모드 무작위)</small></button>
+        <div class="row"><button id="hubBtn" class="btn green grow">미션 · 업적 <span id="missionDot"></span></button><button id="rankBtn" class="btn blue grow">전적 · 랭킹</button></div>
+        <button id="editorBtn" class="btn wide">맵 에디터 <small>· 블록으로 나만의 맵 만들기</small></button>
+        <button id="practiceBtn" class="btn blue wide">연습장 <small>· 사격장 과녁 · 허수아비 · 모든 총 무료</small></button>
+        <div class="row">
+          <button id="createBtn" class="btn green">방 만들기</button>
+          <input id="codeIn" maxlength="4" placeholder="방 코드" inputmode="numeric">
+          <button id="joinBtn" class="btn blue">참가</button>
+        </div>
+        <div class="ptitle small">열린 방 <span id="netState" class="dim"></span></div>
+        <div id="roomList" class="roomlist"><div class="dim">방이 없어요. 새로 만들어 보세요!</div></div>
+        <div class="help">
+          <b>WASD</b> 이동 · <b>Shift</b> 달리기 · <b>Space</b> 점프(2단) · <b>C</b> 앉기(달리면서 누르면 슬라이딩)<br>
+          <b>좌클릭</b> 사격 · <b>우클릭</b> 조준 · <b>R</b> 재장전 · <b>1~4/휠</b> 무기 · <b>G</b> 수류탄 · <b>V</b> 칼<br>
+          <b>B</b> 상점(부활 후 8초) · 빨간 받침대 = 힐팩 · 파란 받침대 = 갑옷 상자 (시간 지나면 다시 생겨요) · <b>Z</b> 포탑 설치 · <b>X</b> 공습 · <b>Y</b> 감정표현 · <b>T</b> 스프레이 · <b>F</b>(길게) 스파이크 설치 · <b>E</b>(길게) 해체 / 보급상자 열기 · <b>E</b> 무기 줍기 · <b>Tab</b> 점수 · <b>Enter</b> 채팅 · <b>Esc</b> 메뉴<br>
+          로켓·수류탄으로 벽을 부술 수 있어요 · 죽으면 <b>킬캠</b> (Space로 건너뛰기)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 꾸미기 상점 -->
+<div id="locker" class="modal hidden">
+  <div class="panel locker-panel">
+    <div class="ptitle">꾸미기 상점 <span class="coins"><i class="coin"></i><b id="lockerCoins">0</b> <i class="goldc"></i><b id="lockerGold" class="goldtxt">0</b></span><span class="lvbadge" id="lockerLv">Lv.1</span><button id="lockerClose" class="btn tiny red right">닫기</button></div>
+    <div class="locker-cols">
+      <div class="locker-prev"><div id="lockerPrevSlot"></div><div id="lockerSel" class="dim"></div></div>
+      <div class="grow">
+        <div class="seg tabs" id="lockerTabs"><button data-tab="skin" class="on">캐릭터 스킨</button><button data-tab="gskin">총 스킨</button><button data-tab="spray">스프레이</button><button data-tab="gacha">골드 뽑기</button></div>
+        <div id="lockerGrid"></div>
+        <div class="dim">매치를 끝까지 하면 XP와 코인을 받아요 (킬, 깃발 득점, 승리, 1등 보너스). 레벨이 오르면 +200 코인!</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 방 로비 -->
+<div id="lobby" class="screen hidden">
+  <div class="lobby-wrap">
+    <div class="panel">
+      <div class="ptitle">방 코드 <span id="roomCode" class="code">----</span> <span id="lanInfo" class="dim"></span></div>
+      <div id="lobbyPlayers" class="plist"></div>
+      <div id="lobbyBotBtns" class="botbtns"></div>
+      <button id="teamBtn" class="btn blue wide hidden">팀 바꾸기</button>
+    </div>
+    <div class="panel grow">
+      <div class="ptitle">매치 설정 <span id="hostNote" class="dim"></span></div>
+      <div class="cfgrow"><span>모드</span><div class="seg" id="modeSeg"><button data-v="ffa">개인전</button><button data-v="tdm">팀 데스매치</button><button data-v="ctf">깃발 뺏기</button><button data-v="spike">스파이크</button><button data-v="zombie">좀비 감염</button><button data-v="gungame">건게임</button><button data-v="br">배틀로얄</button><button data-v="boss">보스전</button></div></div>
+      <div id="modeDesc" class="dim modedesc"></div>
+      <div id="mapCards" class="mapcards"></div>
+      <div class="cfgrow"><span>봇 수</span><div class="stepper"><button class="btn tiny" data-bots="-1">-</button><b id="botsVal">5</b><button class="btn tiny" data-bots="1">+</button></div></div>
+      <div class="cfgrow"><span>봇 난이도</span><div class="seg" id="diffSeg"><button data-v="easy">쉬움</button><button data-v="normal">보통</button><button data-v="hard">어려움</button></div></div>
+      <div class="cfgrow" id="cfgTime"><span>시간</span><div class="seg" id="timeSeg"><button data-v="180">3분</button><button data-v="300">5분</button><button data-v="600">10분</button></div></div>
+      <div class="cfgrow" id="cfgKill"><span id="killLbl">목표 킬</span><div class="seg" id="killSeg"><button data-v="15">15</button><button data-v="25">25</button><button data-v="40">40</button></div></div>
+      <div class="row end">
+        <button id="leaveBtn" class="btn red">나가기</button>
+        <button id="startBtn" class="btn big yellow">게임 시작</button>
+      </div>
+      <div id="lobbyChat" class="lchat"></div>
+      <input id="lobbyChatIn" maxlength="80" placeholder="채팅 입력 후 Enter">
+    </div>
+  </div>
+</div>
+
+<!-- 게임 HUD -->
+<div id="hud" class="hidden">
+  <div id="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
+  <div id="hitmark"></div>
+  <div id="scope"><div class="scope-hole"></div><div class="scope-dot"></div></div>
+  <div id="vignette"></div>
+  <div id="dmgDirs"></div>
+  <div id="topbar">
+    <div id="teamBar" class="hidden"><span class="ts red"><b id="scoreR">0</b></span><div id="timerT">5:00</div><span class="ts blue"><b id="scoreB">0</b></span></div>
+    <div id="timer">5:00</div>
+    <div id="leader"></div>
+    <div id="flagStat" class="hidden"></div>
+  </div>
+  <div id="spikeBar" class="hidden"><div class="sb-side" id="sbL"></div><div class="sb-mid"><div id="sbRound"></div><div id="sbTime"></div><div id="sbIcon"></div></div><div class="sb-side" id="sbR"></div></div>
+  <div id="plantBar" class="hidden"><div id="plantLbl"></div><div class="pbar"><div id="plantFill"></div></div></div>
+  <div id="spikeHint"></div>
+  <div id="roundBanner"></div>
+  <div id="practiceHud" class="hidden"></div>
+  <div id="goldPop"></div>
+  <div id="bossBar" class="hidden"><div id="bossName">거대 골렘</div><div class="bbar"><div id="bossFill"></div><span id="bossHpTxt"></span></div></div>
+  <div id="zoneWarn"></div>
+  <div id="zombieTint"></div>
+  <div id="killfeed"></div>
+  <div id="center"></div>
+  <div id="streak"></div>
+  <div id="bigMsg"></div>
+  <div id="hint"></div>
+  <div id="buyHint"></div>
+  <div id="botLeft">
+    <div id="supBar"></div>
+    <div id="perkBar"></div>
+    <div id="money">$800</div>
+    <div class="bars">
+      <div class="stat hp"><i class="ico heart"></i><span id="hpNum">100</span><div class="bar"><div id="hpBar"></div></div></div>
+      <div class="stat ar"><i class="ico shield"></i><span id="arNum">0</span><div class="bar"><div id="arBar"></div></div></div>
+    </div>
+  </div>
+  <div id="botRight">
+    <div id="slots"></div>
+    <div id="ammoBox"><img id="wIcon" alt=""><div><div id="wName">P9 권총</div><div id="ammo"><b id="mag">15</b> / <span id="res">60</span></div></div></div>
+  </div>
+  <div id="chat"><div id="chatLog"></div><input id="chatIn" maxlength="80" class="hidden" placeholder="Enter로 보내기, Esc 취소"></div>
+  <div id="death" class="hidden"><div class="dt">처치당함</div><div id="deathBy"></div><div id="deathTimer"></div></div>
+  <div id="killcam" class="hidden">
+    <div class="kc-top"><span class="kc-rec"></span>킬캠 <span class="dim">· Space/클릭으로 건너뛰기</span></div>
+    <div class="kc-bot"><div id="kcWho"></div><div id="kcInfo" class="dim"></div></div>
+  </div>
+</div>
+
+<div id="buy" class="modal hidden">
+  <div class="panel buy-panel">
+    <div class="ptitle">상점 <span id="buyMoney" class="money">$0</span> <span id="buyTime" class="dim"></span><button id="buyClose" class="btn tiny red right">닫기 (B)</button></div>
+    <div id="buyGrid"></div>
+    <div class="row"><button id="rebuyBtn" class="btn blue">지난번 구매 다시 사기</button><span class="dim">카드를 클릭해서 구매 · 죽으면 주무기를 떨어뜨려요</span></div>
+  </div>
+</div>
+
+<div id="score" class="modal hidden"><div class="panel score-panel"><div class="ptitle">점수판 <span id="scoreMap" class="dim"></span></div><div id="scoreTable"></div></div></div>
+
+<div id="pause" class="modal hidden">
+  <div class="panel pause-panel">
+    <div class="ptitle">일시정지</div>
+    <label class="lbl">마우스 감도 <b id="sensVal"></b></label><input type="range" id="sens" min="0.2" max="3" step="0.05">
+    <label class="lbl">시야(FOV) <b id="fovVal"></b></label><input type="range" id="fov" min="60" max="110" step="1">
+    <label class="lbl">볼륨 <b id="volVal"></b></label><input type="range" id="vol" min="0" max="1" step="0.05">
+    <label class="chk"><input type="checkbox" id="kcToggle"> 죽으면 킬캠 보기</label>
+    <div id="botMgr" class="hidden"><div class="ptitle small">봇 관리 <span class="dim">(방장)</span></div><div id="botMgrList" class="botlist"></div><div id="botMgrBtns" class="botbtns"></div></div>
+    <button id="resumeBtn" class="btn big yellow">계속하기</button>
+    <button id="endBtn" class="btn red hidden">매치 끝내기 (방장)</button>
+    <button id="quitBtn" class="btn">방 나가기</button>
+  </div>
+</div>
+
+<div id="result" class="modal hidden"><div class="panel result-panel"><div class="ptitle">매치 결과</div><div id="resultTeam"></div><div id="podium"></div><table id="resultTable"></table><div id="rewards"></div><div class="dim" id="resultNote">잠시 후 대기실로 돌아갑니다</div></div></div>
+
+<div id="celebrate"><div class="rays"></div><div class="cel-main" id="celMain"></div><div class="cel-sub" id="celSub"></div><div id="confetti"></div></div>
+<div id="hub" class="modal hidden">
+  <div class="panel hub-panel">
+    <div class="ptitle">내 기록 <button id="hubClose" class="btn tiny red right">닫기</button></div>
+    <div class="seg tabs" id="hubTabs"><button data-tab="mission">일일 미션</button><button data-tab="ach">업적</button><button data-tab="stats">전적</button><button data-tab="rank">랭킹</button></div>
+    <div id="hubBody"></div>
+  </div>
+</div>
+<div id="notices"></div>
+<div id="emoteWheel" class="hidden"></div>
+<div id="editorHud" class="hidden">
+  <div class="ed-top"><input id="edName" maxlength="16" placeholder="맵 이름"><select id="edTheme"></select>
+    <button id="edSave" class="btn tiny green">저장 (M)</button><button id="edTest" class="btn tiny yellow">테스트 플레이</button><button id="edCode" class="btn tiny blue">공유 코드</button><button id="edExit" class="btn tiny red">나가기</button></div>
+  <div id="edCross"></div>
+  <div id="edPos"></div>
+  <div id="edBlockName"></div>
+  <div id="edPalette"></div>
+  <div class="ed-help">좌클릭 부수기 · 우클릭 놓기 · 휠/1~9 블록 · Q 스포이드 · B 블록 목록 · WASD 비행 · Space/C 위아래 · Shift 빠르게 · Z 되돌리기 · M 저장<br><span class="dim">플레이하려면 맨 아래 지면(높이 4) 위에 넓은 빈 땅이 몇 군데 필요해요 (스폰 지점)</span></div>
+</div>
+<div id="editorStart" class="modal hidden"><div class="panel ed-start"><div class="ptitle">맵 에디터 <button id="edStartClose" class="btn tiny red right">닫기</button></div><div id="edStartBody"></div></div></div>
+<div id="blockPicker" class="modal hidden"><div class="panel bp-panel"><div class="ptitle">블록 고르기 <button id="bpClose" class="btn tiny red right">닫기 (B)</button></div><div id="bpGrid"></div></div></div>
+<div id="edShare" class="modal hidden"><div class="panel ed-share"><div class="ptitle">맵 공유 코드 <button id="edShareClose" class="btn tiny red right">닫기</button></div><div class="dim">이 코드를 친구에게 보내면 맵 에디터의 '공유 코드로 불러오기'에서 열 수 있어요</div><textarea id="edShareText" readonly></textarea><button id="edShareCopy" class="btn green">복사</button></div></div>
+<div id="clickToPlay" class="hidden"><div>클릭해서 계속</div></div>
+<div id="toast"></div>
+
+<script src="js/shared.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
