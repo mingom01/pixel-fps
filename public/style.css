@@ -528,3 +528,26 @@ body.touch #botRight { top: 56px; left: 14px; right: auto; transform-origin: top
 .kbtn.wait { background: var(--yellow); color: #000; animation: kblink 0.8s infinite; }
 @keyframes kblink { 50% { opacity: 0.6; } }
 #setGen { max-width: 420px; display: flex; flex-direction: column; }
+
+/* ---------- 킬 배너 (발로란트식) ---------- */
+#killBanner { position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); pointer-events: none; }
+.kb-wrap { display: flex; flex-direction: column; align-items: center; animation: kbIn 0.32s cubic-bezier(.2, 1.5, .4, 1) both; filter: drop-shadow(0 0 10px var(--kb-glow)); }
+.kb-wrap.out { animation: kbOut 0.4s forwards; }
+.kb-svg { overflow: visible; }
+.kb-blade { transform-box: view-box; transform-origin: 60px 60px; animation: kbBlade 0.3s cubic-bezier(.2, 1.6, .4, 1) both; }
+.kb-spin { transform-box: view-box; transform-origin: 60px 60px; animation: spin 5s linear infinite; }
+.kb-lbl { margin-top: -4px; font-size: 14px; font-weight: bold; letter-spacing: 1px; text-shadow: 2px 2px 0 #000; white-space: nowrap; }
+.kb-lbl b { font-size: 18px; }
+.kb-hs { color: #ff6a5a; }
+@keyframes kbIn { 0% { transform: scale(1.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes kbOut { to { transform: translateY(8px) scale(0.9); opacity: 0; } }
+@keyframes kbBlade { 0% { transform: scale(0.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* 연속 킬 축하 연출: 화면을 덜 가리게 작게 (광선·플래시·꽃가루 없음) */
+#celebrate .rays, #celebrate.on::before, #confetti { display: none !important; }
+.cel-main { top: 15%; font-size: clamp(22px, 3vw, 34px); letter-spacing: 2px; text-shadow: 3px 3px 0 #8a3a00, -1px -1px 0 #fff3a8;
+  background: rgba(10, 12, 20, 0.55); padding: 4px 16px; border: 2px solid rgba(255, 216, 74, 0.6); animation: celpop 0.45s cubic-bezier(.2, 1.4, .4, 1); }
+#celebrate.t-penta .cel-main { text-shadow: 3px 3px 0 #6a0a5a; border-color: rgba(255, 106, 240, 0.6); }
+#celebrate.t-god .cel-main { text-shadow: 3px 3px 0 #0a4a6a; border-color: rgba(106, 240, 255, 0.6); }
+.cel-sub { top: calc(15% + 30px); font-size: 13px; }
+#streak { top: 26%; font-size: 24px; text-shadow: 2px 2px 0 #8a2a00; }

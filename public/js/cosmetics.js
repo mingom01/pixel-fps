@@ -45,11 +45,12 @@ export const myLevel = () => levelInfo(profile.xp).lv;
 export function grantMatch({ kills, caps, win, rank }) {
   const before = myLevel();
   const xp = 100 + kills * 25 + caps * 80 + (win ? 150 : 0) + (rank === 0 ? 100 : 0);
-  const coins = 30 + kills * 10 + caps * 40 + (win ? 100 : 0) + (rank === 0 ? 50 : 0);
+  // 코인 획득량 (이전 대비 약 40% 감소)
+  const coins = 18 + kills * 6 + caps * 24 + (win ? 60 : 0) + (rank === 0 ? 30 : 0);
   profile.xp += xp; profile.coins += coins; profile.games++; profile.kills += kills; if (win) { profile.wins++; profile.gold += 5; }
   const after = myLevel();
   // 레벨업 보너스 코인
-  const bonus = (after - before) * 200;
+  const bonus = (after - before) * 100;
   profile.coins += bonus;
   saveProfile();
   return { xp, coins: coins + bonus, before, after, gold: win ? 5 : 0 };
@@ -115,7 +116,7 @@ export function dailyMissions() {
     const pool = MISSION_POOL.slice(), list = [];
     while (list.length < 3 && pool.length) {
       const m = pool.splice(Math.floor(rnd() * pool.length), 1)[0], n = m.t[Math.floor(rnd() * m.t.length)];
-      list.push({ type: m.type, target: n, name: m.name(n), prog: 0, done: false, coins: 120 + n * (m.type.startsWith('mode') ? 150 : m.type === 'win' ? 120 : 12), gold: m.type === 'win' || m.type.startsWith('mode') || n >= 20 ? 6 : 3 });
+      list.push({ type: m.type, target: n, name: m.name(n), prog: 0, done: false, coins: 70 + n * (m.type.startsWith('mode') ? 90 : m.type === 'win' ? 70 : 7), gold: m.type === 'win' || m.type.startsWith('mode') || n >= 20 ? 6 : 3 });
     }
     profile.daily = { date: d, list };
     saveProfile();

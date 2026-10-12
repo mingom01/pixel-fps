@@ -294,7 +294,7 @@ function endMatch(r) {
   broadcast(r, { t: 'end', rank, mode: r.cfg.mode, win, score: r.score });
   log(`방 ${r.code} 매치 종료 — ${teamMode(r) ? '점수 ' + r.score.join(':') : '1위 ' + (rank[0] && rank[0].name)}`);
   clearTimeout(r.timer);
-  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; pushRoom(r); }, 12000);
+  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; pushRoom(r); }, 6000);
 }
 function addScore(r, team, n) {
   r.score[team] += n;
@@ -466,9 +466,12 @@ function explode(r, x, y, z, owner, kind) {
 
 function buy(r, e, item) {
   const now = Date.now();
-  if (r.state !== 'play' || !e.alive) return 'dead';
-  if (isGG(r) || isBR(r) || e.zombie) return 'mode';
-  if (now > e.buyUntil && !nearShop(r, e) && !isPractice(r)) return 'time';
+  const dead = !e.alive;
+  if (r.state !== 'play') return 'dead';
+  if (isGG(r) || isBR(r) || e.zombie || (dead && isZombie(r))) return 'mode';
+  // 죽어 있는 동안에도 다음 부활 때 쓸 장비를 살 수 있어요 (스파이크는 라운드제라 제외)
+  if (dead && (isSpike(r) || item === 'medkit' || item === 'ammo')) return 'dead';
+  if (!dead && now > e.buyUntil && !nearShop(r, e) && !isPractice(r)) return 'time';
   const W = WEAPONS[item], I = ITEMS[item];
   if (!W && (!I || !I.price)) return 'bad';
   const price = isPractice(r) ? 0 : W ? W.price : I.price;

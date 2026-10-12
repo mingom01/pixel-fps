@@ -10,6 +10,7 @@ import { initAuth, onSocketOpen, handleAuthMsg, isAuthed } from './auth.js';
 import { initSettings, openSettings, closeSettings, settingsOpen } from './settings/panel.js';
 import { drawCross, getCross } from './settings/crosshair.js';
 import { toGame, resetBindsCache } from './settings/keybinds.js';
+import { showKillBanner, clearKillBanner } from './hud/killbanner.js';
 
 const SH = window.SH;
 const { WEAPONS, ITEMS, P, ECON } = SH;
@@ -417,7 +418,7 @@ function startGame(m) {
 function leaveGame() {
   S.inGame = false; me.alive = false;
   if (document.pointerLockElement) document.exitPointerLock();
-  closeModals();
+  closeModals(); clearKillBanner();
   $('result').classList.add('hidden');
 }
 function onEnd(m) {
@@ -583,7 +584,9 @@ const SHOP = [
   ['퍽 <small>죽어도 매치 끝까지 유지</small>', ['perk_speed', 'perk_hp', 'perk_reload']], ['지원 <small>Z: 포탑 설치 · X: 공습 지점</small>', ['uav', 'turret', 'air']],
 ];
 function nearShop() { return !!(S.map && S.map.shops && S.map.shops.some(p => Math.hypot(p[0] - me.x, p[2] - me.z) < ECON.SHOP_DIST - 0.3 && Math.abs(p[1] - me.y) < 2.5)); }
-function canBuyNow() { return me.alive && (S.mode === 'practice' || serverNow() < me.buyUntil || nearShop()); }
+// 죽어 있을 때도 다음 부활용으로 구매 가능 (라운드제·특수 모드 제외)
+function deadBuyOk() { return !me.alive && S.inGame && !['spike', 'gungame', 'br', 'zombie'].includes(S.mode); }
+function canBuyNow() { return deadBuyOk() || (me.alive && (S.mode === 'practice' || serverNow() < me.buyUntil || nearShop())); }
 function ownedOf(id) {
   const W = WEAPONS[id], I = ITEMS[id];
   if (W) return me.primary === id || me.secondary === id;
@@ -621,7 +624,7 @@ function itemIcon(id, px) {
 function toggleBuy() {
   if (S.modal === 'buy') { closeModals(); return; }
   if (S.modal) return;
-  if (!me.alive) { toast('살아있을 때만 살 수 있어요'); return; }
+  if (!me.alive && !deadBuyOk()) { toast('이 모드에선 죽은 동안 살 수 없어요'); return; }
   if (!canBuyNow()) { toast('구매 시간이 지났어요 (부활 후 8초 동안만 살 수 있어요)'); A.sfxDeny(); return; }
   openModal('buy');
 }
@@ -661,7 +664,7 @@ function onBuyRes(m) {
     A.sfxBuy();
     S.lastBuy = [...new Set([...(S.lastBuy || []).filter(x => !(WEAPONS[x] && WEAPONS[m.item] && WEAPONS[x].slot === WEAPONS[m.item].slot)), m.item])];
     const W = WEAPONS[m.item];
-    if (W) { fullAmmo(m.item); setTimeout(() => switchTo(m.item, true), 0); }
+    if (W) { fullAmmo(m.item); if (me.alive) setTimeout(() => switchTo(m.item, true), 0); else toast(`부활하면 ${W.name}을(를) 들고 나와요`); }
     else if (m.item === 'ammo') { for (const k in ammo) { const W2 = WEAPONS[k]; if (W2 && W2.res) ammo[k].res = W2.res; } }
     else if (m.item === 'medkit') A.sfxHeal();
     else if (m.item === 'turret') toast('Z 키로 자동 포탑을 설치하세요');
@@ -1194,6 +1197,7 @@ function onKill(m) {
     c.innerHTML = `${m.hs ? '헤드샷! ' : ''}${esc(vn)} 처치 <span class="reward">+$${m.reward}</span>`;
     $('center').prepend(c); while ($('center').children.length > 3) $('center').lastChild.remove();
     setTimeout(() => c.remove(), 2600);
+    showKillBanner({ streak: m.streak || 1, hs: !!m.hs });
     onMyKill(m); trackKill(m);
     if (S.mode === 'practice' && S.pst) S.pst.kills++;
   }
@@ -1545,8 +1549,8 @@ function updateHud(dt) {
   // 구매
   const bl = (me.buyUntil - now) / 1000;
   const atShop = me.alive && nearShop();
-  $('buyHint').textContent = S.mode === 'practice' ? 'B: 상점 (모든 총 무료)' : me.alive && bl > 0 ? `B: 상점 (${Math.ceil(bl)}초)` : '';
-  if (S.modal === 'buy') { $('buyTime').textContent = bl > 0 ? `${Math.ceil(bl)}초 남음` : ''; $('buyMoney').textContent = '$' + me.money; if (bl <= 0 && !atShop && S.mode !== 'practice') closeModals(); }
+  $('buyHint').textContent = S.mode === 'practice' ? 'B: 상점 (모든 총 무료)' : me.alive && bl > 0 ? `B: 상점 (${Math.ceil(bl)}초)` : deadBuyOk() ? 'B: 상점 (부활 전 미리 구매)' : '';
+  if (S.modal === 'buy') { $('buyTime').textContent = deadBuyOk() ? '부활 전 구매' : bl > 0 ? `${Math.ceil(bl)}초 남음` : ''; $('buyMoney').textContent = '$' + me.money; if (bl <= 0 && !atShop && S.mode !== 'practice' && !deadBuyOk()) closeModals(); }
   // 줍기
   const nd = S.nearDrop;
   $('hint').classList.toggle('on', !!(nd && me.alive));
@@ -1806,17 +1810,8 @@ function celebrate(main, sub, tier) {
   const el = $('celebrate');
   el.className = ''; void el.offsetWidth; el.className = 'on ' + (tier || '');
   $('celMain').textContent = main; $('celSub').textContent = sub || '';
-  const cf = $('confetti'); cf.innerHTML = '';
-  const cols = ['#ffd84a', '#ff6af0', '#6af0ff', '#7df07d', '#ff6a5a', '#ffffff', '#3d8bf0'];
-  for (let i = 0; i < 110; i++) {
-    const d = document.createElement('div'); d.className = 'confetto';
-    const sz = 6 + (Math.random() * 9 | 0);
-    d.style.left = (Math.random() * 100) + 'vw'; d.style.width = sz + 'px'; d.style.height = (sz * (0.5 + Math.random())) + 'px';
-    d.style.background = cols[i % cols.length]; d.style.animationDuration = (1.6 + Math.random() * 1.8) + 's'; d.style.animationDelay = (Math.random() * 0.7) + 's';
-    cf.appendChild(d);
-  }
-  A.sfxFanfare(); S.shake = Math.max(S.shake || 0, 0.6);
-  clearTimeout(celT); celT = setTimeout(() => { el.className = ''; cf.innerHTML = ''; }, 3400);
+  A.sfxFanfare();
+  clearTimeout(celT); celT = setTimeout(() => { el.className = ''; }, 2200);
 }
 // 내 처치 → 골드 + 연출
 function onMyKill(m) {
