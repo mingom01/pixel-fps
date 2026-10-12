@@ -9,7 +9,9 @@ const MAX_PROFILE = 96 * 1024;
 
 function readJson(f, d) { try { return JSON.parse(fs.readFileSync(f, 'utf8')) || d; } catch (e) { return d; } }
 const conf = readJson(CONF_FILE, {});
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || conf.googleClientId || '';
+// 붙여넣을 때 섞여 들어간 공백·줄바꿈·따옴표는 지움 (그대로 두면 구글이 invalid_client 로 거부)
+const CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || conf.googleClientId || '').trim().replace(/^["']+|["']+$/g, '').trim();
+if (CLIENT_ID && !/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(CLIENT_ID)) console.log('경고: GOOGLE_CLIENT_ID 형식이 이상해요 (숫자-영문.apps.googleusercontent.com 이어야 해요): ' + CLIENT_ID.slice(0, 12) + '…');
 const DEV_LOGIN = process.env.DEV_LOGIN === '1';
 
 /* ---------- 구글 ID 토큰 검증 (RS256, 의존성 없음) ---------- */
