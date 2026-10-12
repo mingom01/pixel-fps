@@ -7,6 +7,9 @@ import { buildWorld, buildSky, rebuildBlocks, disposeWorld } from './world.js';
 import { profile, saveProfile, levelInfo, myLevel, grantMatch, buyItem, equip, addGold, stats, dailyMissions, missionEvent, ACHIEVEMENTS, checkAchievements, GACHA_COST, RARITY, rollGacha } from './cosmetics.js';
 import * as A from './audio.js';
 import { initAuth, onSocketOpen, handleAuthMsg, isAuthed } from './auth.js';
+import { initSettings, openSettings, closeSettings, settingsOpen } from './settings/panel.js';
+import { drawCross, getCross } from './settings/crosshair.js';
+import { toGame, resetBindsCache } from './settings/keybinds.js';
 
 const SH = window.SH;
 const { WEAPONS, ITEMS, P, ECON } = SH;
@@ -99,6 +102,7 @@ setInterval(() => { if (wsOk && isAuthed() && !S.room) send({ t: 'list' }); }, 3
 function onLoggedIn(u) {
   if (!$('nameIn').value.trim() && u.name) { $('nameIn').value = u.name.slice(0, 10); CFG.name = $('nameIn').value; saveCfg(); }
   updateProfileUI(); refreshPreview(); updateMissionDot();
+  resetBindsCache(); crossCfg = getCross();
   send({ t: 'list' });
 }
 
@@ -476,22 +480,27 @@ document.addEventListener('keydown', (e) => {
   }
   if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
   if (ED.on) { editorKey(e); return; }
+  if (settingsOpen()) { if (e.code === 'Escape') closeSettingsPanel(); return; }
   if (!S.inGame) return;
-  if (e.code === 'Tab') { e.preventDefault(); if (!S.modal) openModal('score'); return; }
-  if (e.code === 'KeyB') { toggleBuy(); return; }
-  if (e.code === 'Enter') { openChat(); e.preventDefault(); return; }
+  // 사용자가 바꾼 키 → 게임 기본 키 코드
+  const code = toGame(e.code);
+  if (code === 'Tab') { e.preventDefault(); if (!S.modal) openModal('score'); return; }
+  if (code === 'KeyB') { toggleBuy(); return; }
+  if (code === 'Enter') { openChat(); e.preventDefault(); return; }
   if (S.modal === 'buy' && e.code === 'Escape') { closeModals(); return; }
   if (S.modal) return;
-  if (e.code === 'Space' && S.kc && S.kc.active) { endKc(); e.preventDefault(); return; }
-  if (e.code === 'Space' && !me.alive && (S.mode === 'spike' || S.mode === 'br')) { nextSpectate(); e.preventDefault(); return; }
+  if (code === 'Space' && S.kc && S.kc.active) { endKc(); e.preventDefault(); return; }
+  if (code === 'Space' && !me.alive && (S.mode === 'spike' || S.mode === 'br')) { nextSpectate(); e.preventDefault(); return; }
   if (S.emoteOpen && /^Digit[1-8]$/.test(e.code)) { doEmote(+e.code.slice(5) - 1); e.preventDefault(); return; }
-  if (!keys[e.code]) onPress(e.code);
-  keys[e.code] = true;
-  if (['Space', 'KeyC'].includes(e.code)) e.preventDefault();
+  if (['Space', 'KeyC', 'Tab'].includes(e.code)) e.preventDefault();
+  if (!code) return;
+  if (!keys[code]) onPress(code);
+  keys[code] = true;
 });
 document.addEventListener('keyup', (e) => {
-  keys[e.code] = false;
-  if (e.code === 'Tab' && S.modal === 'score') closeModals();
+  const code = toGame(e.code);
+  if (code) keys[code] = false;
+  if (code === 'Tab' && S.modal === 'score') closeModals();
 });
 function onPress(code) {
   if (!me.alive) return;
@@ -548,6 +557,14 @@ $('fov').oninput = (e) => { CFG.fov = Number(e.target.value); saveCfg(); updSett
 $('vol').oninput = (e) => { CFG.vol = Number(e.target.value); A.setVolume(CFG.vol); saveCfg(); updSettingsLbl(); };
 $('buyClose').onclick = () => closeModals();
 $('kcToggle').onchange = (e) => { CFG.killcam = e.target.checked; saveCfg(); };
+
+/* ---------- 설정 창 (조준선 · 조작키) ---------- */
+let crossCfg = getCross();
+initSettings({ cfg: CFG, save: saveCfg, setVolume: A.setVolume }, toast);
+function closeSettingsPanel() { closeSettings(); crossCfg = getCross(); if (S.modal === 'pause') openModal('pause'); }
+$('setClose').onclick = closeSettingsPanel;
+$('settingsBtn').onclick = () => { A.initAudio(); openSettings(); };
+$('pauseSetBtn').onclick = () => openSettings();
 
 function renderScore() {
   const ctf = S.mode === 'ctf';
@@ -1541,15 +1558,15 @@ function updateHud(dt) {
   if (kcOn) $('death').classList.add('hidden');
   if (!me.alive && S.dead) $('deathTimer').textContent = me.respawnAt > now ? `${Math.ceil((me.respawnAt - now) / 1000)}초 후 부활` : '부활 중…';
   // 조준선
-  const spread = W ? ((WS.ads > 0.6 ? (W.adsSpread != null ? W.adsSpread : W.spread * 0.35) : W.spread) + Math.hypot(me.vx, me.vz) / P.RUN * (W.mspread || 0) + WS.bloom + (me.ground ? 0 : 0.05)) : 0.01;
-  const gap = 4 + spread * window.innerHeight / (2 * Math.tan(camera.fov * Math.PI / 360));
+  // 이동 오차 / 사격 오차 (픽셀) — 설정에서 켠 선만 벌어져요
+  const pxRad = window.innerHeight / (2 * Math.tan(camera.fov * Math.PI / 360));
+  const moveErr = W ? Math.hypot(me.vx, me.vz) / P.RUN * (W.mspread || 0) * pxRad : 0;
+  const fireErr = W ? (WS.bloom + (me.ground ? 0 : 0.05)) * pxRad : 0;
   const c = $('cross');
-  c.querySelector('.t').style.top = (-gap - 7) + 'px'; c.querySelector('.b').style.top = gap + 'px';
-  c.querySelector('.l').style.left = (-gap - 7) + 'px'; c.querySelector('.r').style.left = gap + 'px';
-  // 조준(줌) 중에도 조준선 표시: 빨간 점 + 촘촘한 십자. 스코프는 스코프 십자선 사용
+  // 스코프는 스코프 십자선 사용
   const scopedNow = !!(W && W.scope && WS.ads > 0.5);
   c.style.display = me.alive && !scopedNow ? '' : 'none';
-  c.classList.toggle('ads', WS.ads > 0.6 && !!W && !W.melee);
+  if (me.alive && !scopedNow) drawCross(c, crossCfg, { move: Math.min(moveErr, 60), fire: Math.min(fireErr, 60) });
 }
 
 /* ================= 네트워크 송신 ================= */

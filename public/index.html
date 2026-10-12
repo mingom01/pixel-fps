@@ -44,6 +44,7 @@
         <div class="ptitle">플레이</div>
         <button id="quickBtn" class="btn big yellow">빠른 시작 <small>봇과 바로 대전 (모드 무작위)</small></button>
         <div class="row"><button id="hubBtn" class="btn green grow">미션 · 업적 <span id="missionDot"></span></button><button id="rankBtn" class="btn blue grow">전적 · 랭킹</button></div>
+        <button id="settingsBtn" class="btn wide">설정 <small>· 조준선 · 조작키 · 감도</small></button>
         <button id="editorBtn" class="btn wide">맵 에디터 <small>· 블록으로 나만의 맵 만들기</small></button>
         <button id="practiceBtn" class="btn blue wide">연습장 <small>· 사격장 과녁 · 허수아비 · 모든 총 무료</small></button>
         <div class="row">
@@ -109,7 +110,7 @@
 
 <!-- 게임 HUD -->
 <div id="hud" class="hidden">
-  <div id="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
+  <canvas id="cross"></canvas>
   <div id="hitmark"></div>
   <div id="scope"><div class="scope-hole"></div><div class="scope-dot"></div></div>
   <div id="vignette"></div>
@@ -173,6 +174,7 @@
     <label class="lbl">시야(FOV) <b id="fovVal"></b></label><input type="range" id="fov" min="60" max="110" step="1">
     <label class="lbl">볼륨 <b id="volVal"></b></label><input type="range" id="vol" min="0" max="1" step="0.05">
     <label class="chk"><input type="checkbox" id="kcToggle"> 죽으면 킬캠 보기</label>
+    <button id="pauseSetBtn" class="btn blue">조준선 · 조작키 설정</button>
     <div id="botMgr" class="hidden"><div class="ptitle small">봇 관리 <span class="dim">(방장)</span></div><div id="botMgrList" class="botlist"></div><div id="botMgrBtns" class="botbtns"></div></div>
     <button id="resumeBtn" class="btn big yellow">계속하기</button>
     <button id="endBtn" class="btn red hidden">매치 끝내기 (방장)</button>
@@ -188,6 +190,13 @@
     <div class="ptitle">내 기록 <button id="hubClose" class="btn tiny red right">닫기</button></div>
     <div class="seg tabs" id="hubTabs"><button data-tab="mission">일일 미션</button><button data-tab="ach">업적</button><button data-tab="stats">전적</button><button data-tab="rank">랭킹</button></div>
     <div id="hubBody"></div>
+  </div>
+</div>
+<div id="settings" class="modal hidden">
+  <div class="panel set-panel">
+    <div class="ptitle">설정 <button id="setClose" class="btn tiny red right">닫기</button></div>
+    <div class="seg tabs" id="setTabs"><button data-tab="cross">조준선</button><button data-tab="keys">조작키</button><button data-tab="gen">감도 · 화면</button></div>
+    <div id="setBody"><div id="setCross"></div><div id="setKeys" class="hidden"></div><div id="setGen" class="hidden"></div></div>
   </div>
 </div>
 <div id="notices"></div>
