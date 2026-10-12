@@ -5,6 +5,9 @@ const http = require('http'), fs = require('fs'), path = require('path'), crypto
 const SH = require('./public/js/shared.js');
 const { WEAPONS, ITEMS, ECON, P } = SH;
 const AUTH = require('./server/auth.js');
+const GIM = require('./server/gimmicks.js');
+// 맵 파일 (public/js/maps/*.js) 등록
+for (const f of fs.readdirSync(path.join(__dirname, 'public', 'js', 'maps')).sort()) if (f.endsWith('.js')) require(path.join(__dirname, 'public', 'js', 'maps', f));
 
 const PORT = Number(process.env.PORT) || 8230;
 const ROOT = path.join(__dirname, 'public');
@@ -256,13 +259,14 @@ function ensureTeams(r) {
 
 /* ---------- 매치 ---------- */
 function startMsg(r) {
-  return { t: 'start', custom: r.cfg.map === 'custom' && r.custom ? r.custom.obj : null, map: r.cfg.map, mode: r.cfg.mode, endAt: r.endAt, target: SH.targetOf(r.cfg), now: Date.now(), drops: [...r.drops.values()], broken: r.broken, score: r.score, pk: (r.pickups || []).map(p => [p.id, p.readyAt]) };
+  return { t: 'start', custom: r.cfg.map === 'custom' && r.custom ? r.custom.obj : null, map: r.cfg.map, mode: r.cfg.mode, endAt: r.endAt, target: SH.targetOf(r.cfg), now: Date.now(), drops: [...r.drops.values()], broken: r.broken, score: r.score, pk: (r.pickups || []).map(p => [p.id, p.readyAt]), gim: GIM.snapshot(r) };
 }
 function startMatch(r) {
   r.state = 'play'; r.projs = []; r.drops.clear(); r.broken = []; r.score = [0, 0]; r.turrets = []; r.strikes = []; r.crates = []; r.sp = null;
   r.nextCrate = Date.now() + 35000;
   if (r.cfg.map === 'custom' && !r.custom) r.cfg.map = 'village';
   r.map = r.cfg.map === 'custom' ? r.custom.map.clone() : SH.getMap(r.cfg.map).clone();
+  GIM.start(r);
   r.pickups = isSpike(r) || isPractice(r) ? [] : r.map.pickups.map(p => Object.assign({ readyAt: 0 }, p));
   r.endAt = Date.now() + (isSpike(r) || isPractice(r) ? 3 * 3600 : r.cfg.time) * 1000;
   fitBots(r);
@@ -1426,6 +1430,12 @@ function botThink(r, b, dt, now) {
   if (isBR(r) && (!b.primary || !b.secondary)) for (const d of r.drops.values()) { if (Math.hypot(d.x - bd.x, d.z - bd.z) < 1.5 && Math.abs(d.y - bd.y) < 2) { const sl = WEAPONS[d.w].slot === 'secondary' ? 'secondary' : 'primary'; if (!b[sl]) { takeDrop(r, b, d); b.w = b.primary || b.secondary; break; } } }
   const l = Math.hypot(mvx, mvz);
   if (l > 0.01) { mvx /= l; mvz /= l; }
+  // 낭떠러지 맵: 앞에 발 디딜 곳이 없으면 멈춤 (구름 바다로 떨어지지 않게)
+  if (m.gim && m.gim.voidY && l > 0.01 && !(bd.launchT > 0)) {
+    const fx = Math.floor(bd.x + mvx * 0.9), fz = Math.floor(bd.z + mvz * 0.9);
+    let safe = false; for (let y = Math.floor(bd.y) - 1; y >= Math.floor(bd.y) - 4 && y > 1; y--) if (m.solid(fx, y, fz) && !SH.HAZARD_FLOOR.has(m.get(fx, y, fz))) { safe = true; break; }
+    if (!safe) { mvx = 0; mvz = 0; bd.vx *= 0.3; bd.vz *= 0.3; b.path = null; }
+  }
   const acc = bd.ground ? 40 : 10;
   bd.vx += clamp(mvx * sp - bd.vx, -acc * dt, acc * dt);
   bd.vz += clamp(mvz * sp - bd.vz, -acc * dt, acc * dt);
@@ -1472,6 +1482,8 @@ function botFire(r, b, t, dist, W) {
   if (total > 0) damage(r, t, b, total, b.w, head ? 'head' : 'body');
 }
 
+GIM.init({ broadcast, explode, damage, topY });
+
 /* ---------- 틱 ---------- */
 setInterval(() => {
   const now = Date.now(), dt = TICK / 1000;
@@ -1489,6 +1501,8 @@ setInterval(() => {
     turretTick(r, dt, now);
     if (r.state !== 'play') continue;
     strikeTick(r, now);
+    if (r.state !== 'play') continue;
+    GIM.tick(r, now, dt);
     if (r.state !== 'play') continue;
     if (isSpike(r)) { spikeTick(r, now); if (r.state !== 'play') continue; }
     crateTick(r, now);

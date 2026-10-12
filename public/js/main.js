@@ -16,6 +16,7 @@ import { tickSkins } from './skins/gunMaterial.js';
 import { tickAuras, decorateGun, fxColor, killEffect } from './skins/skinFx.js';
 import { sfxSkinShot, sfxSkinKill, sfxFinisher, sfxEquip, sfxSkinStep } from './skins/skinSounds.js';
 import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
+import { initGimmicks, startGimmicks, setGimMap, stopGimmicks, onGimMsg, updateGimmicks, afterMove, groundAccMul, ENV_KILL } from './gimmicks.js';
 
 const SH = window.SH;
 const { WEAPONS, ITEMS, P, ECON } = SH;
@@ -155,6 +156,7 @@ function onMsg(m) {
     case 'zone': if (m.ev === 'shrink') { showBig('자기장이 줄어들어요!', '#c08aff', 2200); A.sfxSiren(); } break;
     case 'sys': addChat(`<span style="color:#f4c22b">${esc(m.text)}</span>`); break;
     case 'end': onEnd(m); break;
+    case 'gim': onGimMsg(m); break;
   }
 }
 
@@ -408,6 +410,7 @@ function startGame(m) {
   if (!S.sky) { S.sky = buildSky(def); scene.add(S.sky); }
   S.world.visible = true; S.sky.visible = true;
   scene.fog = new THREE.Fog(def.fog, def.fogNear || 45, def.fogFar || 140);
+  startGimmicks(def, S.map, m.gim);
   setupFlags();
   setupShops();
   for (const id of [...S.turrets.keys()]) removeTurret(id);
@@ -443,7 +446,7 @@ function startGame(m) {
 function leaveGame() {
   S.inGame = false; me.alive = false;
   if (document.pointerLockElement) document.exitPointerLock();
-  closeModals(); clearKillBanner();
+  closeModals(); clearKillBanner(); stopGimmicks();
   $('result').classList.add('hidden');
 }
 function onEnd(m) {
@@ -583,6 +586,8 @@ $('fov').oninput = (e) => { CFG.fov = Number(e.target.value); saveCfg(); updSett
 $('vol').oninput = (e) => { CFG.vol = Number(e.target.value); A.setVolume(CFG.vol); saveCfg(); updSettingsLbl(); };
 $('buyClose').onclick = () => closeModals();
 $('kcToggle').onchange = (e) => { CFG.killcam = e.target.checked; saveCfg(); };
+
+initGimmicks({ scene, camera, me, world: () => S.world, spawn: (...a) => spawnParticle(...a), showBig: (...a) => showBig(...a) });
 
 /* ---------- 설정 창 (조준선 · 조작키) ---------- */
 let crossCfg = getCross();
@@ -872,7 +877,7 @@ function updateMe(dt) {
     if (me.slideT <= 0 || Math.hypot(me.vx, me.vz) < 3.5) me.sliding = false;
   } else {
     const tx = wish ? wish[0] * speed : 0, tz = wish ? wish[1] * speed : 0;
-    const acc = (me.ground ? 55 : 14) * dt;
+    const acc = (me.ground ? 55 * groundAccMul(me) : 14) * dt;
     const dx = tx - me.vx, dz = tz - me.vz, dl = Math.hypot(dx, dz);
     if (me.ground || wish) {
       if (dl <= acc) { me.vx = tx; me.vz = tz; } else { me.vx += dx / dl * acc; me.vz += dz / dl * acc; }
@@ -881,6 +886,7 @@ function updateMe(dt) {
   me.vy -= P.GRAV * dt * (S.map.grav || 1);
   const wasGround = me.ground, vyBefore = me.vy;
   SH.moveBody(S.map, me, dt);
+  afterMove(me);
   if (me.ground) { me.jumps = 0; if (!wasGround && vyBefore < -9) A.sfxLand(); }
   if (me.stepDy) { me.camOff -= me.stepDy; me.stepDy = 0; }
   me.camOff *= Math.pow(0.0001, dt); if (Math.abs(me.camOff) < 0.002) me.camOff = 0;
@@ -1243,7 +1249,8 @@ function onKill(m) {
   if (kr && m.k !== m.v) kr.k++; if (vr) vr.d++;
   const kf = document.createElement('div'); kf.className = 'kf' + (m.k === S.myId || m.v === S.myId ? ' me' : '');
   const icon = WEAPONS[m.w] || m.w === 'nade' ? `<img src="${gunIcon(m.w === 'nade' ? 'nade' : m.w, 1)}">` : '';
-  kf.innerHTML = m.k === m.v ? `<span>${esc(vn)}</span> ${icon} <span class="dim">자폭</span>` : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span>${icon}${m.hs ? '<span class="hs">헤드</span>' : ''}<span style="color:${nameColor(m.v)}">${esc(vn)}</span>`;
+  kf.innerHTML = !m.k && ENV_KILL[m.w] ? `<span style="color:${nameColor(m.v)}">${esc(vn)}</span> <span class="dim">${ENV_KILL[m.w]}</span>`
+    : m.k === m.v ? `<span>${esc(vn)}</span> ${icon} <span class="dim">자폭</span>` : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span>${icon}${m.hs ? '<span class="hs">헤드</span>' : ''}<span style="color:${nameColor(m.v)}">${esc(vn)}</span>`;
   $('killfeed').prepend(kf);
   while ($('killfeed').children.length > 6) $('killfeed').lastChild.remove();
   setTimeout(() => kf.remove(), 7000);
@@ -1274,7 +1281,7 @@ function onKill(m) {
     me.alive = false; S.dead = true; S.killer = m.k !== m.v ? m.k : null; S.deathPos = { x: me.x, y: me.y, z: me.z, yaw: me.yaw };
     S.deathT = 0; WS.trigger = false; WS.ads = 0;
     $('death').classList.remove('hidden');
-    $('deathBy').innerHTML = m.k === m.v ? '스스로 쓰러졌어요' : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span> ${titleHtml((kr || {}).title)}${icon}${m.hs ? '<span class="hs" style="color:#ff6a5a">헤드샷</span>' : ''}`;
+    $('deathBy').innerHTML = !m.k && ENV_KILL[m.w] ? `${ENV_KILL[m.w]}(으)로 쓰러졌어요` : m.k === m.v ? '스스로 쓰러졌어요' : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span> ${titleHtml((kr || {}).title)}${icon}${m.hs ? '<span class="hs" style="color:#ff6a5a">헤드샷</span>' : ''}`;
     closeModals(true);
     S.selfBuf.push({ t: serverNow(), x: me.x, y: me.y, z: me.z, yaw: me.yaw, pitch: 0, fl: 0, w: WS.cur });
     if (CFG.killcam !== false && S.killer && S.ents.get(S.killer) && m.w !== 'turret' && m.w !== 'air') S.kc = { killer: S.killer, w: m.w, hs: m.hs, at: serverNow(), start: performance.now() + 800, active: false, lastT: 0, kick: 0, vw: null };
@@ -2685,7 +2692,7 @@ function onRound(m) {
   if (m.reset) {
     // 맵 초기화 (부서진 블록 복구)
     if (S.world) { scene.remove(S.world); disposeWorld(S.world); }
-    S.map = SH.getMap(S.mapId).clone();
+    S.map = SH.getMap(S.mapId).clone(); setGimMap(S.map);
     S.world = buildWorld(S.map, atlas.tex); scene.add(S.world);
     for (const id of [...S.projs.keys()]) removeProj(id);
     for (const id of [...S.drops.keys()]) removeDrop(id);
@@ -2895,6 +2902,7 @@ function loop() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
   tickSkins(now / 1000); tickAuras(dt);
+  if (S.inGame) updateGimmicks(dt);
   frame(dt);
   requestAnimationFrame(loop);
 }

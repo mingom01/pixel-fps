@@ -594,3 +594,9 @@ body.touch #botRight { top: 56px; left: 14px; right: auto; transform-origin: top
 .skinfo.r-rare { border-color: #1f55a8; }
 .skinfo.r-rare .sk-n { color: #9ac8ff; }
 #lockerGrid .lcard.r-epic .th img, #lockerGrid .lcard.r-legend .th img { filter: drop-shadow(0 0 4px var(--gc, #fff)) drop-shadow(0 0 1px var(--gc, #fff)); }
+
+/* ---------- 맵 기믹 화면 효과 ---------- */
+#gimTint { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 1.2s, background 1.2s; }
+#gimTint.blackout { opacity: 1; background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 0 14%, rgba(2,4,10,0.75) 38%, rgba(0,0,0,0.94) 70%); }
+#gimTint.blizzard { opacity: 1; background: radial-gradient(circle, rgba(230,242,255,0.05) 20%, rgba(230,242,255,0.45) 90%); }
+#gimTint.sandstorm { opacity: 1; background: radial-gradient(circle, rgba(220,170,90,0.08) 20%, rgba(200,150,70,0.5) 90%); }

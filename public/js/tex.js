@@ -140,6 +140,28 @@ for (const [n, c] of [['wool_r', 0xc0302a], ['wool_b', 0x2f5fc0], ['wool_w', 0xe
 def('gold', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const b = x === 0 || y === 0, d = x === 15 || y === 15; px(x, y, shade(0xf2c33a, (b ? 1.2 : d ? 0.7 : (x - y) % 7 === 0 ? 1.15 : 1) * (0.96 + r() * 0.06))); } });
 def('glowc', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const b = x < 2 || y < 2 || x > 13 || y > 13; px(x, y, b ? shade(0x1a2a3a, 1) : shade(0x5ff0ff, 0.9 + r() * 0.12 + ((x + y) % 4 === 0 ? 0.08 : 0))); } });
 
+// ---- 기믹 블록 ----
+def('lava', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const w = Math.sin(x * 0.7 + Math.sin(y * 0.5) * 2) + Math.sin(y * 0.9 + x * 0.2); px(x, y, shade(w > 1.1 ? 0xffe060 : w > 0.2 ? 0xff8a1a : 0xd23a0a, 0.92 + r() * 0.12)); } });
+def('jumppad', (px, r) => {
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+    const b = x < 2 || y < 2 || x > 13 || y > 13, ar = (y >= 3 && y <= 8 && Math.abs(x - 7.5) <= y - 2.5) || (y >= 9 && y <= 12 && x >= 6 && x <= 9);
+    px(x, y, b ? shade(0x2a3a2a, 1) : ar ? shade(0xd8ffb0, 1) : shade(0x3adf5a, 0.9 + r() * 0.12));
+  }
+});
+def('jumppad_side', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) px(x, y, y < 3 ? shade(0x3adf5a, 1) : shade(0x5a636e, (x % 4 === 0 ? 0.8 : 1) * (0.95 + r() * 0.08))); });
+def('portal', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const d = Math.hypot(x - 7.5, y - 7.5), a = Math.atan2(y - 7.5, x - 7.5), sw = Math.sin(a * 3 + d * 0.9); px(x, y, d > 7.2 ? shade(0x2a1040, 1) : shade(sw > 0.3 ? 0xe0a0ff : sw > -0.4 ? 0x9a4aff : 0x5a1ab0, 0.92 + r() * 0.12)); } });
+def('conveyor', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const stripe = (y % 4) < 2, chev = Math.abs(x - 7.5) + (y % 8) < 6 && Math.abs(x - 7.5) + (y % 8) > 4; px(x, y, chev ? shade(0xf0c020, 1) : shade(stripe ? 0x3a3e44 : 0x2a2d32, 0.95 + r() * 0.08)); } });
+def('quicksand', (px, r) => { noiseFill(px, r, 0xb89a5a, 0.14, 6); for (let i = 0; i < 3; i++) { const cx = r() * 16, cy = r() * 16; for (let a = 0; a < 6.28; a += 0.4) px(cx + Math.cos(a) * 2.5 | 0, cy + Math.sin(a) * 2.5 | 0, shade(0x8a6a3a, 1)); } });
+def('electric', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const z = (Math.abs(((x + y * 2) % 12) - 6) < 1) || (Math.abs(((x * 2 - y + 32) % 14) - 7) < 1); px(x, y, z ? shade(0xfff060, 1) : shade(0x22262e, 0.9 + r() * 0.15)); } });
+def('voidb', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const v = r(); px(x, y, shade(v < 0.3 ? 0xffffff : v < 0.75 ? 0xe8eef8 : 0xc8d4e8, 1)); } });
+def('basalt', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) px(x, y, shade(0x56504f, (x % 5 === 0 ? 0.72 : 1) * (0.9 + r() * 0.2))); });
+def('neon_p', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const b = x < 2 || y < 2 || x > 13 || y > 13; px(x, y, b ? shade(0x2a0a2a, 1) : shade(0xff4ad8, 0.9 + r() * 0.12)); } });
+def('neon_b', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const b = x < 2 || y < 2 || x > 13 || y > 13; px(x, y, b ? shade(0x0a1a2a, 1) : shade(0x3ab8ff, 0.9 + r() * 0.12)); } });
+def('obsidian', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const v = r(); px(x, y, shade(v < 0.03 ? 0x6a4aa8 : v < 0.6 ? 0x1e1a26 : 0x28222f, 1)); } });
+def('trampoline', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const b = x < 2 || y < 2 || x > 13 || y > 13, ring = Math.abs(Math.hypot(x - 7.5, y - 7.5) - 4) < 1; px(x, y, b ? shade(0xe2483a, 1) : ring ? shade(0xffffff, 1) : shade(0x2a6ae0, 0.92 + r() * 0.1)); } });
+def('cloud', (px, r) => { noiseFill(px, r, 0xf4f8ff, 0.05, 10); });
+def('marble', (px, r) => { noiseFill(px, r, 0xeae6e0, 0.04, 10); for (let i = 0; i < 3; i++) { let x = r() * 16, y = 0; for (; y < 16; y++) { x += (r() - 0.5) * 2; px(x | 0, y, shade(0xb8b0a8, 1)); } } });
+
 // 블록 → [윗면, 옆면, 아랫면]
 export const FACES = {};
 const f3 = (b, t, s, bo) => { FACES[b] = [TI[t], TI[s || t], TI[bo || t]]; };
@@ -151,8 +173,10 @@ f3(B.CRED, 'c_red'); f3(B.CBLUE, 'c_blue'); f3(B.CGREEN, 'c_green'); f3(B.CYELLO
 f3(B.LAMP, 'lamp'); f3(B.PLASTER, 'plaster'); f3(B.GRATE, 'grate'); f3(B.HAZARD, 'hazard'); f3(B.DARKWOOD, 'darkwood');
 f3(B.SNOW, 'snow', 'snow_side', 'dirt'); f3(B.ICE, 'ice'); f3(B.PINE, 'pine'); f3(B.MOSSY, 'mossy'); f3(B.STONEBRICK, 'stonebrick');
 f3(B.ORE_COAL, 'ore_coal'); f3(B.ORE_GOLD, 'ore_gold'); f3(B.ORE_DIA, 'ore_dia'); f3(B.REGOLITH, 'regolith'); f3(B.MOONROCK, 'moonrock');
+f3(B.LAVA, 'lava'); f3(B.JUMPPAD, 'jumppad', 'jumppad_side', 'basalt'); f3(B.PORTAL, 'portal'); f3(B.CONVEYOR, 'conveyor', 'metal'); f3(B.QUICKSAND, 'quicksand'); f3(B.ELECTRIC, 'electric', 'metal');
+f3(B.VOIDB, 'voidb'); f3(B.BASALT, 'basalt'); f3(B.NEON_P, 'neon_p'); f3(B.NEON_B, 'neon_b'); f3(B.OBSIDIAN, 'obsidian'); f3(B.TRAMPOLINE, 'trampoline', 'c_blue'); f3(B.CLOUD, 'cloud'); f3(B.MARBLE, 'marble');
 f3(B.PANEL, 'panel'); f3(B.WINDOW, 'panel', 'window'); f3(B.WOOL_R, 'wool_r'); f3(B.WOOL_B, 'wool_b'); f3(B.WOOL_W, 'wool_w'); f3(B.WOOL_Y, 'wool_y'); f3(B.GOLD, 'gold'); f3(B.GLOWC, 'glowc');
-export const GLOW = new Set([B.LAMP, B.GLOWC]);
+export const GLOW = new Set([B.LAMP, B.GLOWC, B.LAVA, B.JUMPPAD, B.PORTAL, B.ELECTRIC, B.NEON_P, B.NEON_B]);
 // 블록 대표색 (파편용)
 export const BLOCK_COLOR = {};
 
