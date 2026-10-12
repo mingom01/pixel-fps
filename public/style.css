@@ -551,3 +551,20 @@ body.touch #botRight { top: 56px; left: 14px; right: auto; transform-origin: top
 #celebrate.t-god .cel-main { text-shadow: 3px 3px 0 #0a4a6a; border-color: rgba(106, 240, 255, 0.6); }
 .cel-sub { top: calc(15% + 30px); font-size: 13px; }
 #streak { top: 26%; font-size: 24px; text-shadow: 2px 2px 0 #8a2a00; }
+
+/* ---------- 칭호 ---------- */
+.ttl { display: inline-block; font-size: 11px; padding: 0 5px; border: 1px solid currentColor; border-radius: 2px; vertical-align: middle; white-space: nowrap; line-height: 16px; }
+.ttl.r-common { color: #c9ced9; }
+.ttl.r-rare { color: #6ab0ff; background: rgba(61, 139, 240, 0.12); }
+.ttl.r-epic { color: #e0a4ff; background: rgba(176, 90, 232, 0.18); text-shadow: 0 0 6px rgba(214, 138, 255, 0.8); }
+.ttl.r-legend { color: #ffd84a; border-color: #ffd84a; background: linear-gradient(90deg, #ffd84a, #fff6c8, #ff9a3a, #ffd84a) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: ttlShine 2.4s linear infinite; box-shadow: 0 0 8px rgba(255, 216, 74, 0.45); }
+@keyframes ttlShine { to { background-position: 300% 0; } }
+#myTitle { margin-left: 6px; }
+.ttl-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.tcard { border: 2px solid var(--line); background: var(--panel2); padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.tcard .ttl { font-size: 13px; line-height: 20px; }
+.tcard.lock { opacity: 0.55; }
+.tcard.eq { outline: 2px solid var(--yellow); }
+.tcard .pr { font-size: 11px; color: var(--dim); }
+.tcard .pr.own { color: var(--money); }

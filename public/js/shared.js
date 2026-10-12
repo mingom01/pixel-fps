@@ -917,6 +917,12 @@
     lmg: { name: '블록 기관총', slot: 'primary', price: 4200, dmg: 30, rpm: 720, mag: 100, res: 200, reload: 5.2, spread: 0.034, mspread: 0.05, recoil: 1.7, auto: true, range: [25, 60, 0.75], reward: 300, speed: 0.85, zoom: 1.3, cat: 'heavy' },
     sniper: { name: 'AWB 저격총', slot: 'primary', price: 4750, dmg: 120, rpm: 42, mag: 5, res: 20, reload: 3.4, spread: 0.12, adsSpread: 0.0, mspread: 0.15, recoil: 9, range: [80, 120, 0.9], reward: 100, speed: 0.88, zoom: 4.2, scope: true, partMul: { head: 2, body: 1, legs: 0.75 }, cat: 'rifle' },
     rocket: { name: '로켓 런처', slot: 'primary', price: 5500, dmg: 130, radius: 4.5, proj: 'rocket', rpm: 50, mag: 1, res: 5, reload: 2.6, spread: 0.0, mspread: 0.0, recoil: 7, reward: 300, speed: 0.82, zoom: 1.2, cat: 'heavy' },
+    burst: { name: 'BR-3 버스트', slot: 'primary', price: 2300, dmg: 34, rpm: 900, burst: 3, burstGap: 0.28, mag: 24, res: 72, reload: 2.3, spread: 0.012, mspread: 0.05, recoil: 1.4, range: [25, 60, 0.75], reward: 300, speed: 0.97, zoom: 1.6, cat: 'rifle', desc: '한 번 누르면 3발 점사' },
+    dmr: { name: 'DMR-블록', slot: 'primary', price: 3600, dmg: 58, rpm: 300, mag: 12, res: 48, reload: 2.6, spread: 0.006, mspread: 0.08, recoil: 4, range: [40, 90, 0.85], reward: 200, speed: 0.93, zoom: 2.6, cat: 'rifle', desc: '정확한 반자동 지정사수 소총' },
+    uzi: { name: 'UZ 기관권총', slot: 'secondary', price: 900, dmg: 15, rpm: 950, mag: 22, res: 88, reload: 1.7, spread: 0.035, mspread: 0.02, recoil: 0.8, auto: true, range: [6, 20, 0.5], reward: 400, speed: 1.02, zoom: 1.2, cat: 'pistol', desc: '연사되는 보조무기' },
+    dbarrel: { name: '더블배럴', slot: 'primary', price: 1900, dmg: 16, pellets: 10, rpm: 240, mag: 2, res: 24, reload: 2.2, spread: 0.1, mspread: 0.02, recoil: 8, range: [5, 14, 0.25], reward: 900, speed: 0.98, zoom: 1.15, cat: 'smg', desc: '두 발 연속 근거리 한 방' },
+    scout: { name: '스카우트', slot: 'primary', price: 2600, dmg: 80, rpm: 70, mag: 8, res: 32, reload: 2.6, spread: 0.1, adsSpread: 0.0, mspread: 0.12, recoil: 6, range: [60, 100, 0.85], reward: 300, speed: 1.0, zoom: 3.4, scope: true, partMul: { head: 2.5, body: 1, legs: 0.75 }, cat: 'rifle', desc: '가벼운 저격총 · 헤드샷 한 방' },
+    rail: { name: '레일건', slot: 'primary', price: 5200, dmg: 95, pierce: 3, rpm: 55, mag: 3, res: 15, reload: 3.0, spread: 0.02, adsSpread: 0.0, mspread: 0.1, recoil: 8, range: [100, 140, 1], reward: 200, speed: 0.86, zoom: 2.2, partMul: { head: 1.6, body: 1, legs: 0.8 }, tracer: 0x5fe3ff, cat: 'heavy', desc: '적 3명까지 관통' },
     minigun: { name: '미니건', slot: 'primary', price: 6200, dmg: 16, rpm: 1400, mag: 200, res: 200, reload: 6, spread: 0.045, mspread: 0.03, recoil: 0.6, auto: true, spin: 0.55, range: [20, 50, 0.7], reward: 300, speed: 0.72, zoom: 1.1, cat: 'heavy' },
   };
   const ITEMS = {
@@ -938,7 +944,8 @@
   function maxShotDamage(w) {
     const W = WEAPONS[w]; if (!W) return 0;
     if (W.melee) return W.dmg * 3;
-    return W.dmg * (W.pellets || 1) * 2.2 + 1;
+    const mul = Math.max(2.2, ...Object.values(W.partMul || {}));
+    return W.dmg * (W.pellets || 1) * mul + 1;
   }
   function falloff(W, dist) {
     if (!W.range) return 1;

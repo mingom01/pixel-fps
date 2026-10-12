@@ -39,10 +39,12 @@ const GUNSND = {
   pistol: [2400, 0.12, 0.9, 180], magnum: [1600, 0.25, 1.2, 110], smg: [3000, 0.08, 0.7, 200], shotgun: [1300, 0.32, 1.4, 80],
   rifle: [2000, 0.14, 1.0, 130], carbine: [2600, 0.12, 0.9, 150], lmg: [1700, 0.15, 1.0, 120], sniper: [1200, 0.45, 1.5, 70],
   minigun: [3200, 0.06, 0.6, 220], rocket: [700, 0.5, 1.0, 60],
+  burst: [2200, 0.11, 0.95, 140], dmr: [1500, 0.3, 1.25, 95], uzi: [3400, 0.07, 0.6, 230], dbarrel: [1100, 0.4, 1.6, 70], scout: [1350, 0.38, 1.35, 85],
 };
 // vol: 거리 감쇠 적용된 볼륨, pan: -1..1
 export function sfxShot(w, vol, pan) {
   if (!ctx) return; const t = ctx.currentTime, p = GUNSND[w] || GUNSND.pistol;
+  if (w === 'rail') { out([tone(t, 0.35, 2600, 180, 0.6, 'sawtooth'), tone(t, 0.25, 900, 60, 0.4, 'sine'), noise(t, 0.2, 5000, 800, 1, 0.8, 'bandpass')], vol * 0.6, pan); return; }
   if (w === 'rocket') { out([noise(t, 0.5, 1800, 200, 0.7, 0.9), tone(t, 0.3, 220, 60, 0.3, 'sawtooth')], vol * 0.8, pan); return; }
   out([noise(t, p[1], p[0], p[3] * 4, 0.8, p[2]), tone(t, Math.min(0.12, p[1]), p[3] * 2, p[3] * 0.5, 0.5 * p[2], 'square'), noise(t, 0.03, 7000, 3000, 0.5, 0.6, 'highpass')], vol * 0.55, pan);
 }

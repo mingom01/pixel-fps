@@ -89,6 +89,7 @@ server.on('upgrade', (req, socket) => {
 const BOT_NAMES = ['픽셀킹', '블록헤드', '네모난총잡이', '도트전사', '큐브맨', '8비트', '조준왕', '헤드샷러', '캠핑족', '뉴비봇', '고인물', '야생의봇', '총알받이', '저격수김씨', '돌격대장', '숨바꼭질', '점프맨', '탄창부족'];
 const BOT_SKINS = ['default', 'default', 'default', 'soldier', 'ninja', 'robot', 'zombie', 'pirate', 'astro', 'pumpkin', 'king', 'police', 'clown', 'santa', 'firefighter', 'cowboy', 'skeleton', 'knight', 'panda', 'wizard', 'alien', 'samurai', 'hero'];
 const BOT_GSKINS = ['default', 'default', 'default', 'gold', 'camo', 'pink', 'fire', 'neon', 'diamond', 'desert', 'arctic', 'toxic', 'blood', 'ocean', 'cyber', 'bone'];
+const BOT_TITLES = ['rookie', 'rookie', 'lv5', 'k1', 'w1', 'pixel', 'camper', 'lv10', 'k100', 'hunter', 'shadow'];
 const COLORS = 12;
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 function cleanName(s) { return String(s || '').replace(/[<>&"'`]/g, '').trim().slice(0, 10) || '플레이어'; }
@@ -177,7 +178,7 @@ function createRoom(c, cfg, isPublic) {
   return r;
 }
 function broadcast(r, obj, except) { const s = JSON.stringify(obj); for (const c of r.clients) if (c !== except) c.send(s); }
-function roster(r) { return [...r.ents.values()].map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, skin: e.skin, gskin: e.gskin, lv: e.lv, caps: e.caps, boss: !!e.boss, zombie: !!e.zombie, gg: e.gg || 0 })); }
+function roster(r) { return [...r.ents.values()].map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, skin: e.skin, gskin: e.gskin, title: e.title, lv: e.lv, caps: e.caps, boss: !!e.boss, zombie: !!e.zombie, gg: e.gg || 0 })); }
 function roomMsg(r) { return { t: 'room', customName: r.custom ? r.custom.name : null, code: r.code, host: r.hostId, cfg: r.cfg, state: r.state, endAt: r.endAt, score: r.score, players: roster(r) }; }
 function pushRoom(r) { broadcast(r, roomMsg(r)); }
 function meMsg(e) { return { t: 'me', hp: Math.ceil(e.hp), armor: Math.ceil(e.armor), money: e.money, primary: e.primary, secondary: e.secondary, nades: e.nades, alive: e.alive, buyUntil: e.buyUntil, respawnAt: e.respawnAt, zombie: !!e.zombie, gg: e.gg || 0, helmet: e.helmet, perks: Object.keys(e.perks), sup: e.sup, maxHp: e.maxHp }; }
@@ -188,7 +189,7 @@ function joinRoom(c, r, m) {
   leaveRoom(c);
   c.room = r; r.clients.add(c);
   const e = newEnt(c.id, cleanName(m.name), clamp(Math.round(num(m.color, 0)), 0, COLORS - 1), false);
-  e.skin = cleanId(m.skin); e.gskin = cleanId(m.gskin); e.lv = clamp(Math.round(num(m.lv, 1)), 1, 999);
+  e.skin = cleanId(m.skin); e.gskin = cleanId(m.gskin); e.title = cleanId(m.title); e.lv = clamp(Math.round(num(m.lv, 1)), 1, 999);
   r.ents.set(c.id, e);
   fitBots(r);
   c.send(roomMsg(r));
@@ -219,7 +220,7 @@ function addBot(r, team) {
   let i = 1, id; do { id = 'b' + (i++); } while (r.ents.has(id));
   const name = pick(BOT_NAMES.filter(n => !used.has(n))) || ('봇' + i);
   const b = newEnt(id, name, Math.floor(Math.random() * COLORS), true);
-  b.skin = pick(BOT_SKINS); b.gskin = pick(BOT_GSKINS); b.lv = 1 + Math.floor(Math.random() * 30);
+  b.skin = pick(BOT_SKINS); b.gskin = pick(BOT_GSKINS); b.lv = 1 + Math.floor(Math.random() * 30); b.title = pick(BOT_TITLES);
   b.skill = skillFor(r);
   if (team === 0 || team === 1) { b.team = team; b.teamLock = true; }
   if (isPractice(r)) { b.dummy = true; b.name = '허수아비 ' + i; b.skin = 'default'; }
@@ -286,7 +287,7 @@ function endMatch(r) {
   r.state = 'end';
   const key = (e) => isGG(r) ? (e.gg || 0) * 1000 + e.kills : isBR(r) ? -(e.place || 99) * 1000 + e.kills : isBoss(r) ? (e.bossDmg || 0) : 0;
   const rank = [...r.ents.values()].filter(e => !e.boss && !e.minion).sort((a, b) => key(b) - key(a) || (b.caps - a.caps) * (r.cfg.mode === 'ctf' ? 1 : 0) || b.kills - a.kills || a.deaths - b.deaths)
-    .map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, caps: e.caps, lv: e.lv, gg: e.gg, place: e.place, dmg: Math.round(e.bossDmg || 0), zombie: !!e.zombie }));
+    .map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, caps: e.caps, lv: e.lv, title: e.title, gg: e.gg, place: e.place, dmg: Math.round(e.bossDmg || 0), zombie: !!e.zombie }));
   for (const e of r.ents.values()) if (e.origSkin) { e.skin = e.origSkin; e.origSkin = null; }
   for (const e of [...r.ents.values()]) if (e.boss || e.minion) { r.ents.delete(e.id); broadcast(r, { t: 'gone', id: e.id }); }
   const win = teamMode(r) ? (r.score[0] > r.score[1] ? 0 : r.score[1] > r.score[0] ? 1 : -1) : null;
@@ -745,7 +746,7 @@ function modeStart(r) {
   if (isBR(r)) {
     r.endAt = now + 3600 * 1000;
     // 바닥에 무기 뿌리기
-    const pool = ['pistol', 'pistol', 'magnum', 'smg', 'smg', 'shotgun', 'shotgun', 'rifle', 'rifle', 'carbine', 'lmg', 'sniper', 'rocket'];
+    const pool = ['pistol', 'pistol', 'magnum', 'uzi', 'smg', 'smg', 'shotgun', 'shotgun', 'dbarrel', 'rifle', 'rifle', 'burst', 'carbine', 'dmr', 'scout', 'lmg', 'sniper', 'rail', 'rocket'];
     const cells = r.map.spawns.concat(r.map.pickups.map(p => [p.x, p.y, p.z]));
     for (let i = 0; i < 30; i++) {
       const c = pick(cells), x = c[0] + (Math.random() - 0.5) * 5, z = c[2] + (Math.random() - 0.5) * 5;
@@ -955,7 +956,7 @@ function openCrate(r, e, id) {
   const kinds = new Set([rollLoot(), rollLoot()]);
   for (const k of kinds) {
     if (k === 'weapon') {
-      const w = pick(['rocket', 'minigun', 'lmg', 'sniper', 'carbine']);
+      const w = pick(['rocket', 'minigun', 'lmg', 'sniper', 'carbine', 'rail', 'dmr']);
       if (e.primary && e.primary !== w) { const nd = { id: 'd' + (r.pid++), w: e.primary, x: e.x, y: e.y + 0.3, z: e.z, until: Date.now() + 40000 }; r.drops.set(nd.id, nd); broadcast(r, { t: 'drop', d: nd }); }
       e.primary = w; e.w = w; got.push('w:' + w);
       const cl = clientOf(r, e.id); if (cl) cl.send({ t: 'got', w });
@@ -1226,14 +1227,16 @@ function botSpawn(r, b) {
   const rich = b.skill > 0.7 ? 1.4 : 1;
   const prefs = [];
   if (b.money >= 4750 && Math.random() < 0.22 * rich) prefs.push('sniper');
+  if (b.money >= 3600 && Math.random() < 0.25 * rich) prefs.push(pick(['dmr', 'rail']));
+  if (b.money >= 2300 && Math.random() < 0.3) prefs.push(pick(['burst', 'scout']));
   if (b.money >= 4200 && Math.random() < 0.25) prefs.push('lmg');
   if (b.money >= 3100 && Math.random() < 0.5 * rich) prefs.push('carbine');
   if (b.money >= 2700) prefs.push('rifle');
-  if (b.money >= 1600 && Math.random() < 0.4) prefs.push('shotgun');
+  if (b.money >= 1600 && Math.random() < 0.4) prefs.push(pick(['shotgun', 'dbarrel']));
   if (b.money >= 1250) prefs.push('smg');
   if (!b.primary && prefs.length) buy(r, b, prefs[0]);
   if (b.money >= 650 + 1000 && Math.random() < 0.7) buy(r, b, 'armor');
-  if (b.secondary === 'pistol' && b.money >= 1500 && Math.random() < 0.4) buy(r, b, 'magnum');
+  if (b.secondary === 'pistol' && b.money >= 1500 && Math.random() < 0.4) buy(r, b, pick(['magnum', 'uzi']));
   if (b.money >= 900 && Math.random() < 0.5) buy(r, b, 'helmet');
   if (b.money >= 3500 && Math.random() < 0.35) buy(r, b, pick(['perk_speed', 'perk_hp', 'perk_reload']));
   if (b.money >= 4500 && Math.random() < 0.18) { buy(r, b, 'turret'); b.deployAt = Date.now() + 2000 + Math.random() * 4000; }

@@ -11,6 +11,7 @@ import { initSettings, openSettings, closeSettings, settingsOpen } from './setti
 import { drawCross, getCross } from './settings/crosshair.js';
 import { toGame, resetBindsCache } from './settings/keybinds.js';
 import { showKillBanner, clearKillBanner } from './hud/killbanner.js';
+import { TITLES, titleOwned, titleHow, buyTitle, equipTitle, myTitle, titleHtml } from './titles.js';
 
 const SH = window.SH;
 const { WEAPONS, ITEMS, P, ECON } = SH;
@@ -164,7 +165,7 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 $('nameIn').value = CFG.name || '';
 $('nameIn').addEventListener('input', () => { CFG.name = $('nameIn').value.trim(); saveCfg(); });
 function myName() { const n = $('nameIn').value.trim(); return n || '플레이어' + (S.myId || '').slice(1); }
-function joinInfo() { return { name: myName(), color: CFG.color, skin: profile.skin, gskin: profile.gskin, lv: myLevel() }; }
+function joinInfo() { return { name: myName(), color: CFG.color, skin: profile.skin, gskin: profile.gskin, title: myTitle(), lv: myLevel() }; }
 function buildSwatches() {
   const box = $('colors'); box.innerHTML = '';
   PCOLORS.forEach((c, i) => {
@@ -194,6 +195,7 @@ function updateProfileUI() {
   $('coinNum').textContent = $('lockerCoins').textContent = profile.coins;
   $('goldNum').textContent = $('lockerGold').textContent = profile.gold;
   $('colors').style.opacity = profile.skin === 'default' ? 1 : 0.45;
+  $('myTitle').innerHTML = titleHtml(myTitle());
 }
 updateProfileUI();
 let lockerTab = 'skin';
@@ -215,6 +217,7 @@ function renderLocker() {
     $('lockerGrid').querySelectorAll('[data-s]').forEach(c => c.onclick = () => { profile.spray = +c.dataset.s; saveProfile(); A.sfxSpray(1); renderLocker(); });
     return;
   }
+  if (lockerTab === 'title') { renderTitles(); return; }
   if (lockerTab === 'gacha') { renderGacha(); $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`; return; }
   const isSkin = lockerTab === 'skin', list = isSkin ? CHAR_SKINS : GUN_SKINS, owned = isSkin ? profile.skins : profile.gskins, cur = isSkin ? profile.skin : profile.gskin;
   const lv = myLevel();
@@ -234,6 +237,27 @@ function renderLocker() {
     equip(kind, id); refreshPreview(); renderLocker();
   });
   $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`;
+}
+
+// 칭호 탭
+function renderTitles() {
+  const cur = myTitle(), order = { common: 0, rare: 1, epic: 2, legend: 3 };
+  const ids = Object.keys(TITLES).sort((a, b) => order[TITLES[a].r] - order[TITLES[b].r]);
+  $('lockerGrid').innerHTML = '<div class="ttl-grid">' + ids.map(id => {
+    const own = titleOwned(id), q = TITLES[id].req, buyable = !own && (q.coins || q.gold);
+    const st = own ? (id === cur ? '장착 중' : '보유 · 눌러서 장착') : buyable ? (q.gold ? `<i class="goldc"></i> ${q.gold} 골드` : `<i class="coin"></i> ${q.coins}`) : titleHow(id);
+    return `<div class="tcard ${id === cur ? 'eq' : ''} ${own ? '' : 'lock'} rr-${TITLES[id].r}" data-t="${id}">${titleHtml(id)}<div class="pr ${own ? 'own' : ''}">${st}</div></div>`;
+  }).join('') + '</div>';
+  $('lockerGrid').querySelectorAll('[data-t]').forEach(c => c.onclick = () => {
+    const id = c.dataset.t;
+    if (!titleOwned(id)) {
+      const res = buyTitle(id);
+      if (res !== 'ok') { A.sfxDeny(); toast({ coins: '코인이 부족해요', gold: '골드가 부족해요', locked: titleHow(id) + '하면 얻어요' }[res] || '얻을 수 없어요'); return; }
+      A.sfxBuy();
+    }
+    equipTitle(id); updateProfileUI(); renderLocker();
+  });
+  $('lockerSel').innerHTML = titleHtml(cur);
 }
 
 function renderRoomList(list) {
@@ -349,7 +373,7 @@ function onRoom(m) {
   document.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.map === m.cfg.map));
   $('timeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === m.cfg.time));
   $('killSeg').querySelectorAll('button').forEach(b => { const v = Number(b.dataset.v); b.textContent = SH.targetOf({ mode: md, kills: v }); b.classList.toggle('on', v === m.cfg.kills); });
-  const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${esc(p.name)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
+  const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${esc(p.name)} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
   $('lobbyPlayers').innerHTML = md === 'ffa' ? m.players.map(pl).join('')
     : [0, 1].map(t => `<div class="teamhead" style="color:${TEAMS[t].css}">${TEAMS[t].name} 팀</div>` + m.players.filter(p => p.team === t).map(pl).join('')).join('');
   $('endBtn').classList.toggle('hidden', !host);
@@ -439,7 +463,7 @@ function onEnd(m) {
   const pod = [r[1], r[0], r[2]].map((p, i) => p ? `<div class="pod p${[2, 1, 3][i]}"><div class="nm" style="color:${pc(p)}">${esc(p.name)}</div><div class="kd">${p.k}킬 / ${p.d}데스</div><div class="blk">${[2, 1, 3][i]}</div></div>` : '').join('');
   $('podium').innerHTML = pod;
   const ctf = m.mode === 'ctf';
-  $('resultTable').innerHTML = `<tr><th>#</th><th>이름</th>${ctf ? '<th class="num">득점</th>' : ''}<th class="num">킬</th><th class="num">데스</th></tr>` + r.map((p, i) => `<tr class="${p.id === S.myId ? 'me' : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${pc(p)}"></span>${esc(p.name)}${p.bot ? ' <span class="dim">봇</span>' : ''}</td>${ctf ? `<td class="num">${p.caps || 0}</td>` : ''}<td class="num">${p.k}</td><td class="num">${p.d}</td></tr>`).join('');
+  $('resultTable').innerHTML = `<tr><th>#</th><th>이름</th>${ctf ? '<th class="num">득점</th>' : ''}<th class="num">킬</th><th class="num">데스</th></tr>` + r.map((p, i) => `<tr class="${p.id === S.myId ? 'me' : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${pc(p)}"></span>${esc(p.name)} ${titleHtml(p.title)}${p.bot ? ' <span class="dim">봇</span>' : ''}</td>${ctf ? `<td class="num">${p.caps || 0}</td>` : ''}<td class="num">${p.k}</td><td class="num">${p.d}</td></tr>`).join('');
   $('result').classList.remove('hidden');
   $('clickToPlay').classList.add('hidden');
   const myRank = r.findIndex(p => p.id === S.myId);
@@ -572,15 +596,15 @@ function renderScore() {
   const list = [...S.roster.values()].sort((a, b) => (ctf ? (b.caps || 0) - (a.caps || 0) : 0) || b.k - a.k || a.d - b.d);
   $('scoreMap').textContent = S.mapId ? `${SH.MODES[S.mode].name} · ${S.mapName || ''} · 목표 ${S.target}${ctf ? '점' : '킬'}` : '';
   const head = `<tr><th>#</th><th>이름</th>${ctf ? '<th class="num">득점</th>' : ''}<th class="num">킬</th><th class="num">데스</th><th class="num">K/D</th></tr>`;
-  const row = (p, i) => `<tr class="${p.id === S.myId ? 'me' : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span><span class="lv" style="color:#f4c22b;font-size:11px">Lv${p.lv || 1}</span> ${esc(p.name)}${p.bot ? ' <span class="dim">봇</span>' : ''}</td>${ctf ? `<td class="num">${p.caps || 0}</td>` : ''}<td class="num">${p.k}</td><td class="num">${p.d}</td><td class="num">${(p.k / Math.max(1, p.d)).toFixed(2)}</td></tr>`;
+  const row = (p, i) => `<tr class="${p.id === S.myId ? 'me' : ''}"><td>${i + 1}</td><td><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span><span class="lv" style="color:#f4c22b;font-size:11px">Lv${p.lv || 1}</span> ${esc(p.name)} ${titleHtml(p.title)}${p.bot ? ' <span class="dim">봇</span>' : ''}</td>${ctf ? `<td class="num">${p.caps || 0}</td>` : ''}<td class="num">${p.k}</td><td class="num">${p.d}</td><td class="num">${(p.k / Math.max(1, p.d)).toFixed(2)}</td></tr>`;
   if (!isTeamMode()) { $('scoreTable').innerHTML = `<table>${head}${list.map(row).join('')}</table>`; return; }
   $('scoreTable').innerHTML = [0, 1].map(t => `<h4 style="color:${TEAMS[t].css}">${teamName(t)}${S.mode === 'zombie' || S.mode === 'boss' ? '' : ' 팀 — ' + S.score[t] + '점'}</h4><table>${head}${list.filter(p => p.team === t).map(row).join('')}</table>`).join('');
 }
 
 /* ================= 상점 ================= */
 const SHOP = [
-  ['권총', ['pistol', 'magnum']], ['SMG · 샷건', ['smg', 'shotgun']], ['소총', ['rifle', 'carbine', 'sniper']],
-  ['중화기', ['lmg', 'rocket', 'minigun']], ['장비', ['armor', 'helmet', 'nade']], ['보급', ['medkit', 'ammo']],
+  ['권총', ['pistol', 'magnum', 'uzi']], ['SMG · 샷건', ['smg', 'shotgun', 'dbarrel']], ['소총', ['burst', 'rifle', 'carbine', 'dmr']], ['저격', ['scout', 'sniper']],
+  ['중화기', ['lmg', 'rail', 'rocket', 'minigun']], ['장비', ['armor', 'helmet', 'nade']], ['보급', ['medkit', 'ammo']],
   ['퍽 <small>죽어도 매치 끝까지 유지</small>', ['perk_speed', 'perk_hp', 'perk_reload']], ['지원 <small>Z: 포탑 설치 · X: 공습 지점</small>', ['uav', 'turret', 'air']],
 ];
 function nearShop() { return !!(S.map && S.map.shops && S.map.shops.some(p => Math.hypot(p[0] - me.x, p[2] - me.z) < ECON.SHOP_DIST - 0.3 && Math.abs(p[1] - me.y) < 2.5)); }
@@ -889,7 +913,7 @@ function setViewModel(id, look) {
   const arms = new THREE.Group();
   const ra = armMesh(0.55, sm.shirt, sm.skin); ra.position.set(0.015, -0.05, 0.02); ra.rotation.set(0.45, 0.25, 0); arms.add(ra);
   const def = GUNS[id] || GUNS.pistol;
-  const two = !['pistol', 'magnum', 'knife', 'claw', 'nade'].includes(id);
+  const two = !['pistol', 'magnum', 'uzi', 'knife', 'claw', 'nade'].includes(id);
   if (two) {
     const fz = -((def.muz[2] - def.grip[2]) * 0.48) * VMS;
     const la = armMesh(0.6, sm.shirt, sm.skin); la.position.set(-0.02, -0.04, fz); la.rotation.set(0.35, -0.75, 0); arms.add(la);
@@ -905,7 +929,7 @@ function switchTo(w, force) {
   if (!w || (!force && w === WS.cur)) return;
   if (!haveWeapon(w)) return;
   if (WS.cur !== w) WS.last = WS.cur;
-  WS.cur = w; WS.reloading = false; WS.switchT = 0.38; WS.spin = 0; WS.fireT = Math.max(WS.fireT, 0);
+  WS.cur = w; WS.reloading = false; WS.switchT = 0.38; WS.spin = 0; WS.burstLeft = 0; WS.fireT = Math.max(WS.fireT, 0);
   if (w !== 'knife' && w !== 'nade' && !ammo[w]) fullAmmo(w);
   setViewModel(w);
   A.sfxSwitch();
@@ -954,10 +978,15 @@ function updateWeapon(dt) {
   if (WS.trigger && !S.modal) {
     if (WEAPONS[WS.cur] && WEAPONS[WS.cur].melee) { if (WS.fireT <= 0) knifeAttack(); }
     else if (WS.cur === 'nade') { if (WS.semiReady) { WS.semiReady = false; throwNade(); } }
+    else if (W && W.burst) { if (WS.semiReady && WS.fireT <= 0 && !WS.burstLeft) { WS.semiReady = false; WS.burstLeft = W.burst; } }
     else if (W && (W.auto || WS.semiReady)) {
       let n = 0;
       while (WS.fireT <= 0 && n++ < 3 && WS.trigger) { if (!fireGun(W)) break; if (!W.auto) { WS.semiReady = false; break; } }
     }
+  }
+  // 점사: 버튼을 떼도 남은 발은 이어서 나감
+  if (WS.burstLeft > 0 && W && W.burst) {
+    while (WS.fireT <= 0 && WS.burstLeft > 0) { if (!fireGun(W)) { WS.burstLeft = 0; break; } if (--WS.burstLeft === 0) WS.fireT += W.burstGap; }
   }
   if (WS.fireT < -0.05) WS.fireT = -0.05;
 }
@@ -995,9 +1024,19 @@ function fireGun(W) {
         const r = spread * Math.sqrt(Math.random()), th = Math.random() * Math.PI * 2;
         d.addScaledVector(right, Math.cos(th) * r).addScaledVector(up, Math.sin(th) * r).normalize();
       }
-      const res = hitscan(eye, d, 160);
+      let res = hitscan(eye, d, 160);
+      // 관통 (레일건): 맞은 적을 제외하고 다시 쏴서 뒤의 적도 맞힘
+      if (W.pierce && res.ent) {
+        const skip = new Set([res.ent.id]); let k = 1, last = res;
+        while (k++ < W.pierce) {
+          const nx = hitscan(eye, d, 160, skip); if (!nx.ent) { last = nx; break; }
+          skip.add(nx.ent.id); last = nx;
+          const h2 = hits.get(nx.ent.id) || { dmg: 0, head: false, ent: nx.ent };
+          h2.dmg += W.dmg * SH.falloff(W, nx.t) * (W.partMul || SH.PART_MUL)[nx.part]; if (nx.part === 'head') h2.head = true; hits.set(nx.ent.id, h2); blood(nx.p, d);
+        }
+        tracer(start, last.p, W.tracer);
+      } else tracer(start, res.p, W.tracer);
       ends.push([+res.p.x.toFixed(2), +res.p.y.toFixed(2), +res.p.z.toFixed(2), res.ent ? 1 : 0]);
-      tracer(start, res.p);
       if (res.ent) {
         const pm = (W.partMul || SH.PART_MUL)[res.part];
         const dmg = W.dmg * SH.falloff(W, res.t) * pm;
@@ -1031,11 +1070,12 @@ function fireGun(W) {
   if (a.mag <= 0) setTimeout(() => { if (ammo[WS.cur] === a && a.mag <= 0) startReload(); }, 250);
   return true;
 }
-function hitscan(o, d, maxD) {
+function hitscan(o, d, maxD, skip) {
   const wall = SH.raycast(S.map, o.x, o.y, o.z, d.x, d.y, d.z, maxD);
   let best = wall ? wall.t : maxD, ent = null, part = null;
   for (const e of S.ents.values()) {
     if (!e.alive || !e.model.visible && !(e.fl & 16)) continue;
+    if (skip && skip.has(e.id)) continue;
     if (isMate(e.id)) continue; // 아군은 통과
     if (Math.hypot(e.rx - o.x, e.rz - o.z) > best + 2) continue;
     for (const hb of (e.boss ? SH.bossHitboxes(e.rx, e.ry, e.rz) : SH.hitboxes(e.rx, e.ry, e.rz, !!(e.fl & 2)))) {
@@ -1155,7 +1195,7 @@ function onRemoteShot(m) {
   flashAt(st, 0.35);
   for (const p of m.e || []) {
     const end = new THREE.Vector3(p[0], p[1], p[2]);
-    tracer(st, end);
+    tracer(st, end, (WEAPONS[m.w] || {}).tracer);
     const dir = end.clone().sub(st).normalize();
     if (p[3]) blood(end, dir);
     else puff(end, 0xcccccc, 4);
@@ -1207,7 +1247,7 @@ function onKill(m) {
     me.alive = false; S.dead = true; S.killer = m.k !== m.v ? m.k : null; S.deathPos = { x: me.x, y: me.y, z: me.z, yaw: me.yaw };
     S.deathT = 0; WS.trigger = false; WS.ads = 0;
     $('death').classList.remove('hidden');
-    $('deathBy').innerHTML = m.k === m.v ? '스스로 쓰러졌어요' : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span>${icon}${m.hs ? '<span class="hs" style="color:#ff6a5a">헤드샷</span>' : ''}`;
+    $('deathBy').innerHTML = m.k === m.v ? '스스로 쓰러졌어요' : `<span style="color:${nameColor(m.k)}">${esc(kn)}</span> ${titleHtml((kr || {}).title)}${icon}${m.hs ? '<span class="hs" style="color:#ff6a5a">헤드샷</span>' : ''}`;
     closeModals(true);
     S.selfBuf.push({ t: serverNow(), x: me.x, y: me.y, z: me.z, yaw: me.yaw, pitch: 0, fl: 0, w: WS.cur });
     if (CFG.killcam !== false && S.killer && S.ents.get(S.killer) && m.w !== 'turret' && m.w !== 'air') S.kc = { killer: S.killer, w: m.w, hs: m.hs, at: serverNow(), start: performance.now() + 800, active: false, lastT: 0, kick: 0, vw: null };
@@ -1288,9 +1328,10 @@ function updateSmoke(dt) {
   }
 }
 const tracers = []; const trGeo = new THREE.BoxGeometry(0.025, 0.025, 1).translate(0, 0, -0.5);
-function tracer(a, b) {
+function tracer(a, b, color) {
   let t = tracers.find(o => o.life <= 0);
   if (!t) { if (tracers.length > 60) return; const m = new THREE.Mesh(trGeo, new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, depthWrite: false })); scene.add(m); t = { m, life: 0 }; tracers.push(t); }
+  t.m.material.color.setHex(color || 0xffe9a0);
   const len = a.distanceTo(b);
   if (len < 0.5) return;
   // 총구에서 일부 구간만 빠르게 지나가는 꼬리
