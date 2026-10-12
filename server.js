@@ -4,6 +4,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), os = require('os');
 const SH = require('./public/js/shared.js');
 const { WEAPONS, ITEMS, ECON, P } = SH;
+const AUTH = require('./server/auth.js');
 
 const PORT = Number(process.env.PORT) || 8230;
 const ROOT = path.join(__dirname, 'public');
@@ -15,6 +16,7 @@ function lanIPs() { return Object.values(os.networkInterfaces()).flat().filter(n
 /* ---------- HTTP ---------- */
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
+  if (p === '/auth-config') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify(AUTH.publicConfig())); }
   if (p === '/info') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ port: PORT, ips: lanIPs() })); }
   if (p === '/') p = '/index.html';
   const file = path.join(ROOT, p);
@@ -41,7 +43,7 @@ let nextId = 1;
 class Client {
   constructor(socket) {
     this.socket = socket; this.buf = Buffer.alloc(0); this.alive = true;
-    this.id = 'p' + (nextId++); this.room = null;
+    this.id = 'p' + (nextId++); this.room = null; this.user = null;
     socket.on('data', d => this.onData(d));
     socket.on('close', () => this.onClose());
     socket.on('error', () => this.onClose());
@@ -967,7 +969,21 @@ function openCrate(r, e, id) {
 }
 
 /* ---------- 메시지 ---------- */
+// 로그인 전에는 'auth' 만 받아요
+function handleAuth(c, m) {
+  if (m.t === 'logout') { if (c.user) AUTH.logout(c.user.token); c.user = null; leaveRoom(c); return; }
+  if (m.t === 'profile') { if (c.user && !AUTH.saveProfile(c.user.sub, m.p)) c.send({ t: 'err', text: '프로필 저장 실패' }); return; }
+  AUTH.login(m).then(u => {
+    if (!c.alive) return;
+    c.user = u;
+    c.send({ t: 'authed', sub: u.sub, token: u.token, email: u.email, name: u.name, profile: u.profile });
+    log(`로그인: ${u.email || u.sub}`);
+  }).catch(e => c.send({ t: 'autherr', text: e.message || '로그인 실패', token: !!m.token }));
+}
+
 function handle(c, m) {
+  if (m.t === 'auth' || m.t === 'logout' || m.t === 'profile') return handleAuth(c, m);
+  if (!c.user) { c.send({ t: 'needauth' }); return; }
   const r = c.room;
   switch (m.t) {
     case 'list':

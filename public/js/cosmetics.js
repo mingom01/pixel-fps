@@ -7,12 +7,31 @@ const DEF = { gold: 0, xp: 0, coins: 300, skins: ['default'], gskins: ['default'
 export const profile = (() => {
   let p = {};
   try { p = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* */ }
-  p = Object.assign({}, DEF, p);
-  if (!CHAR_SKINS[p.skin] || !p.skins.includes(p.skin)) p.skin = 'default';
-  if (!GUN_SKINS[p.gskin] || !p.gskins.includes(p.gskin)) p.gskin = 'default';
-  return p;
+  return Object.assign({}, DEF, p);
 })();
-export function saveProfile() { try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (e) { /* */ } }
+function fixProfile() {
+  if (!CHAR_SKINS[profile.skin] || !profile.skins.includes(profile.skin)) profile.skin = 'default';
+  if (!GUN_SKINS[profile.gskin] || !profile.gskins.includes(profile.gskin)) profile.gskin = 'default';
+}
+fixProfile();
+
+// 저장할 때마다 서버로도 보냄 (로그인 후 auth.js 가 연결)
+let syncFn = null, syncT = 0;
+export function setProfileSync(fn) { syncFn = fn; }
+export function saveProfile() {
+  try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (e) { /* */ }
+  if (syncFn) { clearTimeout(syncT); syncT = setTimeout(() => syncFn(profile), 400); }
+}
+// 서버에서 받은 프로필로 교체 (객체는 그대로 두고 내용만 바꿈 — 다른 모듈이 참조 중)
+export function loadProfile(p) {
+  const st = profile.stats;
+  for (const k of Object.keys(profile)) delete profile[k];
+  Object.assign(profile, DEF, JSON.parse(JSON.stringify(p || {})));
+  if (st) { for (const k of Object.keys(st)) delete st[k]; Object.assign(st, profile.stats || {}); profile.stats = st; }
+  fixProfile(); fixStats();
+  if (!profile.ach) profile.ach = {};
+  try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (e) { /* */ }
+}
 
 // 레벨 n → n+1 에 필요한 XP: 300 + 150*(n-1)
 export function levelInfo(xp) {
@@ -57,9 +76,12 @@ export function addGold(n) { profile.gold += n; saveProfile(); }
 /* ================= 전적 ================= */
 if (!profile.stats) profile.stats = {};
 const ST = profile.stats;
-for (const k of ['kills', 'deaths', 'hs', 'wins', 'games', 'bestStreak', 'multiMax', 'plants', 'defuses', 'crates', 'caps', 'heals']) if (ST[k] == null) ST[k] = 0;
-if (!ST.weapons) ST.weapons = {};
-if (!ST.modes) ST.modes = {};
+function fixStats() {
+  for (const k of ['kills', 'deaths', 'hs', 'wins', 'games', 'bestStreak', 'multiMax', 'plants', 'defuses', 'crates', 'caps', 'heals']) if (ST[k] == null) ST[k] = 0;
+  if (!ST.weapons) ST.weapons = {};
+  if (!ST.modes) ST.modes = {};
+}
+fixStats();
 export const stats = ST;
 
 /* ================= 일일 미션 ================= */

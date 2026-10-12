@@ -6,6 +6,7 @@ import { makeGun, makeChar, setCharGun, animChar, gunIcon, GUNS, GUN_SKINS } fro
 import { buildWorld, buildSky, rebuildBlocks, disposeWorld } from './world.js';
 import { profile, saveProfile, levelInfo, myLevel, grantMatch, buyItem, equip, addGold, stats, dailyMissions, missionEvent, ACHIEVEMENTS, checkAchievements, GACHA_COST, RARITY, rollGacha } from './cosmetics.js';
 import * as A from './audio.js';
+import { initAuth, onSocketOpen, handleAuthMsg, isAuthed } from './auth.js';
 
 const SH = window.SH;
 const { WEAPONS, ITEMS, P, ECON } = SH;
@@ -82,7 +83,7 @@ function fullAmmo(w) { const W = WEAPONS[w]; if (W && W.mag) ammo[w] = { mag: W.
 let ws = null, wsOk = false;
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-  ws.onopen = () => { wsOk = true; $('netState').textContent = '· 서버 연결됨'; send({ t: 'list' }); };
+  ws.onopen = () => { wsOk = true; $('netState').textContent = '· 서버 연결됨'; onSocketOpen(); };
   ws.onclose = () => {
     wsOk = false; $('netState').textContent = '· 연결 끊김, 재접속 중…';
     if (S.inGame || S.room) { leaveGame(); showScreen('menu'); toast('서버 연결이 끊겼어요'); }
@@ -92,9 +93,17 @@ function connect() {
   ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMsg(m); };
 }
 function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
-setInterval(() => { if (wsOk && !S.room) send({ t: 'list' }); }, 3000);
+setInterval(() => { if (wsOk && isAuthed() && !S.room) send({ t: 'list' }); }, 3000);
+
+// 로그인 완료 → 서버 프로필로 화면 갱신
+function onLoggedIn(u) {
+  if (!$('nameIn').value.trim() && u.name) { $('nameIn').value = u.name.slice(0, 10); CFG.name = $('nameIn').value; saveCfg(); }
+  updateProfileUI(); refreshPreview(); updateMissionDot();
+  send({ t: 'list' });
+}
 
 function onMsg(m) {
+  if (handleAuthMsg(m)) return;
   switch (m.t) {
     case 'hello': S.myId = m.id; break;
     case 'rooms': renderRoomList(m.list); break;
@@ -2804,6 +2813,7 @@ function loop() {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+initAuth({ send, onReady: onLoggedIn });
 connect();
 
 // 테스트/디버그 훅

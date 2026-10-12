@@ -10,13 +10,24 @@
 <body>
 <canvas id="cv"></canvas>
 
+<!-- 로그인 (로그인해야 메뉴 이용 가능) -->
+<div id="login">
+  <div class="login-box">
+    <div class="logo"><span class="l1">PIXEL</span><span class="l2">STRIKE</span><div class="sub">픽셀 스트라이크 · 온라인 FPS</div></div>
+    <div class="login-msg">구글 계정으로 로그인하면 레벨 · 코인 · 스킨이 계정에 저장돼요</div>
+    <div id="gBtn"></div>
+    <div id="devLogin" class="hidden"><input id="devName" maxlength="10" placeholder="개발용 아이디"><button id="devLoginBtn" class="btn tiny">개발자 로그인</button></div>
+    <div id="loginStatus"></div>
+  </div>
+</div>
+
 <!-- 메인 메뉴 -->
 <div id="menu" class="screen">
   <div class="menu-wrap">
     <div class="logo"><span class="l1">PIXEL</span><span class="l2">STRIKE</span><div class="sub">픽셀 스트라이크 · 온라인 FPS</div></div>
     <div class="menu-cols">
       <div class="panel">
-        <div class="ptitle">내 캐릭터</div>
+        <div class="ptitle">내 캐릭터 <span class="acct"><span id="acctMail" class="dim"></span> <button id="logoutBtn" class="btn tiny">로그아웃</button></span></div>
         <div class="prof">
           <span class="lvbadge" id="lvBadge">Lv.1</span>
           <div class="xpbar"><div id="xpFill"></div><span id="xpText">0 / 300</span></div>

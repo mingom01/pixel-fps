@@ -481,3 +481,15 @@ body.touch #slots { display: none; }
 #touchUI [data-b="emote"] { left: 82px; }
 #touchUI [data-b="spray"] { left: 150px; }
 body.touch #botRight { top: 56px; left: 14px; right: auto; transform-origin: top left; }
+
+/* ---------- 로그인 ---------- */
+#login { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 35%, #2a3350, #0b0e18 70%); }
+#login.hidden { display: none; }
+.login-box { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 28px 32px; border: 3px solid var(--line); background: rgba(10, 12, 20, 0.85); max-width: 92vw; }
+.login-msg { font-size: 14px; color: #c9ced9; text-align: center; }
+#gBtn { min-height: 44px; }
+#devLogin { display: flex; gap: 6px; }
+#devLogin.hidden { display: none; }
+#loginStatus { font-size: 13px; min-height: 18px; color: #c9ced9; text-align: center; }
+#loginStatus.err { color: #ff6a5a; }
+.acct { float: right; font-size: 11px; }
