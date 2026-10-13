@@ -102,6 +102,8 @@ export function decorateGun(grp, spec, len, few) {
   grp.add(a);
 }
 
+// 전설 캐릭터 스킨: 오라 종류별 피니셔
+export const AURA_FINISHER = { ember: 'eruption', smoke: 'blackhole', star: 'supernova', petal: 'bloom', arcane: 'vortex', spark: 'thunderstrike', snow: 'frostbloom', prism: 'refract' };
 // 탄 궤적·파편 색 ('rainbow' 이면 쏠 때마다 다른 색)
 export function fxColor(c) { if (c === 'rainbow') return _c.setHSL(Math.random(), 1, 0.6).getHex(); return c; }
 
@@ -113,8 +115,11 @@ export function killEffect(spawn, p, colors, finisher, flash) {
     for (let i = 0; i < 36; i++) { const a = Math.random() * Math.PI * 2, e = rnd(-0.6, 1), s = rnd(2, 5); spawn(p.x, y, p.z, Math.cos(a) * s, e * s, Math.sin(a) * s, C(), rnd(0.5, 0.9), 0.09, 6); }
     return;
   }
-  if (flash) flash(new THREE.Vector3(p.x, y, p.z), 2.2);
-  if (finisher === 'eruption') {
+  if (flash) flash(new THREE.Vector3(p.x, y, p.z), finisher === 'ascend' ? 1.2 : 2.2);
+  if (finisher === 'ascend') { // 영웅: 바닥 고리 + 나선으로 솟는 빛기둥
+    for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2; spawn(p.x + Math.cos(a) * 0.9, p.y + 0.1, p.z + Math.sin(a) * 0.9, Math.cos(a) * 1.5, 0.3, Math.sin(a) * 1.5, C(), 0.7, 0.1, 0); }
+    for (let i = 0; i < 46; i++) { const a = i * 0.55, rr = 0.55; spawn(p.x + Math.cos(a) * rr, p.y + 0.2 + i * 0.03, p.z + Math.sin(a) * rr, -Math.sin(a) * 1.2, 3.2 + i * 0.03, Math.cos(a) * 1.2, C(), rnd(0.6, 0.9), 0.09, 0); }
+  } else if (finisher === 'eruption') {
     for (let i = 0; i < 70; i++) { const a = Math.random() * Math.PI * 2, s = rnd(0.5, 2.2); spawn(p.x, p.y + 0.2, p.z, Math.cos(a) * s, rnd(6, 12), Math.sin(a) * s, C(), rnd(0.8, 1.4), 0.12, 9); }
     for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; spawn(p.x, p.y + 0.2, p.z, Math.cos(a) * 5, 0.5, Math.sin(a) * 5, C(), 0.6, 0.1, 0); }
   } else if (finisher === 'supernova') {

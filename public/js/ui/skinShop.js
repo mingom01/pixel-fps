@@ -1,5 +1,5 @@
 // 꾸미기 상점의 캐릭터/총 스킨 탭: 등급순 카드, 눌러서 미리보기 → 구매/장착 버튼
-import { profile, myLevel, buyItem, equip } from '../cosmetics.js';
+import { profile, myLevel, buyItem, equip, ACHIEVEMENTS } from '../cosmetics.js';
 import { CHAR_SKINS } from '../skins/charSkins.js';
 import { GUN_SKINS } from '../skins/gunSkins.js';
 import { RARITY_BY, RARITY_ORDER, RARITY_PERKS, rarityOf } from '../skins/rarity.js';
@@ -19,7 +19,16 @@ const listOf = (kind) => kind === 'skin' ? CHAR_SKINS : GUN_SKINS;
 const ownedOf = (kind) => kind === 'skin' ? profile.skins : profile.gskins;
 const curOf = (kind) => kind === 'skin' ? profile.skin : profile.gskin;
 
-function priceHtml(it) { return it.gold ? `<i class="goldc"></i> ${it.gold} 골드` : `<i class="coin"></i> ${it.price}`; }
+function priceHtml(it) {
+  if (it.r === 'legend') return `<i class="coin"></i> ${it.price.toLocaleString()} + <i class="goldc"></i> ${it.gold}`;
+  return it.gold ? `<i class="goldc"></i> ${it.gold} 골드` : `<i class="coin"></i> ${it.price}`;
+}
+// 전설: 무료로 받을 수 있는 업적 안내
+function achHtml(it) {
+  const a = it.ach && ACHIEVEMENTS.find(x => x.id === it.ach); if (!a) return '';
+  const done = profile.ach && profile.ach[a.id];
+  return `<div class="sk-ach ${done ? 'done' : ''}">업적 <b>[${esc(a.name)}]</b> ${esc(a.desc)} ${done ? '· 달성!' : '→ 무료 획득'}</div>`;
+}
 
 export function renderSkinShop(kind) {
   if (pickKind !== kind) { pickKind = kind; pickId = curOf(kind); }
@@ -47,7 +56,7 @@ function renderInfo(kind) {
       : lock ? `<button class="btn wide" disabled>Lv.${it.lv} 필요</button>`
         : `<button class="btn yellow wide" id="skAct">구매 · ${priceHtml(it)}</button>`;
   $('lockerSel').innerHTML = `<div class="skinfo r-${r}"><div class="sk-r" style="color:${R.color}">${R.name}</div><div class="sk-n">${esc(it.name)}</div>
-    <div class="sk-p">${RARITY_PERKS[kind][r]}</div>${btn}${r !== 'common' ? '<button class="btn tiny blue wide" id="skDemo">효과 미리보기 ♪</button>' : ''}</div>`;
+    <div class="sk-p">${RARITY_PERKS[kind][r]}</div>${own ? '' : achHtml(it)}${btn}${r !== 'common' ? '<button class="btn tiny blue wide" id="skDemo">효과 미리보기 ♪</button>' : ''}</div>`;
   const act = $('skAct');
   if (act) act.onclick = () => {
     if (!own) {

@@ -48,7 +48,11 @@ export function sfxShot(w, vol, pan) {
   if (w === 'rocket') { out([noise(t, 0.5, 1800, 200, 0.7, 0.9), tone(t, 0.3, 220, 60, 0.3, 'sawtooth')], vol * 0.8, pan); return; }
   out([noise(t, p[1], p[0], p[3] * 4, 0.8, p[2]), tone(t, Math.min(0.12, p[1]), p[3] * 2, p[3] * 0.5, 0.5 * p[2], 'square'), noise(t, 0.03, 7000, 3000, 0.5, 0.6, 'highpass')], vol * 0.55, pan);
 }
-export function sfxKnife() { if (!ctx) return; const t = ctx.currentTime; out([noise(t, 0.12, 6000, 1500, 2, 0.5, 'bandpass')], 0.5); }
+export function sfxKnife(vol, pan) { if (!ctx) return; const t = ctx.currentTime; out([noise(t, 0.12, 6000, 1500, 2, 0.5, 'bandpass')], 0.5 * (vol == null ? 1 : vol), pan); }
+// 장전: 탄창 빠짐 / 탄창 꽂힘 / 노리쇠
+export function sfxMagOut() { if (!ctx) return; const t = ctx.currentTime; out([noise(t, 0.06, 1800, 800, 2, 0.6, 'bandpass'), tone(t, 0.05, 380, 220, 0.15)], 0.3); }
+export function sfxMagIn() { if (!ctx) return; const t = ctx.currentTime; out([noise(t, 0.05, 4200, 2000, 3, 0.8, 'bandpass'), tone(t + 0.01, 0.04, 950, 500, 0.25, 'square')], 0.35); }
+export function sfxBolt() { if (!ctx) return; const t = ctx.currentTime; out([noise(t, 0.05, 3000, 1500, 2, 0.6, 'bandpass'), noise(t + 0.1, 0.05, 4800, 2600, 3, 0.7, 'bandpass')], 0.3); }
 export function sfxHit(head) { if (!ctx) return; const t = ctx.currentTime; out([tone(t, 0.06, head ? 1800 : 1200, head ? 1700 : 1000, 0.5, 'square')], 0.25); if (head) out([tone(t + 0.04, 0.12, 2400, 2300, 0.4, 'triangle')], 0.3); }
 export function sfxKill() { if (!ctx) return; const t = ctx.currentTime; out([tone(t, 0.08, 880, 880, 0.4, 'square'), tone(t + 0.08, 0.16, 1320, 1320, 0.4, 'square')], 0.22); }
 export function sfxHurt() { if (!ctx) return; const t = ctx.currentTime; out([noise(t, 0.12, 900, 300, 1, 0.8), tone(t, 0.1, 180, 90, 0.3, 'sawtooth')], 0.35); }

@@ -634,3 +634,31 @@ body.touch #botRight { top: 56px; left: 14px; right: auto; transform-origin: top
 .sk-filter button.r-legend { color: #ffd84a; } .sk-filter button.r-epic { color: #e0a4ff; } .sk-filter button.r-rare { color: #6ab0ff; }
 .sk-filter button.on { background: var(--yellow); color: #3a2400; }
 .sk-filter button.on small { color: #6a4a00; }
+
+/* ---------- 영웅·전설 킬 배너 ---------- */
+.kb-wing { transform-box: view-box; animation: kbWing 0.5s cubic-bezier(.2, 1.4, .4, 1) both 0.08s; }
+.kb-sheen { animation: kbSheen 1.4s ease-in-out 0.25s both; }
+.kb-rays { transform-box: view-box; transform-origin: 60px 60px; animation: spin 9s linear infinite, kbFade 0.6s both; }
+.kb-crown { animation: kbCrown 0.5s cubic-bezier(.2, 1.6, .4, 1) both 0.15s; transform-box: view-box; transform-origin: 60px 22px; }
+.kb-spark-ring { transform-box: view-box; transform-origin: 60px 60px; animation: spin 6s linear infinite reverse; }
+.kb-twinkle { animation: kbTw 0.9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.kb-name { margin-top: 2px; font-size: 12px; letter-spacing: 1px; color: var(--kb-main); text-shadow: 1px 1px 0 #000, 0 0 8px var(--kb-glow); white-space: nowrap; animation: kbFade 0.5s both 0.3s; }
+.kb-legend .kb-lbl { font-size: 17px; }
+.kb-legend .kb-lbl b { font-size: 22px; }
+.kb-legend .kb-name { font-size: 14px; background: linear-gradient(90deg, var(--kb-main), #ffffff, var(--kb-main)); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; filter: drop-shadow(1px 1px 0 #000); animation: kbFade 0.5s both 0.3s, kbGrad 1.6s linear infinite; }
+.kb-legend { filter: drop-shadow(0 0 16px var(--kb-glow)); }
+.kb-epic { filter: drop-shadow(0 0 12px var(--kb-glow)); }
+.kb-edge { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 120px 30px var(--kb-glow, rgba(255, 215, 90, 0.6)); animation: kbEdge 0.9s ease-out forwards; }
+.kb-edge { box-shadow: inset 0 0 140px 24px rgba(255, 220, 120, 0.5); z-index: 5; }
+@keyframes kbWing { 0% { transform: scaleX(0.1) rotate(-20deg); opacity: 0; } 100% { transform: scaleX(1) rotate(0); opacity: 1; } }
+@keyframes kbSheen { 0% { transform: translateX(0) skewX(-20deg); } 100% { transform: translateX(200px) skewX(-20deg); } }
+@keyframes kbCrown { 0% { transform: translateY(-14px) scale(0.3); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes kbTw { 0%, 100% { transform: scale(0.4); opacity: 0.3; } 50% { transform: scale(1.2); opacity: 1; } }
+@keyframes kbFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kbGrad { to { background-position: -200% 0; } }
+@keyframes kbEdge { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
+
+/* 전설 스킨: 업적 안내 */
+.sk-ach { margin: 6px 0; padding: 6px 8px; border: 2px solid #f4c22b; background: rgba(244, 194, 43, 0.1); font-size: 12px; line-height: 1.5; }
+.sk-ach.done { border-color: #7df07d; background: rgba(125, 240, 125, 0.1); }
+.ach-leg { color: #f4c22b; }

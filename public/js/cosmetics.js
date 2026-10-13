@@ -7,6 +7,25 @@ import { SPRAYS, FREE_SPRAYS, OLD_SPRAY_IDS } from './skins/sprays.js';
 export { RARITY, rarityOf };
 export const EMOTE_SLOTS = 8; // 감정표현 휠 칸 수
 
+/* ================= 전설 스킨: 얻기 어렵게 =================
+   1) 구매: Lv.15 이상 + 코인과 골드를 둘 다 많이 냄
+   2) 지정된 업적을 달성하면 무료로 받음 */
+export const LEGEND_LV = 15;
+export const LEGEND_ACH = {
+  skin: { shadow: 'st10', dragon: 'k1000', golden: 'w100', valkyrie: 'hs200', voidwalker: 'penta', frostqueen: 'st15', phoenixlord: 'k2000' },
+  gskin: {
+    lava: 'k500', galaxy: 'lv25', prism: 'allmodes', dragon: 'k2000', aurora: 'w50', phoenix: 'st15', celestial: 'lv40', reaper: 'hs500',
+    tempest: 'plant30', crystal: 'col40', emperor: 'def20', nebula: 'games200', valentine: 'heals100', singularity: 'lv50', kraken: 'crate60',
+  },
+};
+for (const [kind, list] of [['skin', CHAR_SKINS], ['gskin', GUN_SKINS]]) {
+  for (const [id, it] of Object.entries(list)) {
+    if (it.r !== 'legend' || it.legendFixed) continue;
+    const g = it.gold || 200;
+    Object.assign(it, { legendFixed: true, lv: LEGEND_LV, price: 20000 + Math.round(g / 10) * 400, gold: g * 2, ach: LEGEND_ACH[kind][id] || null });
+  }
+}
+
 const KEY = 'pf_profile';
 const DEF = { gold: 0, xp: 0, coins: 300, skins: ['default'], gskins: ['default'], skin: 'default', gskin: 'default', games: 0, kills: 0, wins: 0 };
 export const profile = (() => {
@@ -46,6 +65,7 @@ export function loadProfile(p) {
   if (st) { for (const k of Object.keys(st)) delete st[k]; Object.assign(st, profile.stats || {}); profile.stats = st; }
   fixProfile(); fixStats();
   if (!profile.ach) profile.ach = {};
+  grantPastLegends();
   try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (e) { /* */ }
 }
 
@@ -77,7 +97,11 @@ export function buyItem(kind, id) {
   const it = list[id]; if (!it) return 'bad';
   if (owned.includes(id)) return 'have';
   if (myLevel() < it.lv) return 'level';
-  if (it.gold) { if (profile.gold < it.gold) return 'gold'; profile.gold -= it.gold; }
+  if (it.r === 'legend') { // 전설은 코인 + 골드 둘 다
+    if (profile.coins < it.price) return 'coins';
+    if (profile.gold < it.gold) return 'gold';
+    profile.coins -= it.price; profile.gold -= it.gold;
+  } else if (it.gold) { if (profile.gold < it.gold) return 'gold'; profile.gold -= it.gold; }
   else { if (profile.coins < it.price) return 'coins'; profile.coins -= it.price; }
   owned.push(id); saveProfile();
   return 'ok';
@@ -182,12 +206,43 @@ export const ACHIEVEMENTS = [
   { id: 'lv10', name: '레벨 10', desc: '레벨 10 달성', test: () => myLevel() >= 10, gold: 20 },
   { id: 'lv25', name: '레벨 25', desc: '레벨 25 달성', test: () => myLevel() >= 25, gold: 50 },
   { id: 'col10', name: '수집가', desc: '스킨 10개 모으기', test: () => profile.skins.length + profile.gskins.length - 2 >= 10, gold: 25 },
+  // 전설 스킨이 걸린 어려운 업적들
+  { id: 'k2000', name: '살아있는 전설', desc: '누적 2000킬', test: () => ST.kills >= 2000, gold: 120 },
+  { id: 'hs500', name: '머리만 노린다', desc: '헤드샷 500번', test: () => ST.hs >= 500, gold: 80 },
+  { id: 'w50', name: '연승 머신', desc: '50번 승리', test: () => ST.wins >= 50, gold: 40 },
+  { id: 'st15', name: '무적', desc: '죽지 않고 15연속 처치', test: () => ST.bestStreak >= 15, gold: 50 },
+  { id: 'lv40', name: '레벨 40', desc: '레벨 40 달성', test: () => myLevel() >= 40, gold: 80 },
+  { id: 'lv50', name: '레벨 50', desc: '레벨 50 달성', test: () => myLevel() >= 50, gold: 120 },
+  { id: 'col40', name: '대수집가', desc: '스킨 40개 모으기', test: () => profile.skins.length + profile.gskins.length - 2 >= 40, gold: 60 },
+  { id: 'plant30', name: '폭파의 신', desc: '스파이크 30번 설치', test: () => ST.plants >= 30, gold: 40 },
+  { id: 'def20', name: '철벽 해체반', desc: '스파이크 20번 해체', test: () => ST.defuses >= 20, gold: 40 },
+  { id: 'crate60', name: '보급 중독', desc: '보급상자 60개 열기', test: () => ST.crates >= 60, gold: 40 },
+  { id: 'games200', name: '개근상', desc: '매치 200판 끝까지 플레이', test: () => ST.games >= 200, gold: 60 },
+  { id: 'heals100', name: '힐팩 수집가', desc: '힐팩 100번 먹기', test: () => ST.heals >= 100, gold: 30 },
 ];
+// 업적에 걸린 전설 스킨 목록
+export function achLegends(achId) {
+  const out = [];
+  for (const kind of ['skin', 'gskin']) for (const [id, a] of Object.entries(LEGEND_ACH[kind])) if (a === achId) { const it = (kind === 'skin' ? CHAR_SKINS : GUN_SKINS)[id]; if (it) out.push({ kind, id, it }); }
+  return out;
+}
 if (!profile.ach) profile.ach = {};
+export function grantPastLegends() {
+  let n = 0;
+  for (const achId of Object.keys(profile.ach || {})) for (const g of achLegends(achId)) { const own = ownedList(g.kind); if (!own.includes(g.id)) { own.push(g.id); n++; } }
+  if (n) saveProfile();
+  return n;
+}
 // 새로 달성한 업적 반환 (보상 지급)
 export function checkAchievements() {
   const got = [];
-  for (const a of ACHIEVEMENTS) if (!profile.ach[a.id] && a.test()) { profile.ach[a.id] = Date.now(); profile.gold += a.gold; got.push(a); }
+  for (const a of ACHIEVEMENTS) if (!profile.ach[a.id] && a.test()) {
+    profile.ach[a.id] = Date.now(); profile.gold += a.gold;
+    // 걸려 있는 전설 스킨 무료 지급
+    const gifts = [];
+    for (const g of achLegends(a.id)) { const own = ownedList(g.kind); if (!own.includes(g.id)) { own.push(g.id); gifts.push(g.it.name); } }
+    got.push(Object.assign({}, a, { gifts }));
+  }
   if (got.length) saveProfile();
   return got;
 }
@@ -213,3 +268,4 @@ export function rollGacha() {
   saveProfile();
   return Object.assign({ dup }, pickd);
 }
+grantPastLegends();

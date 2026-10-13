@@ -93,7 +93,7 @@ server.on('upgrade', (req, socket) => {
 
 /* ---------- 유틸 ---------- */
 const BOT_NAMES = ['픽셀킹', '블록헤드', '네모난총잡이', '도트전사', '큐브맨', '8비트', '조준왕', '헤드샷러', '캠핑족', '뉴비봇', '고인물', '야생의봇', '총알받이', '저격수김씨', '돌격대장', '숨바꼭질', '점프맨', '탄창부족'];
-const BOT_SKINS = ['default', 'default', 'default', 'soldier', 'ninja', 'robot', 'zombie', 'pirate', 'astro', 'pumpkin', 'king', 'police', 'clown', 'santa', 'firefighter', 'cowboy', 'skeleton', 'knight', 'panda', 'wizard', 'alien', 'samurai', 'hero', 'chef', 'diver', 'gamer', 'vampire', 'cyborg', 'pharaoh', 'masked'];
+const BOT_SKINS = ['default', 'default', 'default', 'politician', 'student', 'doctor', 'detective', 'idol', 'seonbi', 'angel', 'demon', 'neon', 'soldier', 'ninja', 'robot', 'zombie', 'pirate', 'astro', 'pumpkin', 'king', 'police', 'clown', 'santa', 'firefighter', 'cowboy', 'skeleton', 'knight', 'panda', 'wizard', 'alien', 'samurai', 'hero', 'chef', 'diver', 'gamer', 'vampire', 'cyborg', 'pharaoh', 'masked'];
 const BOT_GSKINS = ['default', 'default', 'default', 'camo', 'desert', 'arctic', 'urban', 'woodland', 'digital', 'navy', 'carbon', 'zebra', 'pink', 'mint', 'blood', 'gold', 'fire', 'ice', 'toxic', 'ocean', 'bone', 'tiger', 'redline', 'sunset', 'candy', 'ruby', 'sapphire', 'arcade', 'matrix', 'vapor', 'neon', 'cyber', 'diamond', 'void', 'thunder', 'inferno', 'plasma', 'oni', 'lava'];
 const BOT_TITLES = ['rookie', 'rookie', 'lv5', 'k1', 'w1', 'pixel', 'camper', 'lv10', 'k100', 'hunter', 'shadow'];
 const COLORS = 12;
@@ -1153,6 +1153,11 @@ function handle(c, m) {
       callStrike(r, e, num(m.x, e.x), num(m.z, e.z));
       break;
     case 'plant': startPlant(r, e, !!m.on); break;
+    case 'swing':
+      if (!e.alive) break;
+      if (Date.now() < e.protUntil) e.protUntil = 0;
+      broadcast(r, { t: 'swing', id: c.id }, c);
+      break;
     case 'emote':
       if (!e.alive || Date.now() - (e.emoteT || 0) < 1500) break;
       e.emoteT = Date.now();
@@ -1394,6 +1399,7 @@ function botThink(r, b, dt, now) {
       // 근접: 가까우면 휘두르기
       if (dist < W.melee && b.fireCD <= 0 && Math.abs(dyaw) < 0.6) {
         b.fireCD = 60 / W.rpm * (1.1 + Math.random() * 0.4);
+        broadcast(r, { t: 'swing', id: b.id });
         if (Math.random() < 0.55 + b.skill * 0.35) damage(r, t, b, W.dmg, b.w, 'body');
       }
     } else if (b.reloadT <= 0 && b.react <= 0 && Math.abs(dyaw) < 0.12 && b.fireCD <= 0) {

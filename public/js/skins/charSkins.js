@@ -15,6 +15,9 @@ export const CHAR_SKINS = {
   panda: { name: '판다', r: 'common', price: 500, lv: 4 },
   chef: { name: '요리사', r: 'common', price: 400, lv: 2 },
   diver: { name: '잠수부', r: 'common', price: 450, lv: 3 },
+  student: { name: '교복 학생', r: 'common', price: 350, lv: 1 },
+  doctor: { name: '의사', r: 'common', price: 400, lv: 2 },
+  detective: { name: '탐정', r: 'common', price: 450, lv: 3 },
 
   /* ---------- 레어: 외형 + 발소리 + 발자국 효과 ---------- */
   ninja: { name: '닌자', r: 'rare', price: 1200, lv: 4, fx: { step: 'soft', dust: 0x2a2a3a } },
@@ -25,6 +28,9 @@ export const CHAR_SKINS = {
   knight: { name: '기사', r: 'rare', price: 1800, lv: 6, fx: { step: 'metal', dust: 0xa8b0b8 } },
   gamer: { name: '프로게이머', r: 'rare', price: 1400, lv: 5, fx: { step: 'soft', dust: 0x5aff8a } },
   vampire: { name: '뱀파이어', r: 'rare', price: 1700, lv: 7, fx: { step: 'bone', dust: 0x8a0a1a } },
+  politician: { name: '정치인', r: 'rare', price: 1500, lv: 5, fx: { step: 'soft', dust: 0x2a3a6a } },
+  idol: { name: '아이돌', r: 'rare', price: 1500, lv: 5, fx: { step: 'squeak', dust: 0xff8ac8 } },
+  seonbi: { name: '조선 선비', r: 'rare', price: 1600, lv: 6, fx: { step: 'soft', dust: 0xe8e0c8 } },
 
   /* ---------- 영웅: 레어 + 오라 ---------- */
   robot: { name: '로봇', r: 'epic', price: 3500, lv: 7, fx: { step: 'metal', dust: 0x3af0ff }, aura: { kind: 'spark', colors: [0x3af0ff, 0xffffff] } },
@@ -36,6 +42,9 @@ export const CHAR_SKINS = {
   cyborg: { name: '사이보그', r: 'epic', price: 4200, lv: 9, fx: { step: 'metal', dust: 0xff2a2a }, aura: { kind: 'spark', colors: [0xff2a2a, 0xffffff] } },
   pharaoh: { name: '파라오', r: 'epic', price: 4600, lv: 10, fx: { step: 'gold', dust: 0xe3b341 }, aura: { kind: 'star', colors: [0xffd040, 0x5a8aff] } },
   masked: { name: '가면 무도회', r: 'epic', price: 4400, lv: 10, fx: { step: 'soft', dust: 0x8a4ac0 }, aura: { kind: 'smoke', colors: [0x2a0a4a, 0x6a2aa0, 0x14081e] } },
+  angel: { name: '천사', r: 'epic', price: 4600, lv: 10, fx: { step: 'magic', dust: 0xfff4c0 }, aura: { kind: 'petal', colors: [0xffffff, 0xfff4c0, 0xffe080] } },
+  demon: { name: '악마', r: 'epic', price: 4600, lv: 10, fx: { step: 'bone', dust: 0xff3a1a }, aura: { kind: 'ember', colors: [0xff3a1a, 0xff8a20, 0x5a0a0a] } },
+  neon: { name: '네온 러너', r: 'epic', price: 4300, lv: 9, fx: { step: 'metal', dust: 0x3af0ff }, aura: { kind: 'spark', colors: [0x3af0ff, 0xff3ad0] } },
   hero: { name: '슈퍼히어로', r: 'epic', price: 5000, lv: 12, fx: { step: 'metal', dust: 0xe2483a }, aura: { kind: 'spark', colors: [0xe2483a, 0x3d8bf0, 0xffd84a] } },
 
   /* ---------- 전설: 영웅 + 빛 고리 + 쓰러짐 연출 + 전용 킬 배너 ---------- */
@@ -54,4 +63,10 @@ export const CHAR_SKINS = {
   voidwalker: { name: '공허의 방랑자', r: 'legend', gold: 320, lv: 1, fx: { step: 'magic', dust: 0x8a5aff },
     aura: { kind: 'arcane', colors: [0xc08aff, 0x6a3ad0, 0xffffff] }, halo: 0xb08aff, death: [0x8a5aff, 0x14082e, 0xffffff],
     banner: { main: '#d8c0ff', accent: '#3a1a8a', glow: 'rgba(150,100,255,0.8)' } },
+  frostqueen: { name: '서리 여왕', r: 'legend', gold: 300, lv: 1, fx: { step: 'magic', dust: 0xbfe8ff },
+    aura: { kind: 'snow', colors: [0xffffff, 0xbfe8ff, 0x8ad0ff] }, halo: 0xbfe8ff, death: [0xbfe8ff, 0xffffff, 0x5a8ac0],
+    banner: { main: '#d8f4ff', accent: '#2a6ab0', glow: 'rgba(150,210,255,0.8)' } },
+  phoenixlord: { name: '불사조 군주', r: 'legend', gold: 350, lv: 1, fx: { step: 'gold', dust: 0xff8a20 },
+    aura: { kind: 'ember', colors: [0xff5a10, 0xffb020, 0xffe060] }, halo: 0xffb020, death: [0xff5a10, 0xffd040, 0xffffff],
+    banner: { main: '#ffb040', accent: '#b01a0a', glow: 'rgba(255,120,30,0.8)' } },
 };
