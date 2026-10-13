@@ -741,7 +741,8 @@
   function openSky(m, x, y, z) { for (let yy = y; yy < m.H; yy++) if (m.solid(x, yy, z)) return false; return true; }
 
   // 힐팩 / 갑옷 상자 고정 위치 (스폰 근처는 피하고 서로 멀리)
-  const PICKUP = { hpS: { heal: 50, respawn: 10000 }, hpL: { heal: 999, respawn: 20000 }, armor: { armor: 50, respawn: 25000 } };
+  // 방어막 상자는 맵에서 뺐어요 (armor 는 예전 커스텀 맵 호환용으로만 남김). 힐팩은 개수를 줄이고 빨리 다시 생김
+  const PICKUP = { hpS: { heal: 50, respawn: 6000 }, hpL: { heal: 999, respawn: 12000 }, armor: { armor: 50, respawn: 25000 } };
   function computePickups(m, id) {
     const c = [];
     for (let z = 3; z < m.D - 3; z++) for (let x = 3; x < m.W - 3; x++) {
@@ -756,12 +757,12 @@
     // 첫 점은 맵 가운데에 가장 가까운 곳
     c.sort((a, b) => Math.hypot(a[0] - m.W / 2, a[2] - m.D / 2) - Math.hypot(b[0] - m.W / 2, b[2] - m.D / 2));
     out.push(c[Math.floor(r() * Math.min(5, c.length))]);
-    while (out.length < 9 && out.length < c.length) {
+    while (out.length < 4 && out.length < c.length) {
       let best = null, bd = -1;
       for (let i = 0; i < c.length; i += 2) { let md = 1e9; for (const o of out) md = Math.min(md, Math.hypot(o[0] - c[i][0], o[2] - c[i][2])); if (md > bd) { bd = md; best = c[i]; } }
       out.push(best);
     }
-    const kinds = ['hpL', 'armor', 'hpS', 'hpS', 'armor', 'hpL', 'hpS', 'hpS', 'armor'];
+    const kinds = ['hpL', 'hpS', 'hpS', 'hpS'];
     return out.map((p, i) => ({ id: 'k' + i, kind: kinds[i], x: p[0], y: p[1], z: p[2] }));
   }
 

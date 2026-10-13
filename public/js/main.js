@@ -17,6 +17,7 @@ import { tickAuras, decorateGun, fxColor, killEffect } from './skins/skinFx.js';
 import { sfxSkinShot, sfxSkinKill, sfxFinisher, sfxEquip, sfxSkinStep } from './skins/skinSounds.js';
 import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
 import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
+import { showIncome } from './hud/income.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
 import { SPRAY_BY, sprayCanvas } from './skins/sprays.js';
 import { initGimmicks, startGimmicks, setGimMap, stopGimmicks, onGimMsg, updateGimmicks, afterMove, groundAccMul, ENV_KILL } from './gimmicks.js';
@@ -150,6 +151,7 @@ function onMsg(m) {
     case 'crate': onCrate(m); break;
     case 'cratepick': onCratePick(m); break;
     case 'pk': onPickup(m); break;
+    case 'income': showIncome(m.amt); break;
     case 'rank': onRank(m); break;
     case 'emote': onEmote(m); break;
     case 'spray': onSpray(m); break;
@@ -1607,7 +1609,7 @@ function updateHud(dt) {
     const carrying = S.flags.some(f => f[3] === S.myId);
     if (carrying) showBig('깃발을 우리 기지로 가져가세요!', '#f4c22b', 300);
   }
-  $('money').textContent = '$' + me.money;
+  $('moneyNum').textContent = '$' + me.money;
   $('hpNum').textContent = Math.max(0, Math.ceil(me.hp)); $('hpBar').style.width = clamp(me.hp / me.maxHp * 100, 0, 100) + '%';
   const pk = (me.helmet ? 'helmet,' : '') + me.perks.join(',');
   if ($('perkBar').dataset.k !== pk) { $('perkBar').dataset.k = pk; $('perkBar').innerHTML = pk.split(',').filter(Boolean).map(id => `<img src="${itemIcon(id, 2)}" title="${ITEMS[id].name}">`).join(''); }

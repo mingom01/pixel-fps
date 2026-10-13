@@ -7,6 +7,7 @@ const { WEAPONS, ITEMS, ECON, P } = SH;
 const AUTH = require('./server/auth.js');
 const STORE = require('./server/store.js');
 const GIM = require('./server/gimmicks.js');
+const INCOME = require('./server/income.js');
 // 맵 파일 (public/js/maps/*.js) 등록
 for (const f of fs.readdirSync(path.join(__dirname, 'public', 'js', 'maps')).sort()) if (f.endsWith('.js')) require(path.join(__dirname, 'public', 'js', 'maps', f));
 
@@ -285,6 +286,7 @@ function startMatch(r) {
   GIM.start(r);
   r.pickups = isSpike(r) || isPractice(r) ? [] : r.map.pickups.map(p => Object.assign({ readyAt: 0 }, p));
   r.endAt = Date.now() + (isSpike(r) || isPractice(r) ? 3 * 3600 : r.cfg.time) * 1000;
+  INCOME.start(r, Date.now());
   fitBots(r);
   for (const e of r.ents.values()) if (e.bot) e.skill = skillFor(r);
   r.flags = r.cfg.mode === 'ctf' ? [0, 1].map(t => { const b = r.map.bases[t]; return { team: t, home: b.slice(), x: b[0], y: b[1], z: b[2], carrier: null, atHome: true, dropAt: 0 }; }) : null;
@@ -1299,11 +1301,10 @@ function botGoal(r, b) {
   if (b.zombie && nearest) return nearest;
   if (isBoss(r)) { const bb = r.ents.get('boss'); if (bb && bb.alive && b.team === 0) return { x: bb.x + (Math.random() - 0.5) * 16, y: bb.y, z: bb.z + (Math.random() - 0.5) * 16 }; }
   // 다쳤으면 힐팩, 갑옷이 없으면 갑옷 상자
-  if (r.pickups && r.pickups.length && (b.hp < 55 || b.armor < 25)) {
+  if (r.pickups && r.pickups.length && b.hp < 55) {
     let best = null, bd2 = 30;
     for (const p of r.pickups) {
-      if (Date.now() < p.readyAt) continue;
-      if (b.hp < 55 ? p.kind === 'armor' : p.kind !== 'armor') continue;
+      if (Date.now() < p.readyAt || p.kind === 'armor') continue;
       const d = Math.hypot(p.x - bd.x, p.z - bd.z); if (d < bd2) { bd2 = d; best = p; }
     }
     if (best) return best;
@@ -1523,6 +1524,11 @@ setInterval(() => {
     if (isSpike(r)) { spikeTick(r, now); if (r.state !== 'play') continue; }
     crateTick(r, now);
     pickupTick(r, now);
+    INCOME.tick(r, now, (e, amt) => {
+      if (e.money >= ECON.MAX) return;
+      e.money = Math.min(ECON.MAX, e.money + amt); sendMe(r, e);
+      if (!e.bot) { const c = clientOf(r, e.id); if (c) c.send({ t: 'income', amt }); }
+    });
     for (let i = r.projs.length - 1; i >= 0; i--) {
       const pr = r.projs[i];
       pr.life -= dt;
