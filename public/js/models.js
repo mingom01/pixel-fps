@@ -90,10 +90,25 @@ export const GUN_SCALE = 0.035;
 // 총 스킨 카탈로그는 skins/gunSkins.js
 export { GUN_SKINS };
 const METAL_KEYS = { b: 0, d: 0, m: 1, l: 2, k: 2 }, BODY_KEYS = { w: 0, t: 0, g: 0, s: 0, o: 0, W: 1, G: 1 };
-function skinColor(ck, gs, i) {
+// 여러 색 사이를 t(0~1)로 보간
+const _s1 = new THREE.Color(), _s2 = new THREE.Color();
+function stopColor(stops, t) {
+  const f = Math.max(0, Math.min(1, t)) * (stops.length - 1), k = Math.min(stops.length - 2, Math.floor(f));
+  return _s1.setHex(stops[k]).lerp(_s2.setHex(stops[k + 1]), f - k).getHex();
+}
+// 스킨 무늬: camo(위장) · fade(총 길이 방향 그라데이션) · tiger(줄무늬) · metal/body(두 톤)
+function skinColor(ck, gs, i, bx) {
   const base = PAL[ck] != null ? PAL[ck] : ck;
-  if (!gs || (!gs.camo && !gs.metal)) return base;
+  if (!gs || (!gs.camo && !gs.metal && !gs.fade && !gs.tiger)) return base;
   if ('rycR'.includes(ck)) return gs.acc != null ? gs.acc : base;
+  if (gs.fade && bx) {
+    const zc = (bx[2] + bx[5]) / 2, c = stopColor(gs.fade, (zc + 14) / 58);
+    return ck === 'b' || ck === 'd' ? _s1.setHex(c).multiplyScalar(0.42).getHex() : c;
+  }
+  if (gs.tiger) {
+    if (ck === 'b' || ck === 'd') return gs.metal ? gs.metal[0] : _s1.setHex(gs.tiger[1]).multiplyScalar(0.4).getHex();
+    return gs.tiger[i % gs.tiger.length];
+  }
   if (gs.camo) return gs.camo[(i * 7 + 3) % gs.camo.length];
   if (ck in METAL_KEYS) { const c = gs.metal[METAL_KEYS[ck]]; return ck === 'b' ? new THREE.Color(c).multiplyScalar(0.55).getHex() : c; }
   if (ck in BODY_KEYS) return gs.body[BODY_KEYS[ck]];
@@ -110,7 +125,7 @@ function boxGeom(list, scale, gs) {
   ];
   list.forEach((bx, bi) => {
     const [x0, y0, z0, x1, y1, z1, ck] = bx;
-    _c.setHex(skinColor(ck, gs, bi));
+    _c.setHex(skinColor(ck, gs, bi, bx));
     for (const [n, vs, sh] of F) {
       const v = vs.map(([a, b, c]) => [(a ? x1 : x0) * scale, (b ? y1 : y0) * scale, -(c ? z1 : z0) * scale]);
       for (const i of [0, 2, 1, 0, 3, 2]) { // z 반전으로 감김 순서 뒤집음
@@ -179,7 +194,7 @@ export function gunIcon(id, px, gskin) {
   const grid = new Array(W * H).fill(null);
   const sorted = def.boxes.map((b, i) => b.concat([i])).sort((a, b) => a[3] - b[3]);
   for (const b of sorted) {
-    const col = skinColor(b[6], gs, b[b.length - 1]);
+    const col = skinColor(b[6], gs, b[b.length - 1], b);
     for (let y = Math.floor(b[1] - miny); y < Math.ceil(b[4] - miny); y++) for (let z = Math.floor(b[2] - minz); z < Math.ceil(b[5] - minz); z++) {
       const top = y === Math.ceil(b[4] - miny) - 1;
       grid[(H - 1 - (y + pad)) * W + z + pad] = { c: col, f: top ? 1.18 : 1 };
@@ -231,6 +246,10 @@ export function makeChar(ci, sid, teamColor) {
   else if (s.hat === 'wizard') { addBox(head, 0.62, 0.05, 0.62, 0, 0.47, 0, 0x3a1a6a); addBox(head, 0.4, 0.18, 0.4, 0, 0.58, 0, 0x4a2a8a); addBox(head, 0.26, 0.18, 0.26, 0.04, 0.75, 0.04, 0x4a2a8a); addBox(head, 0.13, 0.16, 0.13, 0.08, 0.9, 0.08, 0x4a2a8a); addBox(head, 0.08, 0.08, 0.02, 0, 0.6, -0.21, 0xf4d060); }
   else if (s.hat === 'ears') { addBox(head, 0.14, 0.12, 0.08, -0.18, 0.5, 0, 0x1a1a1a); addBox(head, 0.14, 0.12, 0.08, 0.18, 0.5, 0, 0x1a1a1a); }
   else if (s.hat === 'topknot') { addBox(head, 0.14, 0.14, 0.2, 0, 0.52, 0.1, 0x111111); addBox(head, 0.48, 0.05, 0.48, 0, 0.44, 0, 0x111111); }
+  else if (s.hat === 'chef') { addBox(head, 0.5, 0.1, 0.5, 0, 0.48, 0, 0xf4f4f4); addBox(head, 0.42, 0.24, 0.42, 0, 0.64, 0, 0xffffff); addBox(head, 0.52, 0.12, 0.52, 0, 0.8, 0, 0xffffff); }
+  else if (s.hat === 'headset') { addBox(head, 0.52, 0.06, 0.1, 0, 0.5, 0, 0x1a1a22); for (const x of [-0.26, 0.26]) addBox(head, 0.07, 0.18, 0.18, x, 0.24, 0, 0x22252e); addBox(head, 0.04, 0.04, 0.2, -0.27, 0.12, -0.12, 0x5aff8a); }
+  else if (s.hat === 'nemes') { addBox(head, 0.54, 0.14, 0.54, 0, 0.47, 0, 0xe3b341); addBox(head, 0.54, 0.04, 0.54, 0, 0.43, 0, 0x2f5fd0); for (const x of [-0.27, 0.27]) { addBox(head, 0.06, 0.42, 0.22, x, 0.12, 0.04, 0xe3b341); addBox(head, 0.065, 0.06, 0.22, x, 0.0, 0.04, 0x2f5fd0); } addBox(head, 0.5, 0.42, 0.06, 0, 0.14, 0.27, 0xe3b341); addBox(head, 0.08, 0.1, 0.04, 0, 0.5, -0.27, 0x2f5fd0); }
+  else if (s.hat === 'winghelm') { addBox(head, 0.53, 0.14, 0.53, 0, 0.48, 0, 0xc8d0d8); addBox(head, 0.1, 0.06, 0.56, 0, 0.57, 0, 0xffd040); for (const x of [-0.3, 0.3]) { addBox(head, 0.04, 0.26, 0.12, x, 0.52, 0.06, 0xffffff); addBox(head, 0.04, 0.18, 0.1, x * 1.1, 0.68, 0.14, 0xf0f0f0); } }
   else if (s.hat === 'horns') { const hm = 0xe8e0c8; addBox(head, 0.08, 0.2, 0.08, -0.18, 0.55, 0.02, hm); addBox(head, 0.08, 0.2, 0.08, 0.18, 0.55, 0.02, hm); addBox(head, 0.06, 0.1, 0.06, -0.22, 0.68, 0.06, hm); addBox(head, 0.06, 0.1, 0.06, 0.22, 0.68, 0.06, hm); }
   if (s.cape) { const cp = addBox(torso, 0.52, 0.86, 0.04, 0, 0.18, 0.17, s.cape); cp.rotation.x = 0.12; }
   if (teamColor != null) { addBox(head, 0.5, 0.07, 0.5, 0, 0.3, 0, teamColor); addBox(armL, 0.24, 0.08, 0.24, 0, -0.12, 0, teamColor); addBox(armR, 0.24, 0.08, 0.24, 0, -0.12, 0, teamColor); }

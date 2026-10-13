@@ -123,6 +123,19 @@ export function killEffect(spawn, p, colors, finisher, flash) {
     for (let ring = 0; ring < 5; ring++) for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2, s = 2 + ring * 1.2; spawn(p.x, y - 0.4 + ring * 0.25, p.z, Math.cos(a) * s, 0.4, Math.sin(a) * s, colors[ring % colors.length], 0.9, 0.1, 0); }
   } else if (finisher === 'dragonfire') {
     for (let i = 0; i < 80; i++) { const a = i * 0.45, s = 1.5 + i * 0.06; spawn(p.x, p.y + 0.2, p.z, Math.cos(a) * s, 2 + i * 0.09, Math.sin(a) * s, C(), rnd(0.8, 1.3), 0.12, 3); }
+  } else if (finisher === 'vortex') { // 소용돌이가 위로 감겨 올라감
+    for (let i = 0; i < 90; i++) { const a = i * 0.35, rr = 2.5 - i * 0.02; spawn(p.x + Math.cos(a) * rr, p.y + 0.2 + i * 0.03, p.z + Math.sin(a) * rr, -Math.sin(a) * 4, 3, Math.cos(a) * 4, C(), rnd(0.7, 1.1), 0.1, 0); }
+  } else if (finisher === 'shatter') { // 유리처럼 깨져 흩어짐
+    for (let i = 0; i < 70; i++) { const a = Math.random() * Math.PI * 2, s = rnd(3, 9); spawn(p.x, y, p.z, Math.cos(a) * s, rnd(-2, 6), Math.sin(a) * s, C(), rnd(0.5, 1), rnd(0.08, 0.16), 14); }
+  } else if (finisher === 'thunderstrike') { // 하늘에서 번개 기둥
+    for (let i = 0; i < 60; i++) spawn(p.x + rnd(-0.3, 0.3), p.y + i * 0.3, p.z + rnd(-0.3, 0.3), rnd(-0.5, 0.5), -2, rnd(-0.5, 0.5), C(), rnd(0.3, 0.6), 0.14, 0);
+    for (let i = 0; i < 30; i++) { const a = i / 30 * Math.PI * 2; spawn(p.x, p.y + 0.1, p.z, Math.cos(a) * 7, 0.5, Math.sin(a) * 7, C(), 0.5, 0.1, 0); }
+  } else if (finisher === 'bloom') { // 꽃잎이 피어남
+    for (let k = 0; k < 6; k++) for (let i = 0; i < 12; i++) { const a = k / 6 * Math.PI * 2 + i * 0.05, s = 1 + i * 0.35; spawn(p.x, y, p.z, Math.cos(a) * s, 1.5 + i * 0.1, Math.sin(a) * s, C(), rnd(1, 1.6), 0.12, 2); }
+  } else if (finisher === 'blackhole') { // 빨려 들어감
+    for (let i = 0; i < 70; i++) { const a = Math.random() * Math.PI * 2, rr = rnd(2.5, 4); spawn(p.x + Math.cos(a) * rr, y + rnd(-1, 1.5), p.z + Math.sin(a) * rr, -Math.cos(a) * rr * 1.6, rnd(-0.5, 0.5), -Math.sin(a) * rr * 1.6, C(), 0.6, 0.11, 0); }
+  } else if (finisher === 'heartburst') { // 하트 모양으로 터짐
+    for (let i = 0; i < 60; i++) { const t = i / 60 * Math.PI * 2, hx = 16 * Math.sin(t) ** 3, hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t); spawn(p.x, y + 0.5, p.z, hx * 0.3, hy * 0.3, 0, C(), 1, 0.12, 0); }
   } else if (finisher === 'frostbloom') {
     for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; spawn(p.x, p.y + 0.1, p.z, Math.cos(a) * 6, 0.2, Math.sin(a) * 6, C(), 0.8, 0.11, 0); }
     for (let i = 0; i < 40; i++) spawn(p.x + rnd(-1.5, 1.5), p.y + rnd(2, 3.5), p.z + rnd(-1.5, 1.5), rnd(-0.3, 0.3), -rnd(0.5, 1.2), rnd(-0.3, 0.3), C(), rnd(1.5, 2.2), 0.08, 0);

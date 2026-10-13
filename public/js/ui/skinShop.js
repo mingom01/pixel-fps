@@ -9,7 +9,8 @@ import * as A from '../audio.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-let D = null, pickId = null, pickKind = null;
+let D = null, pickId = null, pickKind = null, filter = 'all';
+const FILTERS = [['all', '전체'], ['legend', '전설'], ['epic', '영웅'], ['rare', '레어'], ['common', '일반'], ['own', '보유']];
 
 // deps = { thumb(id), preview({ skin, gskin, gunShow }), toast(text), changed() }
 export function initSkinShop(deps) { D = deps; }
@@ -23,14 +24,16 @@ function priceHtml(it) { return it.gold ? `<i class="goldc"></i> ${it.gold} 골�
 export function renderSkinShop(kind) {
   if (pickKind !== kind) { pickKind = kind; pickId = curOf(kind); }
   const list = listOf(kind), owned = ownedOf(kind), cur = curOf(kind), lv = myLevel();
-  const ids = Object.keys(list).sort((a, b) => RARITY_ORDER[rarityOf(list[a])] - RARITY_ORDER[rarityOf(list[b])] || (list[a].gold || 0) - (list[b].gold || 0) || (list[a].price || 0) - (list[b].price || 0));
-  $('lockerGrid').innerHTML = ids.map(id => {
+  const ids = Object.keys(list).filter(id => filter === 'all' || (filter === 'own' ? owned.includes(id) : rarityOf(list[id]) === filter)).sort((a, b) => RARITY_ORDER[rarityOf(list[a])] - RARITY_ORDER[rarityOf(list[b])] || (list[a].gold || 0) - (list[b].gold || 0) || (list[a].price || 0) - (list[b].price || 0));
+  const cnt = (f) => Object.keys(list).filter(id => f === 'all' || (f === 'own' ? owned.includes(id) : rarityOf(list[id]) === f)).length;
+  $('lockerGrid').innerHTML = `<div class="sk-filter">${FILTERS.map(([f, n]) => `<button data-f="${f}" class="${filter === f ? 'on' : ''} ${f !== 'all' && f !== 'own' ? 'r-' + f : ''}">${n} <small>${cnt(f)}</small></button>`).join('')}</div>` + ids.map(id => {
     const it = list[id], r = rarityOf(it), own = owned.includes(id), lock = !own && lv < it.lv;
     const th = kind === 'skin' ? D.thumb(id) : gunIcon('rifle', 2, id);
     const pr = own ? `<div class="pr own">${id === cur ? '장착 중' : '보유'}</div>` : lock ? `<div class="pr lv">Lv.${it.lv} 필요</div>` : `<div class="pr ${it.gold ? 'gold' : ''}">${priceHtml(it)}</div>`;
     const gc = it.glow ? `style="--gc:#${it.glow.c1.toString(16).padStart(6, '0')}"` : it.halo ? `style="--gc:#${it.halo.toString(16).padStart(6, '0')}"` : '';
     return `<div class="lcard r-${r} ${id === cur ? 'eq' : ''} ${id === pickId ? 'sel' : ''} ${lock ? 'lock' : ''}" data-id="${id}" ${gc}><div class="rtag">${RARITY_BY[r].name}</div><div class="th"><img src="${th}"></div><div class="nm">${esc(it.name)}</div>${pr}</div>`;
   }).join('');
+  $('lockerGrid').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { filter = b.dataset.f; renderSkinShop(kind); });
   $('lockerGrid').querySelectorAll('.lcard').forEach(c => c.onclick = () => { pickId = c.dataset.id; A.sfxSwitch(); renderSkinShop(kind); demo(kind, pickId, true); });
   renderInfo(kind);
   D.preview(kind === 'skin' ? { skin: pickId } : { gskin: pickId, gunShow: true });

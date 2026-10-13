@@ -92,8 +92,8 @@ server.on('upgrade', (req, socket) => {
 
 /* ---------- 유틸 ---------- */
 const BOT_NAMES = ['픽셀킹', '블록헤드', '네모난총잡이', '도트전사', '큐브맨', '8비트', '조준왕', '헤드샷러', '캠핑족', '뉴비봇', '고인물', '야생의봇', '총알받이', '저격수김씨', '돌격대장', '숨바꼭질', '점프맨', '탄창부족'];
-const BOT_SKINS = ['default', 'default', 'default', 'soldier', 'ninja', 'robot', 'zombie', 'pirate', 'astro', 'pumpkin', 'king', 'police', 'clown', 'santa', 'firefighter', 'cowboy', 'skeleton', 'knight', 'panda', 'wizard', 'alien', 'samurai', 'hero'];
-const BOT_GSKINS = ['default', 'default', 'default', 'camo', 'desert', 'arctic', 'urban', 'pink', 'mint', 'blood', 'gold', 'fire', 'ice', 'toxic', 'ocean', 'bone', 'neon', 'cyber', 'diamond', 'void', 'thunder', 'lava'];
+const BOT_SKINS = ['default', 'default', 'default', 'soldier', 'ninja', 'robot', 'zombie', 'pirate', 'astro', 'pumpkin', 'king', 'police', 'clown', 'santa', 'firefighter', 'cowboy', 'skeleton', 'knight', 'panda', 'wizard', 'alien', 'samurai', 'hero', 'chef', 'diver', 'gamer', 'vampire', 'cyborg', 'pharaoh', 'masked'];
+const BOT_GSKINS = ['default', 'default', 'default', 'camo', 'desert', 'arctic', 'urban', 'woodland', 'digital', 'navy', 'carbon', 'zebra', 'pink', 'mint', 'blood', 'gold', 'fire', 'ice', 'toxic', 'ocean', 'bone', 'tiger', 'redline', 'sunset', 'candy', 'ruby', 'sapphire', 'arcade', 'matrix', 'vapor', 'neon', 'cyber', 'diamond', 'void', 'thunder', 'inferno', 'plasma', 'oni', 'lava'];
 const BOT_TITLES = ['rookie', 'rookie', 'lv5', 'k1', 'w1', 'pixel', 'camper', 'lv10', 'k100', 'hunter', 'shadow'];
 const COLORS = 12;
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
@@ -166,7 +166,19 @@ function cleanCfg(c, old) {
     kills: [15, 25, 40].includes(num(c.kills, 0)) ? num(c.kills, 0) : old.kills,
     mode: SH.MODES[c.mode] ? c.mode : old.mode,
     diff: SH.DIFFS[c.diff] ? c.diff : old.diff,
+    // 랜덤: 매 판 시작할 때 모드/맵을 새로 뽑음
+    rmode: c.rmode != null ? !!c.rmode : !!old.rmode,
+    rmap: c.rmap != null ? !!c.rmap : !!old.rmap,
   };
+}
+const RANDOM_MODES = ['ffa', 'tdm', 'ctf', 'spike', 'zombie', 'gungame', 'br', 'boss'];
+const mapKind = (id) => id === 'custom' ? 'normal' : (SH.MAPS[id] && SH.MAPS[id].kind) || 'normal';
+function rollRandom(r) {
+  const c = r.cfg;
+  if (c.mode === 'practice') return;
+  if (c.rmode) c.mode = pick(RANDOM_MODES);
+  const want = c.mode === 'spike' ? 'spike' : 'normal';
+  if (c.rmap || c.rmode || mapKind(c.map) !== want) c.map = pick(Object.keys(SH.MAPS).filter(id => mapKind(id) === want));
 }
 function fixCfg(cfg) {
   const kind = cfg.map === 'custom' ? 'normal' : SH.MAPS[cfg.map].kind || 'normal';
@@ -265,6 +277,7 @@ function startMsg(r) {
   return { t: 'start', custom: r.cfg.map === 'custom' && r.custom ? r.custom.obj : null, map: r.cfg.map, mode: r.cfg.mode, endAt: r.endAt, target: SH.targetOf(r.cfg), now: Date.now(), drops: [...r.drops.values()], broken: r.broken, score: r.score, pk: (r.pickups || []).map(p => [p.id, p.readyAt]), gim: GIM.snapshot(r) };
 }
 function startMatch(r) {
+  rollRandom(r);
   r.state = 'play'; r.projs = []; r.drops.clear(); r.broken = []; r.score = [0, 0]; r.turrets = []; r.strikes = []; r.crates = []; r.sp = null;
   r.nextCrate = Date.now() + 35000;
   if (r.cfg.map === 'custom' && !r.custom) r.cfg.map = 'village';
@@ -998,7 +1011,7 @@ function handle(c, m) {
   const r = c.room;
   switch (m.t) {
     case 'list':
-      c.send({ t: 'rooms', list: [...rooms.values()].filter(x => x.pub && x.clients.size < MAX_ROOM).map(x => ({ code: x.code, n: x.clients.size, map: x.cfg.map, mode: x.cfg.mode, state: x.state, host: (x.ents.get(x.hostId) || {}).name })) });
+      c.send({ t: 'rooms', list: [...rooms.values()].filter(x => x.pub && x.clients.size < MAX_ROOM).map(x => ({ code: x.code, n: x.clients.size, map: x.cfg.map, mode: x.cfg.mode, rmode: !!x.cfg.rmode, rmap: !!x.cfg.rmap, state: x.state, host: (x.ents.get(x.hostId) || {}).name })) });
       break;
     case 'create': {
       const nr = createRoom(c, m.cfg, !m.quick);
@@ -1141,14 +1154,14 @@ function handle(c, m) {
     case 'emote':
       if (!e.alive || Date.now() - (e.emoteT || 0) < 1500) break;
       e.emoteT = Date.now();
-      broadcast(r, { t: 'emote', id: e.id, e: clamp(Math.floor(num(m.e, 0)), 0, 7) });
+      broadcast(r, { t: 'emote', id: e.id, e: cleanId(m.e) });
       break;
     case 'spray': {
       if (!e.alive || Date.now() - (e.sprayT || 0) < 1500) break;
       const p = Array.isArray(m.p) ? m.p.map(v => num(v, 0)) : null, nn = Array.isArray(m.n) ? m.n.map(v => clamp(Math.round(num(v, 0)), -1, 1)) : null;
       if (!p || !nn || p.length !== 3 || nn.length !== 3 || Math.hypot(p[0] - e.x, p[2] - e.z) > 8) break;
       e.sprayT = Date.now();
-      broadcast(r, { t: 'spray', id: e.id, s: clamp(Math.floor(num(m.s, 0)), 0, 15), p, n: nn });
+      broadcast(r, { t: 'spray', id: e.id, s: cleanId(m.s), p, n: nn });
       break;
     }
     case 'defuse': startDefuse(r, e, !!m.on); break;

@@ -13,6 +13,8 @@ export const CHAR_SKINS = {
   zombie: { name: '좀비', r: 'common', price: 450, lv: 3 },
   cowboy: { name: '카우보이', r: 'common', price: 450, lv: 3 },
   panda: { name: '판다', r: 'common', price: 500, lv: 4 },
+  chef: { name: '요리사', r: 'common', price: 400, lv: 2 },
+  diver: { name: '잠수부', r: 'common', price: 450, lv: 3 },
 
   /* ---------- 레어: 외형 + 발소리 + 발자국 효과 ---------- */
   ninja: { name: '닌자', r: 'rare', price: 1200, lv: 4, fx: { step: 'soft', dust: 0x2a2a3a } },
@@ -21,6 +23,8 @@ export const CHAR_SKINS = {
   santa: { name: '산타', r: 'rare', price: 1500, lv: 5, fx: { step: 'jingle', dust: 0xffffff } },
   skeleton: { name: '해골', r: 'rare', price: 1600, lv: 6, fx: { step: 'bone', dust: 0xe8e0c8 } },
   knight: { name: '기사', r: 'rare', price: 1800, lv: 6, fx: { step: 'metal', dust: 0xa8b0b8 } },
+  gamer: { name: '프로게이머', r: 'rare', price: 1400, lv: 5, fx: { step: 'soft', dust: 0x5aff8a } },
+  vampire: { name: '뱀파이어', r: 'rare', price: 1700, lv: 7, fx: { step: 'bone', dust: 0x8a0a1a } },
 
   /* ---------- 영웅: 레어 + 오라 ---------- */
   robot: { name: '로봇', r: 'epic', price: 3500, lv: 7, fx: { step: 'metal', dust: 0x3af0ff }, aura: { kind: 'spark', colors: [0x3af0ff, 0xffffff] } },
@@ -29,6 +33,9 @@ export const CHAR_SKINS = {
   alien: { name: '외계인', r: 'epic', price: 4500, lv: 9, fx: { step: 'squeak', dust: 0x7aff5a }, aura: { kind: 'spark', colors: [0x7aff5a, 0xd0ff40] } },
   samurai: { name: '사무라이', r: 'epic', price: 4800, lv: 10, fx: { step: 'soft', dust: 0xffb8d8 }, aura: { kind: 'petal', colors: [0xffb8d8, 0xff8ab8, 0xffffff] } },
   king: { name: '임금님', r: 'epic', price: 5000, lv: 11, fx: { step: 'gold', dust: 0xffd84a }, aura: { kind: 'star', colors: [0xffd84a, 0xfff2b0] } },
+  cyborg: { name: '사이보그', r: 'epic', price: 4200, lv: 9, fx: { step: 'metal', dust: 0xff2a2a }, aura: { kind: 'spark', colors: [0xff2a2a, 0xffffff] } },
+  pharaoh: { name: '파라오', r: 'epic', price: 4600, lv: 10, fx: { step: 'gold', dust: 0xe3b341 }, aura: { kind: 'star', colors: [0xffd040, 0x5a8aff] } },
+  masked: { name: '가면 무도회', r: 'epic', price: 4400, lv: 10, fx: { step: 'soft', dust: 0x8a4ac0 }, aura: { kind: 'smoke', colors: [0x2a0a4a, 0x6a2aa0, 0x14081e] } },
   hero: { name: '슈퍼히어로', r: 'epic', price: 5000, lv: 12, fx: { step: 'metal', dust: 0xe2483a }, aura: { kind: 'spark', colors: [0xe2483a, 0x3d8bf0, 0xffd84a] } },
 
   /* ---------- 전설: 영웅 + 빛 고리 + 쓰러짐 연출 + 전용 킬 배너 ---------- */
@@ -41,4 +48,10 @@ export const CHAR_SKINS = {
   golden: { name: '황금 전사', r: 'legend', gold: 300, lv: 1, fx: { step: 'gold', dust: 0xffd84a },
     aura: { kind: 'star', colors: [0xffd84a, 0xffffff, 0xfff2b0] }, halo: 0xffe680, death: [0xffd84a, 0xffffff, 0xd4a520],
     banner: { main: '#ffe680', accent: '#d4a520', glow: 'rgba(255,215,90,0.75)' } },
+  valkyrie: { name: '발키리', r: 'legend', gold: 280, lv: 1, fx: { step: 'metal', dust: 0xffe080 },
+    aura: { kind: 'petal', colors: [0xffffff, 0xfff0c0, 0xffd860] }, halo: 0xffe080, death: [0xffffff, 0xffd860, 0xc8d0d8],
+    banner: { main: '#fff4c8', accent: '#c8a020', glow: 'rgba(255,235,170,0.8)' } },
+  voidwalker: { name: '공허의 방랑자', r: 'legend', gold: 320, lv: 1, fx: { step: 'magic', dust: 0x8a5aff },
+    aura: { kind: 'arcane', colors: [0xc08aff, 0x6a3ad0, 0xffffff] }, halo: 0xb08aff, death: [0x8a5aff, 0x14082e, 0xffffff],
+    banner: { main: '#d8c0ff', accent: '#3a1a8a', glow: 'rgba(150,100,255,0.8)' } },
 };

@@ -19,6 +19,12 @@ const SHOT = {
   prism: (t) => [523, 659, 784, 1046].map((f, i) => T(t + i * 0.025, 0.18, f * 2, f * 2, 0.08, 'triangle')),
   dragon: (t) => [T(t, 0.35, 140, 55, 0.4, 'sawtooth'), N(t, 0.4, 1600, 200, 0.6, 0.6, 'bandpass'), T(t + 0.05, 0.2, 700, 350, 0.1, 'square')],
   aurora: (t) => [T(t, 0.45, 784, 1175, 0.1, 'sine'), T(t + 0.04, 0.45, 1175, 1568, 0.07, 'sine'), N(t, 0.3, 7000, 4000, 2, 0.15, 'highpass')],
+  glitch: (t) => [T(t, 0.04, 1600, 1600, 0.15, 'square'), T(t + 0.05, 0.04, 400, 400, 0.15, 'square'), T(t + 0.1, 0.05, 2400, 900, 0.1, 'square')],
+  arcade: (t) => [T(t, 0.06, 988, 988, 0.15, 'square'), T(t + 0.06, 0.1, 1318, 1318, 0.15, 'square')],
+  wind: (t) => [N(t, 0.35, 1200, 3000, 0.7, 0.35, 'bandpass'), N(t + 0.1, 0.25, 3000, 900, 0.7, 0.2, 'bandpass')],
+  heavy: (t) => [T(t, 0.25, 70, 35, 0.5, 'sine'), N(t, 0.2, 500, 80, 0.8, 0.5, 'lowpass')],
+  gong: (t) => [T(t, 0.6, 196, 190, 0.2, 'sine'), T(t, 0.5, 466, 460, 0.1, 'sine'), T(t, 0.4, 740, 735, 0.06, 'triangle')],
+  chirp: (t) => [T(t, 0.08, 2000, 4200, 0.12, 'sine'), T(t + 0.08, 0.08, 2600, 4800, 0.08, 'sine')],
 };
 export function sfxSkinShot(snd, vol, pan) {
   const ctx = actx(); if (!ctx || !SHOT[snd]) return;
@@ -35,7 +41,10 @@ export function sfxSkinKill(snd) {
 // 전설 피니셔 / 장착
 export function sfxFinisher(kind) {
   const ctx = actx(); if (!ctx) return; const t = ctx.currentTime;
-  const seq = { eruption: [196, 247, 294, 392], supernova: [523, 784, 1046, 1568], refract: [523, 659, 784, 988, 1175], dragonfire: [147, 196, 220, 294], frostbloom: [659, 880, 1175, 1568] }[kind] || [440, 660, 880];
+  const seq = {
+    eruption: [196, 247, 294, 392], supernova: [523, 784, 1046, 1568], refract: [523, 659, 784, 988, 1175], dragonfire: [147, 196, 220, 294], frostbloom: [659, 880, 1175, 1568],
+    vortex: [330, 440, 554, 659, 880], shatter: [1568, 1318, 1046, 784], thunderstrike: [110, 147, 220, 440], bloom: [523, 659, 784, 1046], blackhole: [262, 220, 175, 131], heartburst: [784, 988, 1175, 1568],
+  }[kind] || [440, 660, 880];
   seq.forEach((f, i) => O([T(t + i * 0.07, 0.35, f, f, 0.18, 'triangle'), T(t + i * 0.07, 0.25, f * 2, f * 2, 0.06, 'sine')], 0.3));
   O([N(t + 0.25, 0.8, 5000, 300, 0.6, 0.5, 'bandpass'), T(t + 0.25, 0.7, 90, 40, 0.3, 'sine')], 0.35);
 }

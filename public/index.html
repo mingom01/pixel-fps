@@ -73,7 +73,7 @@
     <div class="locker-cols">
       <div class="locker-prev"><div id="lockerPrevSlot"></div><div id="lockerSel" class="dim"></div></div>
       <div class="grow">
-        <div class="seg tabs" id="lockerTabs"><button data-tab="skin" class="on">캐릭터 스킨</button><button data-tab="gskin">총 스킨</button><button data-tab="title">칭호</button><button data-tab="spray">스프레이</button><button data-tab="gacha">골드 뽑기</button></div>
+        <div class="seg tabs" id="lockerTabs"><button data-tab="skin" class="on">캐릭터 스킨</button><button data-tab="gskin">총 스킨</button><button data-tab="title">칭호</button><button data-tab="emote">감정표현</button><button data-tab="spray">스프레이</button><button data-tab="gacha">골드 뽑기</button></div>
         <div id="lockerGrid"></div>
         <div class="dim">매치를 끝까지 하면 XP와 코인을 받아요 (킬, 깃발 득점, 승리, 1등 보너스). 레벨이 오르면 +100 코인!</div>
       </div>
@@ -92,14 +92,16 @@
     </div>
     <div class="panel grow">
       <div class="ptitle">매치 설정 <span id="hostNote" class="dim"></span></div>
-      <div class="cfgrow"><span>모드</span><div class="seg" id="modeSeg"><button data-v="ffa">개인전</button><button data-v="tdm">팀 데스매치</button><button data-v="ctf">깃발 뺏기</button><button data-v="spike">스파이크</button><button data-v="zombie">좀비 감염</button><button data-v="gungame">건게임</button><button data-v="br">배틀로얄</button><button data-v="boss">보스전</button></div></div>
+      <div class="ptitle small">모드</div>
+      <div class="modegrid" id="modeSeg"><button data-v="random" class="rnd">? 랜덤</button><button data-v="ffa">개인전</button><button data-v="tdm">팀 데스매치</button><button data-v="ctf">깃발 뺏기</button><button data-v="spike">스파이크</button><button data-v="zombie">좀비 감염</button><button data-v="gungame">건게임</button><button data-v="br">배틀로얄</button><button data-v="boss">보스전</button></div>
       <div id="modeDesc" class="dim modedesc"></div>
-      <div id="mapCards" class="mapcards"></div>
+      <div class="ptitle small">맵 <span id="mapCount" class="dim"></span></div>
+      <div class="mapscroll"><div id="mapCards" class="mapcards"></div></div>
       <div class="cfgrow"><span>봇 수</span><div class="stepper"><button class="btn tiny" data-bots="-1">-</button><b id="botsVal">5</b><button class="btn tiny" data-bots="1">+</button></div></div>
       <div class="cfgrow"><span>봇 난이도</span><div class="seg" id="diffSeg"><button data-v="easy">쉬움</button><button data-v="normal">보통</button><button data-v="hard">어려움</button></div></div>
       <div class="cfgrow" id="cfgTime"><span>시간</span><div class="seg" id="timeSeg"><button data-v="180">3분</button><button data-v="300">5분</button><button data-v="600">10분</button></div></div>
       <div class="cfgrow" id="cfgKill"><span id="killLbl">목표 킬</span><div class="seg" id="killSeg"><button data-v="15">15</button><button data-v="25">25</button><button data-v="40">40</button></div></div>
-      <div class="row end">
+      <div class="row end lobby-start">
         <button id="leaveBtn" class="btn red">나가기</button>
         <button id="startBtn" class="btn big yellow">게임 시작</button>
       </div>

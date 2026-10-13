@@ -48,6 +48,8 @@ input:focus { border-color: var(--yellow); }
 .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto;
   background: radial-gradient(ellipse at center, rgba(20,26,44,0.55), rgba(8,10,16,0.92)); }
 .menu-wrap, .lobby-wrap { width: min(980px, 100%); }
+/* 내용이 화면보다 길면 위쪽이 잘리지 않고 스크롤되도록 (가운데 정렬은 auto 여백으로) */
+.screen > .menu-wrap, .screen > .lobby-wrap { margin: auto 0; }
 .logo { text-align: center; margin-bottom: 18px; line-height: 1; }
 .logo span { font-family: 'Galmuri11', monospace; font-weight: bold; font-size: clamp(42px, 9vw, 86px); letter-spacing: 4px; display: inline-block; }
 .logo .l1 { color: var(--yellow); text-shadow: 5px 5px 0 #8a4b00, 10px 10px 0 rgba(0,0,0,0.4); }
@@ -601,3 +603,31 @@ body.touch #botRight { top: 56px; left: 14px; right: auto; transform-origin: top
 #gimTint.blizzard { opacity: 1; background: radial-gradient(circle, rgba(230,242,255,0.05) 20%, rgba(230,242,255,0.45) 90%); }
 #gimTint.sandstorm { opacity: 1; background: radial-gradient(circle, rgba(220,170,90,0.08) 20%, rgba(200,150,70,0.5) 90%); }
 .login-privacy { font-size: 11px; color: var(--dim); }
+
+/* ---------- 방 설정: 모드 칩 · 맵 스크롤 · 시작 버튼 고정 ---------- */
+.modegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 5px; }
+.modegrid button { background: #1a2036; color: var(--text); border: 3px solid var(--line); padding: 6px 4px; cursor: pointer; font-size: 13px; font-family: inherit; }
+.modegrid button:hover { background: #26304f; }
+.modegrid button.on { background: var(--yellow); color: #3a2400; }
+.modegrid button.rnd { color: #e0a4ff; }
+.modegrid button.rnd.on { background: #b05ae8; color: #fff; }
+.mapscroll { max-height: min(300px, 38vh); overflow-y: auto; padding-right: 4px; border: 2px solid var(--line); background: rgba(0,0,0,0.18); padding: 6px; }
+.mapcards { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)) !important; }
+.mapcard.rnd { border-style: dashed; border-color: #8a5ae0; }
+.mapcard.rnd.on { border-style: solid; border-color: #b05ae8; box-shadow: 0 0 0 2px #b05ae8; }
+.rndthumb { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: bold; color: #e0a4ff; background: repeating-linear-gradient(45deg, #2a1a4a 0 8px, #22163c 8px 16px); border-bottom: 3px solid var(--line); margin-bottom: 6px; }
+.locked .modegrid button { pointer-events: none; opacity: 0.75; }
+.lobby-start { position: sticky; bottom: -16px; background: var(--panel); padding: 8px 0; margin-top: 8px; z-index: 2; }
+
+/* ---------- 감정표현·스프레이 탭 ---------- */
+.ex-head { grid-column: 1 / -1; font-size: 12px; color: var(--dim); }
+.ex-head b { color: var(--yellow); }
+.ex-big { width: 96px; height: 96px; image-rendering: pixelated; align-self: center; }
+.ew-item.r-rare b { color: #6ab0ff; } .ew-item.r-epic b { color: #d68aff; } .ew-item.r-legend b { color: #ffd84a; }
+
+.sk-filter { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; position: sticky; top: 0; z-index: 3; background: var(--panel); padding: 2px 0 6px; }
+.sk-filter button { background: #1a2036; color: var(--text); border: 2px solid var(--line); padding: 3px 9px; cursor: pointer; font-family: inherit; font-size: 12px; }
+.sk-filter button small { color: var(--dim); }
+.sk-filter button.r-legend { color: #ffd84a; } .sk-filter button.r-epic { color: #e0a4ff; } .sk-filter button.r-rare { color: #6ab0ff; }
+.sk-filter button.on { background: var(--yellow); color: #3a2400; }
+.sk-filter button.on small { color: #6a4a00; }
