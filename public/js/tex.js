@@ -388,6 +388,55 @@ function skinSpec(ci, sid) {
       sp.side = (ctx, s2, r) => dither(ctx, 0xf2c33a, 8, 8, r, 0.1); sp.back = sp.side; sp.top = sp.side;
       sp.chest = (ctx) => { rect(ctx, '#ffffff', 3, 2, 2, 2); rect(ctx, '#d23b2a', 3, 3, 2, 1); rect(ctx, '#9a6a10', 0, 8, 8, 1); };
       break;
+    case 'diver':
+      Object.assign(sp, { shirt: 0xe8701a, pants: 0x1a1a22, boots: 0x111111, hair: 0xe8701a });
+      sp.face = (ctx, s2, r) => { dither(ctx, 0xe8701a, 8, 8, r, 0.08); rect(ctx, '#2a3a4a', 1, 1, 6, 5); rect(ctx, '#7ac8e8', 2, 2, 4, 3); rect(ctx, '#d8f4ff', 2, 2, 1, 1); rect(ctx, '#9aa1ab', 3, 6, 2, 2); };
+      sp.side = (ctx, s2, r) => { dither(ctx, 0xe8701a, 8, 8, r, 0.08); rect(ctx, '#9aa1ab', 3, 3, 2, 2); }; sp.back = sp.side; sp.top = (ctx, s2, r) => dither(ctx, 0xe8701a, 8, 8, r, 0.08);
+      sp.chest = (ctx) => { rect(ctx, '#1a1a22', 0, 0, 8, 1); rect(ctx, '#ffd040', 1, 2, 6, 1); rect(ctx, '#1a1a22', 0, 8, 8, 1); };
+      break;
+    case 'chef':
+      Object.assign(sp, { shirt: 0xf4f4f4, pants: 0x2a2a2a, boots: 0x1a1a1a, hat: 'chef' });
+      sp.pantsPaint = (ctx, w, h) => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) rect(ctx, (x + y) % 2 ? '#2a2a2a' : '#e8e8e8', x, y, 1, 1); };
+      sp.chest = (ctx) => { rect(ctx, '#d0d0d0', 2, 1, 1, 1); rect(ctx, '#d0d0d0', 5, 1, 1, 1); rect(ctx, '#d0d0d0', 2, 4, 1, 1); rect(ctx, '#d0d0d0', 5, 4, 1, 1); rect(ctx, '#e2483a', 3, 0, 2, 1); };
+      break;
+    case 'gamer':
+      Object.assign(sp, { shirt: 0x22252e, pants: 0x2a3040, boots: 0xf0f0f0, hair: 0x3a2a1a, hat: 'headset' });
+      sp.shirtPaint = (ctx, w, h, r) => { dither(ctx, 0x22252e, w, h, r, 0.1); rect(ctx, '#5aff8a', 0, 2, w, 1); };
+      sp.chest = (ctx) => { rect(ctx, '#5aff8a', 2, 3, 4, 3); rect(ctx, '#22252e', 3, 4, 2, 1); rect(ctx, '#3a3e48', 1, 7, 6, 2); };
+      break;
+    case 'vampire':
+      Object.assign(sp, { skin: 0xe8e0e8, shirt: 0x1a1a1e, pants: 0x1a1a1e, boots: 0x0a0a0a, hair: 0x14101a, cape: 0x8a0a1a });
+      sp.face = (ctx, s2, r) => { dither(ctx, 0xe8e0e8, 8, 8, r, 0.05); rect(ctx, '#14101a', 0, 0, 8, 2); rect(ctx, '#14101a', 3, 2, 2, 1); rect(ctx, '#d01a2a', 1, 3, 2, 1); rect(ctx, '#d01a2a', 5, 3, 2, 1); rect(ctx, '#5a0a14', 2, 6, 4, 1); rect(ctx, '#ffffff', 2, 7, 1, 1); rect(ctx, '#ffffff', 5, 7, 1, 1); };
+      sp.chest = (ctx) => { rect(ctx, '#f4f4f4', 2, 0, 4, 3); rect(ctx, '#d01a2a', 3, 1, 2, 1); rect(ctx, '#8a0a1a', 0, 8, 8, 1); };
+      break;
+    case 'cyborg':
+      Object.assign(sp, { shirt: 0x3a3e48, pants: 0x22252e, boots: 0x14161a, hair: 0x2a2a2a });
+      sp.face = (ctx, s2, r) => { normalFace(ctx, s2, r); rect(ctx, '#9aa1ab', 4, 0, 4, 8); rect(ctx, '#5a626c', 4, 2, 4, 1); rect(ctx, '#ff2a2a', 5, 3, 2, 1); rect(ctx, '#5a626c', 4, 6, 4, 1); };
+      sp.chest = (ctx) => { rect(ctx, '#9aa1ab', 4, 0, 4, 10); rect(ctx, '#ff2a2a', 5, 3, 2, 2); rect(ctx, '#5a626c', 0, 8, 8, 1); };
+      break;
+    case 'pharaoh':
+      Object.assign(sp, { skin: 0xc68a5c, shirt: 0xf0e8d0, pants: 0xf0e8d0, boots: 0xe3b341, hat: 'nemes' });
+      sp.face = (ctx, s2, r) => { normalFace(ctx, s2, r); rect(ctx, '#1a1a1a', 1, 3, 2, 1); rect(ctx, '#1a1a1a', 5, 3, 2, 1); rect(ctx, '#2f5fd0', 0, 3, 1, 1); rect(ctx, '#2f5fd0', 7, 3, 1, 1); rect(ctx, '#e3b341', 3, 7, 2, 1); };
+      sp.chest = (ctx) => { for (let x = 0; x < 8; x++) rect(ctx, x % 2 ? '#2f5fd0' : '#e3b341', x, 0, 1, 3); rect(ctx, '#e3b341', 0, 8, 8, 1); rect(ctx, '#2f5fd0', 3, 8, 2, 1); };
+      break;
+    case 'masked':
+      Object.assign(sp, { shirt: 0x14141a, pants: 0x14141a, boots: 0x0a0a0a, hair: 0x14141a, cape: 0x4a1a6a });
+      sp.face = (ctx, s2, r) => { normalFace(ctx, s2, r); rect(ctx, '#14141a', 0, 0, 8, 2); rect(ctx, '#f4f4f4', 0, 2, 8, 3); rect(ctx, '#111111', 1, 3, 2, 1); rect(ctx, '#111111', 5, 3, 2, 1); rect(ctx, '#ffd040', 0, 2, 1, 1); rect(ctx, '#ffd040', 7, 2, 1, 1); };
+      sp.chest = (ctx) => { rect(ctx, '#f4f4f4', 3, 0, 2, 5); rect(ctx, '#14141a', 3, 1, 2, 1); rect(ctx, '#a02a2a', 3, 2, 2, 1); };
+      break;
+    case 'valkyrie':
+      Object.assign(sp, { skin: 0xf2c9a0, shirt: 0xc8d0d8, pants: 0x8a929a, boots: 0xe3b341, hair: 0xf4d880, hat: 'winghelm', cape: 0xffffff });
+      sp.shirtPaint = (ctx, w, h, r) => { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) rect(ctx, toN(shade(0xc8d0d8, (y % 3 === 0 ? 1.18 : 0.94) * (0.95 + r() * 0.1))), x, y, 1, 1); };
+      sp.chest = (ctx) => { rect(ctx, '#ffd040', 3, 1, 2, 5); rect(ctx, '#ffd040', 1, 3, 6, 1); rect(ctx, '#ffd040', 0, 8, 8, 1); };
+      sp.back = (ctx, s2) => { rect(ctx, s2.hair, 0, 0, 8, 8); rect(ctx, '#e0c060', 3, 0, 2, 8); };
+      break;
+    case 'voidwalker':
+      Object.assign(sp, { skin: 0x1a0a3a, shirt: 0x14082e, pants: 0x0e061e, boots: 0x6a3ad0, hair: 0x14082e, cape: 0x2a0a5a });
+      sp.shirtPaint = (ctx, w, h, r) => { dither(ctx, 0x14082e, w, h, r, 0.12); for (let i = 0; i < w * h / 7; i++) rect(ctx, r() < 0.6 ? '#ffffff' : '#c08aff', r() * w | 0, r() * h | 0, 1, 1); };
+      sp.pantsPaint = sp.shirtPaint;
+      sp.face = (ctx, s2, r) => { dither(ctx, 0x1a0a3a, 8, 8, r, 0.12); rect(ctx, '#e0c8ff', 1, 3, 2, 1); rect(ctx, '#e0c8ff', 5, 3, 2, 1); rect(ctx, '#8a5aff', 0, 0, 8, 1); rect(ctx, '#ffffff', 6, 6, 1, 1); };
+      sp.side = (ctx, s2, r) => { dither(ctx, 0x1a0a3a, 8, 8, r, 0.12); rect(ctx, '#ffffff', r() * 8 | 0, r() * 8 | 0, 1, 1); }; sp.back = sp.side; sp.top = sp.side;
+      break;
   }
   return sp;
 }

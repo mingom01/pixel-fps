@@ -16,6 +16,9 @@ import { tickSkins } from './skins/gunMaterial.js';
 import { tickAuras, decorateGun, fxColor, killEffect } from './skins/skinFx.js';
 import { sfxSkinShot, sfxSkinKill, sfxFinisher, sfxEquip, sfxSkinStep } from './skins/skinSounds.js';
 import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
+import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
+import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
+import { SPRAY_BY, sprayCanvas } from './skins/sprays.js';
 import { initGimmicks, startGimmicks, setGimMap, stopGimmicks, onGimMsg, updateGimmicks, afterMove, groundAccMul, ENV_KILL } from './gimmicks.js';
 
 const SH = window.SH;
@@ -230,17 +233,13 @@ function skinThumb(id) {
 function renderLocker() {
   updateProfileUI();
   $('lockerTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === lockerTab));
-  if (lockerTab === 'spray') {
-    refreshPreview();
-    $('lockerGrid').innerHTML = SPRAYS.map((sp, i) => `<div class="lcard ${(profile.spray || 0) === i ? 'eq' : ''}" data-s="${i}"><div class="th"><img src="${sprayCanvas(i, 4).toDataURL()}"></div><div class="nm">${sp.name}</div><div class="pr own">${(profile.spray || 0) === i ? '사용 중' : '무료 · 눌러서 선택'}</div></div>`).join('') + '<div class="dim" style="grid-column:1/-1">게임 중 T 키로 벽에 스프레이를 뿌려요 · Y 키로 감정표현</div>';
-    $('lockerGrid').querySelectorAll('[data-s]').forEach(c => c.onclick = () => { profile.spray = +c.dataset.s; saveProfile(); A.sfxSpray(1); renderLocker(); });
-    return;
-  }
+  if (lockerTab === 'spray' || lockerTab === 'emote') { refreshPreview(); renderExtras(lockerTab); return; }
   if (lockerTab === 'title') { refreshPreview(); renderTitles(); return; }
   if (lockerTab === 'gacha') { refreshPreview(); renderGacha(); $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`; return; }
   renderSkinShop(lockerTab);
 }
 initSkinShop({ thumb: (id) => skinThumb(id), preview: (o) => refreshPreview(o), toast, changed: () => updateProfileUI() });
+initExtrasShop({ previewEmote: (id) => { const em = EMOTE_BY[id]; if (em && pv.ch) pv.emote = { anim: em.anim, fx: em.fx, t0: performance.now(), until: performance.now() + 3000 }; }, toast });
 
 // 칭호 탭
 function renderTitles() {
@@ -266,10 +265,10 @@ function renderTitles() {
 function renderRoomList(list) {
   const box = $('roomList');
   if (!list.length) { box.innerHTML = '<div class="dim">방이 없어요. 새로 만들어 보세요!</div>'; return; }
-  box.innerHTML = list.map(r => `<div class="roomitem" data-code="${r.code}"><span class="code">${r.code}</span><span>${esc(r.host || '')}의 방</span><span class="dim">${SH.MODES[r.mode || 'ffa'].name} · ${(SH.MAPS[r.map] || { name: '커스텀 맵' }).name} · ${r.n}명</span><span class="tag ${r.state === 'play' ? 'play' : ''}">${r.state === 'play' ? '게임 중' : '대기 중'}</span></div>`).join('');
+  box.innerHTML = list.map(r => `<div class="roomitem" data-code="${r.code}"><span class="code">${r.code}</span><span>${esc(r.host || '')}의 방</span><span class="dim">${r.rmode && r.state !== 'play' ? '랜덤 모드' : SH.MODES[r.mode || 'ffa'].name} · ${(r.rmode || r.rmap) && r.state !== 'play' ? '랜덤 맵' : (SH.MAPS[r.map] || { name: '커스텀 맵' }).name} · ${r.n}명</span><span class="tag ${r.state === 'play' ? 'play' : ''}">${r.state === 'play' ? '게임 중' : '대기 중'}</span></div>`).join('');
   box.querySelectorAll('.roomitem').forEach(el => el.onclick = () => { A.initAudio(); send(Object.assign({ t: 'join', code: el.dataset.code }, joinInfo())); });
 }
-$('quickBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', quick: true, cfg: { map: pick(Object.keys(SH.MAPS)), mode: pick(['ffa', 'tdm', 'ctf', 'spike']), bots: 7, time: 300, kills: 25, diff: 'normal' } }, joinInfo())); };
+$('quickBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', quick: true, cfg: { map: 'village', mode: 'ffa', rmode: true, rmap: true, bots: 7, time: 300, kills: 25, diff: 'normal' } }, joinInfo())); };
 $('practiceBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', quick: true, cfg: { map: 'range', mode: 'practice', bots: 4, time: 300, kills: 25, diff: 'easy' } }, joinInfo())); };
 $('createBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', cfg: { map: 'village', mode: 'ffa', bots: 5, time: 300, kills: 25, diff: 'normal' } }, joinInfo())); };
 $('joinBtn').onclick = () => { A.initAudio(); const c = $('codeIn').value.trim(); if (c) send(Object.assign({ t: 'join', code: c }, joinInfo())); };
@@ -293,13 +292,18 @@ function mapThumb(id) {
 }
 function buildMapCards() {
   const box = $('mapCards'); box.innerHTML = '';
+  // 랜덤 맵 카드 (매 판 새로 뽑음)
+  const rd = document.createElement('div'); rd.className = 'mapcard rnd'; rd.dataset.map = 'random';
+  rd.innerHTML = '<div class="rndthumb">?</div>랜덤 맵<div class="mdesc">매 판 새로 뽑기</div>';
+  rd.onclick = () => sendCfg({ rmap: true });
+  box.appendChild(rd);
   for (const id of Object.keys(SH.MAPS)) {
     if (SH.MAPS[id].kind === 'practice') continue;
     const d = document.createElement('div'); d.className = 'mapcard'; d.dataset.map = id;
     const c = document.createElement('canvas'); c.width = 64; c.height = 64; const cx2 = c.getContext('2d'); cx2.imageSmoothingEnabled = false; cx2.drawImage(mapThumb(id), 0, 0, 64, 64);
     d.appendChild(c); d.appendChild(document.createTextNode(SH.MAPS[id].name));
     if (SH.MAPS[id].desc) { const sm = document.createElement('div'); sm.className = 'mdesc'; sm.textContent = SH.MAPS[id].desc; d.appendChild(sm); }
-    d.onclick = () => sendCfg({ map: id });
+    d.onclick = () => sendCfg({ map: id, rmap: false });
     box.appendChild(d);
   }
 }
@@ -308,7 +312,7 @@ function sendCfg(p) { if (!S.room) return; send({ t: 'cfg', cfg: Object.assign({
 document.querySelectorAll('[data-bots]').forEach(b => b.onclick = () => sendCfg({ bots: clamp(S.room.cfg.bots + Number(b.dataset.bots), 0, 11) }));
 $('timeSeg').querySelectorAll('button').forEach(b => b.onclick = () => sendCfg({ time: Number(b.dataset.v) }));
 $('killSeg').querySelectorAll('button').forEach(b => b.onclick = () => sendCfg({ kills: Number(b.dataset.v) }));
-$('modeSeg').querySelectorAll('button').forEach(b => b.onclick = () => sendCfg({ mode: b.dataset.v }));
+$('modeSeg').querySelectorAll('button').forEach(b => b.onclick = () => sendCfg(b.dataset.v === 'random' ? { rmode: true } : { mode: b.dataset.v, rmode: false }));
 $('diffSeg').querySelectorAll('button').forEach(b => b.onclick = () => sendCfg({ diff: b.dataset.v }));
 $('teamBtn').onclick = () => send({ t: 'team' });
 const MODE_DESC = {
@@ -355,13 +359,20 @@ function onRoom(m) {
   for (const p of m.players) S.roster.set(p.id, p);
   for (const [id, e] of S.ents) { const r = S.roster.get(id); if (r && (r.color !== e.color || r.name !== e.name || r.team !== e.team || r.skin !== e.skin || r.gskin !== e.gskin)) { removeEnt(id); } }
   if (m.state !== 'play' || !S.inGame) S.mode = m.cfg.mode;
-  const md = m.cfg.mode;
-  $('modeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === md));
+  const md = m.cfg.mode, rmode = !!m.cfg.rmode, rmap = rmode || !!m.cfg.rmap;
+  $('modeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', rmode ? b.dataset.v === 'random' : b.dataset.v === md));
   $('diffSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === m.cfg.diff));
-  $('modeDesc').textContent = MODE_DESC[md];
+  $('modeDesc').textContent = rmode ? `게임을 시작할 때마다 모드와 맵을 무작위로 골라요${m.state !== 'wait' || S.inGame ? '' : ` · 지난 판: ${SH.MODES[md].name}`}` : MODE_DESC[md];
   $('killLbl').textContent = md === 'ctf' ? '목표 득점' : md === 'tdm' ? '팀 목표 킬' : '목표 킬';
-  $('teamBtn').classList.toggle('hidden', !['tdm', 'ctf', 'spike'].includes(md) || m.state === 'play');
-  document.querySelectorAll('.mapcard').forEach(c => { const k = c.dataset.map === 'custom' ? 'normal' : SH.MAPS[c.dataset.map].kind || 'normal'; c.classList.toggle('hidden', md === 'spike' ? k !== 'spike' : k !== 'normal'); });
+  $('teamBtn').classList.toggle('hidden', rmode || !['tdm', 'ctf', 'spike'].includes(md) || m.state === 'play');
+  // 지금 모드에 맞는 맵만 보여줌 (랜덤 모드면 랜덤 맵만)
+  let shown = 0;
+  document.querySelectorAll('.mapcard').forEach(c => {
+    const id = c.dataset.map, k = id === 'custom' || id === 'random' ? 'normal' : SH.MAPS[id].kind || 'normal';
+    const hide = rmode ? id !== 'random' : id !== 'random' && (md === 'spike' ? k !== 'spike' : k !== 'normal');
+    c.classList.toggle('hidden', hide); if (!hide && id !== 'random') shown++;
+  });
+  $('mapCount').textContent = rmode ? '(랜덤 모드에서는 맵도 무작위)' : `(${shown}개)`;
   refreshCustomCards(m);
   if (S.afterRoom && m.host === S.myId && m.state === 'wait') { const f = S.afterRoom; S.afterRoom = null; f(m); }
   $('cfgTime').classList.toggle('hidden', md === 'spike' || md === 'br'); $('cfgKill').classList.toggle('hidden', ['spike', 'zombie', 'br', 'boss', 'gungame'].includes(md));
@@ -373,7 +384,7 @@ function onRoom(m) {
   $('lobby').querySelector('.grow').classList.toggle('locked', !host);
   $('startBtn').disabled = !host; $('startBtn').textContent = host ? '게임 시작' : '방장을 기다리는 중…';
   $('botsVal').textContent = m.cfg.bots;
-  document.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', c.dataset.map === m.cfg.map));
+  document.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', rmap ? c.dataset.map === 'random' : c.dataset.map === m.cfg.map));
   $('timeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === m.cfg.time));
   $('killSeg').querySelectorAll('button').forEach(b => { const v = Number(b.dataset.v); b.textContent = SH.targetOf({ mode: md, kills: v }); b.classList.toggle('on', v === m.cfg.kills); });
   const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${esc(p.name)} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
@@ -796,7 +807,7 @@ function updateEnts(dt) {
       if (!e.boss && s.w && s.w !== e.w) { e.w = s.w; setCharGun(e.model, s.w === 'nade' ? 'nade' : s.w, e.gskin); }
       e.model.userData.firing = performance.now() - (e.lastShot || 0) < 150;
       if (e.boss) animBoss(e, dt, sp > 20 ? 0 : sp, false); else animChar(e.model, dt, sp > 20 ? 0 : sp, s.pitch, !!(s.fl & 2), !!(s.fl & 64), false);
-      if (e.emote) { if (performance.now() < e.emote.until && sp < 1.5) applyEmote(e.model, e.emote.anim, (performance.now() - e.emote.t0) / 1000); else { clearEmotePose(e.model); e.emote = null; } }
+      if (e.emote) { if (performance.now() < e.emote.until && sp < 1.5) { applyEmote(e.model, e.emote.anim, (performance.now() - e.emote.t0) / 1000); emoteFx(e.emote.fx, e.rx, e.ry, e.rz, spawnParticle); } else { clearEmotePose(e.model); e.emote = null; } }
       // 보호막 깜빡임
       e.model.visible = !(s.fl & 16) || (Math.floor(performance.now() / 120) % 2 === 0);
       e.tag.visible = !kcOn;
@@ -2146,7 +2157,7 @@ function chestIcon() {
 }
 function renderGacha() {
   $('lockerGrid').innerHTML = `<div class="gacha"><img class="chest" id="gChest" src="${chestIcon()}"><div class="gtitle">골드 뽑기 상자</div>
-    <div class="dim">캐릭터·총 스킨 중 하나가 랜덤으로 나와요 (레벨 제한 무시!) · 이미 가진 스킨이면 코인으로 돌려받아요</div>
+    <div class="dim">캐릭터 스킨 · 총 스킨 · 감정표현 · 스프레이 중 하나가 랜덤으로 나와요 (레벨 제한 무시!) · 이미 가진 거면 코인으로 돌려받아요</div>
     <div class="grates">${RARITY.map(r => `<span style="color:${r.color}">${r.name} ${r.w}%</span>`).join(' · ')}</div>
     <button id="gachaBtn" class="btn big yellow">뽑기 <small><i class="goldc"></i> ${GACHA_COST} 골드 (보유 ${profile.gold})</small></button>
     <div id="gachaOut"></div></div>`;
@@ -2161,9 +2172,10 @@ function doGacha() {
   const R = RARITY.find(r => r.id === res.r);
   setTimeout(() => {
     chest.classList.remove('shake');
-    const th = res.kind === 'skin' ? skinThumb(res.id) : gunIcon('rifle', 2, res.id);
-    $('gachaOut').innerHTML = `<div class="greveal" style="--rc:${R.color}"><div class="grar" style="color:${R.color}">${R.name}</div><img src="${th}"><div class="gname">${esc(res.it.name)} <span class="dim">(${res.kind === 'skin' ? '캐릭터' : '총'} 스킨)</span></div>${res.dup ? '<div class="dim">이미 가지고 있어서 코인으로 돌려받았어요</div>' : `<button class="btn green" id="gEquip">바로 장착</button>`}</div>`;
+    const th = res.kind === 'skin' ? skinThumb(res.id) : res.kind === 'gskin' ? gunIcon('rifle', 2, res.id) : res.kind === 'emote' ? emoteIcon(res.id, 64) : sprayCanvas(res.id, 5).toDataURL();
+    $('gachaOut').innerHTML = `<div class="greveal" style="--rc:${R.color}"><div class="grar" style="color:${R.color}">${R.name}</div><img src="${th}"><div class="gname">${esc(res.it.name)} <span class="dim">(${{ skin: '캐릭터 스킨', gskin: '총 스킨', emote: '감정표현', spray: '스프레이' }[res.kind]})</span></div>${res.dup ? '<div class="dim">이미 가지고 있어서 코인으로 돌려받았어요</div>' : `<button class="btn green" id="gEquip">바로 장착</button>`}</div>`;
     if (!res.dup) $('gEquip').onclick = () => { equip(res.kind, res.id); refreshPreview(); A.sfxBuy(); renderGacha(); };
+    if (!res.dup && res.kind === 'emote' && pv.ch) pv.emote = { anim: res.it.anim, fx: res.it.fx, t0: performance.now(), until: performance.now() + 3000 };
     if (res.r === 'legend') { A.sfxFanfare(); } else A.sfxBuy();
     btn.disabled = false; $('gachaBtn').querySelector('small').innerHTML = `<i class="goldc"></i> ${GACHA_COST} 골드 (보유 ${profile.gold})`;
     updateProfileUI(); noticeDone([], checkAchievements());
@@ -2173,28 +2185,25 @@ function doGacha() {
 setTimeout(() => { updateMissionDot(); noticeDone([], checkAchievements()); }, 600);
 
 /* ================= 감정표현 / 스프레이 ================= */
-const EMOTES = [
-  { name: '춤', anim: 'dance' }, { name: '손 흔들기', anim: 'wave' }, { name: '환호', anim: 'cheer' }, { name: '경례', anim: 'salute' },
-  { name: 'GG', anim: 'cheer', say: 'GG' }, { name: 'ㅋㅋㅋ', anim: 'laugh', say: 'ㅋㅋㅋ' }, { name: '고마워!', anim: 'wave', say: '고마워!' }, { name: '도와줘!', anim: 'wave', say: '도와줘!' },
-];
 function toggleEmoteWheel(on) {
   S.emoteOpen = on == null ? !S.emoteOpen : on;
   const el = $('emoteWheel');
   el.classList.toggle('hidden', !S.emoteOpen);
-  if (S.emoteOpen) el.innerHTML = '<div class="ew-title">감정표현 · 숫자키로 선택 (Y 닫기)</div>' + EMOTES.map((e, i) => `<div class="ew-item" data-e="${i}"><b>${i + 1}</b> ${esc(e.name)}</div>`).join('');
+  if (S.emoteOpen) el.innerHTML = '<div class="ew-title">감정표현 · 숫자키로 선택 (Y 닫기)</div>' + profile.emoteSlots.map((id, i) => `<div class="ew-item r-${(EMOTE_BY[id] || {}).r}" data-e="${i}"><b>${i + 1}</b> ${esc((EMOTE_BY[id] || { name: id }).name)}</div>`).join('');
   el.querySelectorAll('[data-e]').forEach(d => d.onclick = () => doEmote(+d.dataset.e));
 }
 function doEmote(i) {
   toggleEmoteWheel(false);
-  if (!me.alive || !EMOTES[i]) return;
-  send({ t: 'emote', e: i });
-  S.selfEmote = { e: i, t0: performance.now(), until: performance.now() + 2600, x: me.x, z: me.z };
+  const id = profile.emoteSlots[i];
+  if (!me.alive || !EMOTE_BY[id]) return;
+  send({ t: 'emote', e: id });
+  S.selfEmote = { e: id, t0: performance.now(), until: performance.now() + 2600, x: me.x, z: me.z };
 }
 function onEmote(m) {
-  const em = EMOTES[m.e]; if (!em) return;
+  const em = EMOTE_BY[m.e]; if (!em) return;
   const e = S.ents.get(m.id);
   if (e) {
-    e.emote = { anim: em.anim, t0: performance.now(), until: performance.now() + 2600 };
+    e.emote = { anim: em.anim, fx: em.fx, t0: performance.now(), until: performance.now() + 2600 };
     if (em.say) {
       if (e.bubble) e.model.remove(e.bubble);
       const b = labelSprite(em.say, '#ffffff'); b.position.y = 2.55; b.scale.multiplyScalar(1.3); e.model.add(b); e.bubble = b;
@@ -2203,39 +2212,9 @@ function onEmote(m) {
   }
   if (em.say && m.id !== S.myId) addChat(`<b style="color:${nameColor(m.id)}">${esc((S.roster.get(m.id) || {}).name || '?')}</b>: ${esc(em.say)}`);
 }
-// 캐릭터 모델에 감정표현 동작 덮어쓰기
-function applyEmote(model, anim, t) {
-  const u = model.userData; if (!u.armL) return;
-  const s = Math.sin(t * 9);
-  if (anim === 'dance') { u.body.rotation.y = Math.sin(t * 5) * 0.6; u.armL.rotation.set(Math.PI * 0.85 + s * 0.5, 0, 0.3); u.armR.rotation.set(Math.PI * 0.85 - s * 0.5, 0, -0.3); u.legL.rotation.x = s * 0.5; u.legR.rotation.x = -s * 0.5; u.body.position.y = Math.abs(s) * 0.12; }
-  else if (anim === 'wave') { u.armR.rotation.set(Math.PI * 0.95, 0, -0.3 + Math.sin(t * 12) * 0.45); u.armL.rotation.set(0.15, 0, 0.1); }
-  else if (anim === 'cheer') { u.armL.rotation.set(Math.PI, 0, 0.35); u.armR.rotation.set(Math.PI, 0, -0.35); u.body.position.y = Math.abs(Math.sin(t * 7)) * 0.35; }
-  else if (anim === 'salute') { u.armR.rotation.set(Math.PI * 0.78, 0, -1.0); u.armL.rotation.set(0.05, 0, 0.05); }
-  else if (anim === 'laugh') { u.upper.rotation.x = 0.15 + Math.sin(t * 16) * 0.12; u.armL.rotation.set(0.9, 0, 0.6); u.armR.rotation.set(0.9, 0, -0.6); }
-  if (u.gun) u.gun.visible = false;
-}
-function clearEmotePose(model) { const u = model.userData; if (!u.armL) return; u.body.rotation.y = 0; u.body.position.y = 0; u.upper.rotation.x = 0; if (u.gun) u.gun.visible = true; }
-
-// 스프레이 (픽셀 그림)
-const SPRAYS = [
-  { name: '하트', rows: ['..RR..RR..', '.RRRRRRRR.', 'RRWRRRRRRR', 'RRRRRRRRRR', 'RRRRRRRRRR', '.RRRRRRRR.', '..RRRRRR..', '...RRRR...', '....RR....'], col: { R: '#e2483a', W: '#ffc0b8' } },
-  { name: '해골', rows: ['..WWWWWW..', '.WWWWWWWW.', 'WWWWWWWWWW', 'WKKWWWWKKW', 'WKKWWWWKKW', 'WWWWKKWWWW', '.WWWWWWWW.', '..WKWKWK..', '..WWWWWW..'], col: { W: '#f0ead8', K: '#111111' } },
-  { name: '스마일', rows: ['..YYYYYY..', '.YYYYYYYY.', 'YYKYYYYKYY', 'YYKYYYYKYY', 'YYYYYYYYYY', 'YKYYYYYYKY', 'YYKKKKKKYY', '.YYYYYYYY.', '..YYYYYY..'], col: { Y: '#f4c22b', K: '#3a2400' } },
-  { name: 'GG', rows: ['.GGGG..GGGG.', 'GG....GG....', 'GG.GG.GG.GG.', 'GG..G.GG..G.', '.GGGG..GGGG.'], col: { G: '#7df07d' } },
-  { name: '왕관', rows: ['Y...Y...Y', 'YY.YYY.YY', 'YYYYYYYYY', 'YRYYBYYRY', 'YYYYYYYYY', 'YYYYYYYYY'], col: { Y: '#f4c22b', R: '#e2483a', B: '#3d8bf0' } },
-  { name: '별', rows: ['....Y....', '....Y....', '...YYY...', 'YYYYYYYYY', '.YYYYYYY.', '..YYYYY..', '.YYY.YYY.', 'YY.....YY'], col: { Y: '#ffd84a' } },
-  { name: '불꽃', rows: ['....R.....', '...RR..R..', '..RRR.RR..', '.RROR.RRR.', '.ROOORROR.', 'RROOYOOORR', 'ROOYYYOOOR', 'ROOYYYYOOR', '.ROOYYOOR.'], col: { R: '#e2483a', O: '#ff8a20', Y: '#ffd84a' } },
-  { name: '고양이', rows: ['K......K', 'KK....KK', 'KKKKKKKK', 'KGKKKKGK', 'KKKKKKKK', 'KKKPPKKK', '.KKKKKK.'], col: { K: '#3a3f4a', G: '#7df07d', P: '#ff9ac0' } },
-];
 const sprayTexCache = {};
-function sprayCanvas(i, px) {
-  const sp = SPRAYS[i] || SPRAYS[0], w = Math.max(...sp.rows.map(r => r.length)), h = sp.rows.length, n = Math.max(w, h) + 2;
-  const c = document.createElement('canvas'); c.width = c.height = n * (px || 1); const x = c.getContext('2d');
-  const ox = Math.floor((n - w) / 2), oy = Math.floor((n - h) / 2);
-  sp.rows.forEach((r, yy) => [...r].forEach((ch, xx) => { if (sp.col[ch]) { x.fillStyle = sp.col[ch]; x.fillRect((xx + ox) * (px || 1), (yy + oy) * (px || 1), px || 1, px || 1); } }));
-  return c;
-}
 function sprayTex(i) {
+  if (!SPRAY_BY[i]) i = 'heart';
   if (sprayTexCache[i]) return sprayTexCache[i];
   const t = new THREE.CanvasTexture(sprayCanvas(i, 1)); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace;
   return (sprayTexCache[i] = t);
@@ -2245,7 +2224,7 @@ function doSpray() {
   const eye = eyePos(), fwd = camForward(new THREE.Vector3());
   const h = SH.raycast(S.map, eye.x, eye.y, eye.z, fwd.x, fwd.y, fwd.z, 6);
   if (!h) { toast('가까운 벽이나 바닥을 보고 T를 누르세요'); return; }
-  send({ t: 'spray', s: profile.spray || 0, p: [+(eye.x + fwd.x * h.t).toFixed(2), +(eye.y + fwd.y * h.t).toFixed(2), +(eye.z + fwd.z * h.t).toFixed(2)], n: [h.nx, h.ny, h.nz] });
+  send({ t: 'spray', s: profile.spray, p: [+(eye.x + fwd.x * h.t).toFixed(2), +(eye.y + fwd.y * h.t).toFixed(2), +(eye.z + fwd.z * h.t).toFixed(2)], n: [h.nx, h.ny, h.nz] });
 }
 function onSpray(m) {
   const old = S.sprays.get(m.id); if (old) scene.remove(old);
@@ -2267,7 +2246,8 @@ function updateSelfEmoteCam(dt) {
   const se = S.selfEmote, g = S.ghost; if (!g) return;
   g.visible = true; g.position.set(me.x, me.y, me.z); g.rotation.y = me.yaw;
   animChar(g, dt, 0, 0, false, false, false);
-  applyEmote(g, EMOTES[se.e].anim, (performance.now() - se.t0) / 1000);
+  const em = EMOTE_BY[se.e] || { anim: 'wave' };
+  applyEmote(g, em.anim, (performance.now() - se.t0) / 1000); emoteFx(em.fx, me.x, me.y, me.z, spawnParticle);
   const fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw);
   camera.position.set(me.x + fx * 3.2 + fz * 0.6, me.y + 2.0, me.z + fz * 3.2 - fx * 0.6);
   camera.lookAt(me.x, me.y + 1.1, me.z);
@@ -2892,7 +2872,12 @@ function frame(dt) {
     if (ED.on) { editorFrame(dt); return; }
     renderer.clear();
     if (!$('menu').classList.contains('hidden') && (pv.ch || pv.gun)) {
-      if (pv.ch) { pv.ch.rotation.y += dt * 0.8; animChar(pv.ch, dt, 0, 0, false, false, false); }
+      if (pv.ch) {
+        animChar(pv.ch, dt, 0, 0, false, false, false);
+        // 상점에서 고른 감정표현 미리보기
+        if (pv.emote && performance.now() < pv.emote.until) { pv.ch.rotation.y = 0; applyEmote(pv.ch, pv.emote.anim, (performance.now() - pv.emote.t0) / 1000); }
+        else { if (pv.emote) { clearEmotePose(pv.ch); pv.emote = null; } pv.ch.rotation.y += dt * 0.8; }
+      }
       if (pv.gun) pv.gun.rotation.y += dt * 0.6;
       pv.r.render(pv.scene, pv.cam);
     }

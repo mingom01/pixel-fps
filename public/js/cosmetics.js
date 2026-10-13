@@ -2,7 +2,10 @@
 import { CHAR_SKINS } from './skins/charSkins.js';
 import { GUN_SKINS } from './skins/gunSkins.js';
 import { RARITY, rarityOf } from './skins/rarity.js';
+import { EMOTES, FREE_EMOTES } from './skins/emotes.js';
+import { SPRAYS, FREE_SPRAYS, OLD_SPRAY_IDS } from './skins/sprays.js';
 export { RARITY, rarityOf };
+export const EMOTE_SLOTS = 8; // 감정표현 휠 칸 수
 
 const KEY = 'pf_profile';
 const DEF = { gold: 0, xp: 0, coins: 300, skins: ['default'], gskins: ['default'], skin: 'default', gskin: 'default', games: 0, kills: 0, wins: 0 };
@@ -18,6 +21,13 @@ function fixProfile() {
   if (RENAMED[profile.gskin]) profile.gskin = RENAMED[profile.gskin];
   if (!CHAR_SKINS[profile.skin] || !profile.skins.includes(profile.skin)) profile.skin = 'default';
   if (!GUN_SKINS[profile.gskin] || !profile.gskins.includes(profile.gskin)) profile.gskin = 'default';
+  // 감정표현·스프레이: 기본 몇 개만 무료, 나머지는 뽑기로 모음
+  profile.emotes = [...new Set([...(Array.isArray(profile.emotes) ? profile.emotes : []), ...FREE_EMOTES])].filter(id => EMOTES.some(e => e.id === id));
+  profile.sprays = [...new Set([...(Array.isArray(profile.sprays) ? profile.sprays : []), ...FREE_SPRAYS])].filter(id => SPRAYS.some(s => s.id === id));
+  if (typeof profile.spray === 'number') profile.spray = OLD_SPRAY_IDS[profile.spray] || 'heart';
+  if (!profile.sprays.includes(profile.spray)) profile.spray = FREE_SPRAYS[0];
+  const slots = (Array.isArray(profile.emoteSlots) ? profile.emoteSlots : []).filter(id => profile.emotes.includes(id)).slice(0, EMOTE_SLOTS);
+  profile.emoteSlots = slots.length ? slots : profile.emotes.slice(0, EMOTE_SLOTS);
 }
 fixProfile();
 
@@ -75,8 +85,19 @@ export function buyItem(kind, id) {
 export function equip(kind, id) {
   if (kind === 'skin' && profile.skins.includes(id)) profile.skin = id;
   if (kind === 'gskin' && profile.gskins.includes(id)) profile.gskin = id;
+  if (kind === 'spray' && profile.sprays.includes(id)) profile.spray = id;
+  if (kind === 'emote' && profile.emotes.includes(id)) {
+    // 감정표현은 휠에 넣었다 뺐다 (최대 8개)
+    const i = profile.emoteSlots.indexOf(id);
+    if (i >= 0) { if (profile.emoteSlots.length > 1) profile.emoteSlots.splice(i, 1); }
+    else if (profile.emoteSlots.length < EMOTE_SLOTS) profile.emoteSlots.push(id);
+    else return 'full';
+  }
   saveProfile();
+  return 'ok';
 }
+// 종류별 보유 목록
+export const ownedList = (kind) => ({ skin: profile.skins, gskin: profile.gskins, emote: profile.emotes, spray: profile.sprays })[kind];
 
 export function addGold(n) { profile.gold += n; saveProfile(); }
 
@@ -179,11 +200,13 @@ export function rollGacha() {
   const all = [];
   for (const [id, it] of Object.entries(CHAR_SKINS)) if (id !== 'default') all.push({ kind: 'skin', id, it, r: rarityOf(it) });
   for (const [id, it] of Object.entries(GUN_SKINS)) if (id !== 'default') all.push({ kind: 'gskin', id, it, r: rarityOf(it) });
+  for (const it of EMOTES) if (!it.free) all.push({ kind: 'emote', id: it.id, it, r: it.r });
+  for (const it of SPRAYS) if (!it.free) all.push({ kind: 'spray', id: it.id, it, r: it.r });
   let x = Math.random() * RARITY.reduce((a, b) => a + b.w, 0), tier = 'common';
   for (const t of RARITY) { if ((x -= t.w) < 0) { tier = t.id; break; } }
   const pool = all.filter(o => o.r === tier);
   const pickd = pool[Math.floor(Math.random() * pool.length)];
-  const owned = (pickd.kind === 'skin' ? profile.skins : profile.gskins);
+  const owned = ownedList(pickd.kind);
   let dup = false;
   if (owned.includes(pickd.id)) { dup = true; profile.coins += RARITY.find(t => t.id === tier).dup; }
   else owned.push(pickd.id);

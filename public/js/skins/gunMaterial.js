@@ -4,7 +4,7 @@ import * as THREE from '../../lib/three.module.min.js';
 const uTime = { value: 0 };
 export function tickSkins(t) { uTime.value = t; }
 
-const MODES = { pulse: 0, flow: 1, rainbow: 2, stars: 3 };
+const MODES = { pulse: 0, flow: 1, rainbow: 2, stars: 3, glitch: 4, scan: 5 };
 const cache = {};
 
 // 박스 색 키별 빛 세기 (강조 부품이 가장 밝게)
@@ -32,6 +32,14 @@ vec3 skinGlow() {
     vec3 c = hue2rgb(fract(-p.z * 0.03 + p.y * 0.02 + t * 0.25));
     float band = pow(0.5 + 0.5 * sin(-p.z * 0.35 + t * 4.0), 8.0);
     return c * (0.55 + 0.25 * vGlow) + vec3(1.0) * band * 0.6 * vGlow;
+  }
+  if (uMode > 3.5 && uMode < 4.5) {   // glitch: 블록이 지지직 깜빡임
+    float g = step(0.82, hash(floor(p * 0.5) + floor(t * 9.0)));
+    return mix(uC1, uC2, g) * (0.35 + 0.9 * g) * vGlow;
+  }
+  if (uMode > 4.5) {                  // scan: 위아래로 훑는 스캔 라인
+    float line = pow(0.5 + 0.5 * sin(p.y * 0.9 - t * 5.0), 14.0);
+    return (uC1 * 0.35 + uC2 * line * 1.6) * vGlow;
   }
   // stars: 깊은 색 위에 반짝이는 별
   float h = hash(p * 1.3);
