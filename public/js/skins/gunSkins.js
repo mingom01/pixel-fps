@@ -148,6 +148,18 @@ export const GUN_SKINS = {
   valentine: L('러브레터', 250, TW([0x5a0a1a, 0xd02a4a, 0xffd0e0], [0xff6a8a, 0xff9ab0], 0xffffff), [0xff6a9a, 'chirp', 0xff3a6a, 0xff9ab8, 0xffffff], ['pulse', 0xff3a6a, 0xffb0c8], ['petal', 0xff5a8a, 0xffb0c8, 0xffffff], ['#ffb0c8', '#e02a5a', 'rgba(255,100,150,0.8)'], 'heartburst'),
   singularity: L('특이점', 400, TW([0x020204, 0x08060e, 0xb08aff], [0x050408, 0x0a0812], 0xd0b0ff), [0xb08aff, 'void', 0x7a4aff, 0x000000, 0xffffff], ['scan', 0x3a1a8a, 0xd0b0ff], ['arcane', 0x8a5aff, 0x2a0a5a, 0xffffff], ['#d8c0ff', '#1a0a3a', 'rgba(130,80,255,0.75)'], 'blackhole'),
   kraken: L('크라켄', 300, FA(0x5af0d0, 0x2a5ab0, 0x2a0a4a), [0x5af0d0, 'splash', 0x3ad8c8, 0x8a5aff, 0x0a2a4a], ['flow', 0x2ad8c0, 0x9a6aff, 1.8], ['spark', 0x5af0d0, 0x9a6aff, 0xffffff], ['#8afff0', '#4a2ab0', 'rgba(80,240,210,0.75)'], 'vortex'),
+
+  /* ================= 시즌 패스 전용 (상점에서 못 삼, bp: 시즌 번호) ================= */
+  s1_stripe: Object.assign(R('S1 개막 줄무늬', 0, 1, TI(0xffd84a, 0x1a1a22, 0x1a1a22), 0xffd84a, 'chime'), { bp: 1 }),
+  s1_neon: Object.assign(E('S1 네온 시티', 0, 1, TW([0x0a0c18, 0x141a30, 0xff3ad0], [0x101830, 0x18224a], 0x3af0ff), [0xff3ad0, 'synth', 0xff3ad0, 0x3af0ff, 0xffffff], ['flow', 0xff3ad0, 0x3af0ff, 2]), { bp: 1 }),
+  s1_crown: Object.assign(L('S1 픽셀 왕관', 300, TW([0x1a1206, 0x3a2a10, 0xffffff], [0xffd84a, 0xf4c22b], 0xff3a5a), [0xffe680, 'chime', 0xffd84a, 0xffffff, 0xff5a7a], ['rainbow', 0xffd84a, 0xffffff, 1.2], ['star', 0xffd84a, 0xffffff, 0xff8ab0], ['#ffe680', '#c81a4a', 'rgba(255,220,120,0.8)'], 'supernova'), { bp: 1 }),
+
+  /* ================= 무기 숙련도 위장 (그 무기에만 · 상점에 안 보임) ================= */
+  m_bronze: Object.assign(C('숙련 브론즈', 0, 1, TW([0x3a2210, 0x8a5a2a, 0xe0a060], [0xb07a3a, 0x8a5a2a], 0xffd0a0)), { hidden: 1 }),
+  m_silver: Object.assign(C('숙련 실버', 0, 1, TW([0x40464e, 0xa8b0b8, 0xffffff], [0xc8d0d8, 0xa8b0b8], 0xffffff)), { hidden: 1 }),
+  m_gold: Object.assign(R('숙련 금장', 0, 1, TW([0x9a6e10, 0xd4a520, 0xffe27a], [0xe6b830, 0xc9971f], 0xffffff), 0xffd84a, 'chime', 0xffe680), { hidden: 1 }),
+  m_diamond: Object.assign(E('숙련 다이아', 0, 1, TW([0x1f8fa8, 0x5fd3e8, 0xd8fbff], [0x86e6f5, 0x3bbcd4], 0xffffff), [0xb0f4ff, 'crystal', 0xb0f4ff, 0xffffff], ['stars', 0xd8fbff, 0x5fd3e8]), { hidden: 1 }),
+  m_dark: Object.assign(E('암흑 물질', 0, 1, TW([0x050408, 0x100c18, 0xb08aff], [0x0a0812, 0x140e22], 0xff5ae0), [0xb08aff, 'void', 0x8a5aff, 0xff5ae0, 0x000000], ['flow', 0x8a5aff, 0xff5ae0, 1.5]), { hidden: 1 }),
 };
 
 export const gunFx = (id) => (GUN_SKINS[id] && GUN_SKINS[id].fx) || null;

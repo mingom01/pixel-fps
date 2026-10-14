@@ -69,4 +69,11 @@ export const CHAR_SKINS = {
   phoenixlord: { name: '불사조 군주', r: 'legend', gold: 350, lv: 1, fx: { step: 'gold', dust: 0xff8a20 },
     aura: { kind: 'ember', colors: [0xff5a10, 0xffb020, 0xffe060] }, halo: 0xffb020, death: [0xff5a10, 0xffd040, 0xffffff],
     banner: { main: '#ffb040', accent: '#b01a0a', glow: 'rgba(255,120,30,0.8)' } },
+
+  /* ---------- 시즌 패스 전용 (bp: 시즌 번호) ---------- */
+  s1_agent: { name: 'S1 비밀 요원', r: 'rare', price: 0, lv: 1, bp: 1, fx: { step: 'soft', dust: 0x3af0ff } },
+  s1_ranger: { name: 'S1 사막 레인저', r: 'epic', price: 0, lv: 1, bp: 1, fx: { step: 'metal', dust: 0xffb040 }, aura: { kind: 'spark', colors: [0xffb040, 0xffffff] } },
+  s1_lord: { name: 'S1 픽셀 군주', r: 'legend', gold: 300, lv: 1, bp: 1, fx: { step: 'gold', dust: 0xffd84a },
+    aura: { kind: 'prism', colors: [0xffffff] }, halo: 0xffd84a, death: [0xffd84a, 0xff5a7a, 0x5ad8ff, 0xffffff],
+    banner: { main: '#ffe680', accent: '#7a2aa0', glow: 'rgba(255,220,120,0.8)' } },
 };

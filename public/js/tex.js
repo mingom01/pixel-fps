@@ -445,6 +445,26 @@ function skinSpec(ci, sid) {
       sp.face = (ctx, s2, r) => { dither(ctx, 0x1a0a3a, 8, 8, r, 0.12); rect(ctx, '#e0c8ff', 1, 3, 2, 1); rect(ctx, '#e0c8ff', 5, 3, 2, 1); rect(ctx, '#8a5aff', 0, 0, 8, 1); rect(ctx, '#ffffff', 6, 6, 1, 1); };
       sp.side = (ctx, s2, r) => { dither(ctx, 0x1a0a3a, 8, 8, r, 0.12); rect(ctx, '#ffffff', r() * 8 | 0, r() * 8 | 0, 1, 1); }; sp.back = sp.side; sp.top = sp.side;
       break;
+    case 's1_agent': // 시즌1 비밀 요원: 검은 정장 · 선글라스 · 이어피스
+      Object.assign(sp, { hair: 0x1a1a1a, shirt: 0x15161c, pants: 0x15161c, boots: 0x0a0a0a });
+      sp.face = (ctx, s2, r) => { normalFace(ctx, s2, r); rect(ctx, '#0a0a0a', 0, 3, 8, 2); rect(ctx, '#3af0ff', 1, 3, 2, 1); rect(ctx, '#3af0ff', 5, 3, 2, 1); rect(ctx, '#6b2a20', 3, 6, 2, 1); };
+      sp.side = (ctx, s2, r) => { dither(ctx, s2.skin, 8, 8, r, 0.06); rect(ctx, s2.hair, 0, 0, 8, 3); rect(ctx, '#0a0a0a', 4, 3, 4, 1); rect(ctx, '#3af0ff', 1, 4, 1, 2); };
+      sp.chest = (ctx) => { rect(ctx, '#f4f4f4', 3, 0, 2, 4); rect(ctx, '#0a0a0a', 3, 1, 2, 4); rect(ctx, '#3af0ff', 6, 2, 1, 1); rect(ctx, '#0a0a0a', 0, 9, 8, 1); };
+      break;
+    case 's1_ranger': // 시즌1 사막 레인저: 모래색 망토 · 고글 · 스카프
+      Object.assign(sp, { hair: 0x5a3a1a, shirt: 0xc8a060, pants: 0x6a5032, boots: 0x3a2410, hat: 'fedora', hatColor: 0x8a6a3a, cape: 0xb08a50 });
+      sp.shirtPaint = (ctx, w, h, r) => { dither(ctx, 0xc8a060, w, h, r, 0.1); rect(ctx, '#ffb040', 0, 1, w, 1); };
+      sp.face = (ctx, s2, r) => { normalFace(ctx, s2, r); rect(ctx, '#3a2a1a', 0, 3, 8, 1); rect(ctx, '#ffb040', 1, 3, 2, 1); rect(ctx, '#ffb040', 5, 3, 2, 1); rect(ctx, '#c84a2a', 0, 5, 8, 3); };
+      sp.chest = (ctx) => { rect(ctx, '#c84a2a', 1, 0, 6, 2); rect(ctx, '#5a3a1a', 0, 3, 8, 1); rect(ctx, '#5a3a1a', 2, 4, 1, 4); rect(ctx, '#ffb040', 5, 5, 2, 2); rect(ctx, '#3a2410', 0, 9, 8, 1); };
+      sp.acc = [['arms', 0.28, 0.1, 0.28, 0.02, 0.02, 0, 0x8a6a3a]];
+      break;
+    case 's1_lord': // 시즌1 픽셀 군주: 무지개 망토 · 왕관 · 날개
+      Object.assign(sp, { skin: 0xf2c9a0, hair: 0xffffff, shirt: 0x2a1040, pants: 0x1a0a2a, boots: 0xffd84a, hat: 'crown', cape: 0x7a2aa0, wings: { kind: 'feather', c1: 0xffffff, c2: 0xffd84a } });
+      sp.shirtPaint = (ctx, w, h, r) => { dither(ctx, 0x2a1040, w, h, r, 0.08); const C = ['#ff5a5a', '#ffd84a', '#5aff8a', '#5ab8ff', '#d85aff']; for (let y = 0; y < h; y++) rect(ctx, C[y % 5], 0, y, 1, 1), rect(ctx, C[(y + 2) % 5], w - 1, y, 1, 1); };
+      sp.face = (ctx, s2, r) => { normalFace(ctx, s2, r); rect(ctx, '#ffd84a', 1, 4, 2, 1); rect(ctx, '#ffd84a', 5, 4, 2, 1); rect(ctx, '#7a2aa0', 2, 4, 1, 1); rect(ctx, '#7a2aa0', 5, 4, 1, 1); };
+      sp.chest = (ctx) => { rect(ctx, '#ffd84a', 2, 1, 4, 4); rect(ctx, '#ff5a7a', 3, 2, 2, 2); rect(ctx, '#ffffff', 3, 2, 1, 1); rect(ctx, '#ffd84a', 0, 8, 8, 1); };
+      sp.acc = [['arms', 0.29, 0.12, 0.29, 0.02, 0.03, 0, 0xffd84a]];
+      break;
     case 'politician': // 정치인: 남색 정장 · 빨간 넥타이 · 금배지 · 2:8 가르마 · 안경 · 활짝 웃음
       Object.assign(sp, { skin: 0xf2c9a0, hair: 0x2a2a30, shirt: 0x1e2a4a, pants: 0x1e2a4a, boots: 0x111111 });
       sp.shirtPaint = (ctx, w, h, r) => dither(ctx, 0x1e2a4a, w, h, r, 0.06);

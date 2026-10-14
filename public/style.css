@@ -662,3 +662,116 @@ body.touch #botRight { top: 56px; left: 14px; right: auto; transform-origin: top
 .sk-ach { margin: 6px 0; padding: 6px 8px; border: 2px solid #f4c22b; background: rgba(244, 194, 43, 0.1); font-size: 12px; line-height: 1.5; }
 .sk-ach.done { border-color: #7df07d; background: rgba(125, 240, 125, 0.1); }
 .ach-leg { color: #f4c22b; }
+
+/* ================= 경쟁전 ================= */
+.btn.purple { --c: #8b45c9; --cd: #4a1a7a; }
+.rankrow { align-items: stretch; gap: 8px; }
+.rankrow .btn.big { margin: 0; }
+.rankcard { display: flex; align-items: center; gap: 8px; min-width: 170px; background: rgba(10,12,20,0.55); border: 3px solid var(--line); padding: 4px 8px; }
+.rankcard .rk-ico { width: 54px; height: 54px; image-rendering: pixelated; }
+.rk-t { flex: 1; font-size: 13px; }
+.rk-bar { height: 8px; background: #0e1120; border: 2px solid #000; margin: 3px 0; }
+.rk-bar i { display: block; height: 100%; }
+.rkb { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; margin-right: 4px; }
+.rkb img { width: 36px; height: 36px; image-rendering: pixelated; }
+.rkb.sm img { width: 18px; height: 18px; }
+.rkb.sm { font-size: 11px; }
+.rk-mode { color: #ff6a5a; }
+.rk-res { display: flex; align-items: center; gap: 10px; margin-top: 8px; width: 100%; justify-content: center; }
+.rk-res img { width: 54px; height: 54px; image-rendering: pixelated; }
+.rk-res .rk-bar { width: 180px; }
+.up { color: #7df07d; } .down { color: #ff6a5a; }
+#lobby.ranked #startBtn { --c: #e2483a; --cd: #8f2219; }
+.herotag { font-size: 11px; }
+#passDot { display: none; margin-left: 6px; background: #ff4a3a; color: #fff; border: 2px solid #000; font-size: 11px; padding: 0 5px; }
+#passDot.on { display: inline-block; }
+.bpx { color: #c08aff; }
+
+/* ================= 능력전 ================= */
+.heroes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.hero { border: 3px solid var(--line); background: rgba(10,12,20,0.6); padding: 6px 8px; cursor: pointer; font-size: 12px; }
+.hero:hover { background: rgba(40,48,80,0.8); }
+.hero.on { border-color: var(--hc); box-shadow: 0 0 0 2px var(--hc) inset; }
+.hero .hn { font-size: 15px; color: var(--hc); margin-bottom: 3px; }
+.hero .hn small { color: var(--dim); font-size: 11px; }
+.hero .ha { margin-top: 3px; }
+.hero .ha img { width: 20px; height: 20px; vertical-align: middle; image-rendering: pixelated; }
+.hero .ha b { color: #ffd84a; margin: 0 3px; }
+.hero .hd { color: var(--dim); font-size: 11px; padding-left: 24px; }
+#abilHud { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; align-items: flex-end; pointer-events: none; }
+#abilHud .ab-name { position: absolute; top: -20px; left: 0; right: 0; text-align: center; font-size: 13px; text-shadow: 2px 2px 0 #000; white-space: nowrap; }
+#abilHud .ab-buff { color: #ffd84a; }
+#abilHud .ab { position: relative; width: 62px; height: 62px; background: rgba(10,12,20,0.7); border: 3px solid var(--line); display: flex; align-items: center; justify-content: center; }
+#abilHud .ab img { width: 30px; height: 30px; image-rendering: pixelated; }
+#abilHud .ab b { position: absolute; left: 3px; top: 1px; font-size: 12px; color: #ffd84a; text-shadow: 1px 1px 0 #000; }
+#abilHud .ab.cd img { opacity: 0.3; }
+#abilHud .ab.ready { border-color: #7df07d; }
+#abilHud .ab.ult.ready { border-color: #ffd84a; box-shadow: 0 0 12px #ffd84a; animation: kblink 0.8s infinite; }
+#abilHud .ab-t { position: absolute; font-size: 22px; text-shadow: 2px 2px 0 #000; }
+#abilHud .ab-l { position: absolute; bottom: -16px; font-size: 10px; white-space: nowrap; text-shadow: 1px 1px 0 #000; }
+#abilHud .pips { position: absolute; bottom: 3px; display: flex; gap: 2px; }
+#abilHud .pips i { width: 6px; height: 6px; background: #2a2f40; border: 1px solid #000; }
+#abilHud .pips i.on { background: #ffd84a; }
+body.touch #abilHud { bottom: 160px; }
+
+/* ================= 시즌 패스 ================= */
+.pass-panel { width: min(1000px, 100%); max-height: 92vh; display: flex; flex-direction: column; }
+#passHead { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+.ph-lv b { font-size: 34px; color: #c08aff; text-shadow: 2px 2px 0 #000; }
+.ph-lv small { color: var(--dim); }
+.ph-bar { flex: 1; min-width: 220px; }
+.ph-btns { display: flex; gap: 6px; }
+.prem-on { color: #ffd84a; border: 3px solid #ffd84a; padding: 6px 10px; }
+#passTrack { overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; }
+.pt-rows { display: flex; gap: 4px; width: max-content; }
+.pt-lbl { display: flex; flex-direction: column; gap: 4px; position: sticky; left: 0; z-index: 2; background: var(--panel2); }
+.pt-lbl div { height: 112px; width: 70px; display: flex; align-items: center; justify-content: center; font-size: 12px; border: 3px solid var(--line); background: #1a2036; }
+.pt-lbl div:first-child { height: 24px; }
+.pt-lbl .prem { color: #ffd84a; }
+.pt-col { display: flex; flex-direction: column; gap: 4px; }
+.pt-t { height: 24px; text-align: center; font-size: 12px; border: 3px solid var(--line); background: #1a2036; }
+.pt-col.reached .pt-t { background: #8b45c9; }
+.pt-col.next .pt-t { background: #ffd84a; color: #3a2400; }
+.pt-cell { position: relative; width: 92px; height: 112px; border: 3px solid var(--line); background: rgba(10,12,20,0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; padding: 4px; }
+.pt-cell.prem { background: rgba(60,40,10,0.55); }
+.pt-cell.big { border-color: #c08aff; }
+.pt-cell.prem.big { border-color: #ffd84a; }
+.pt-cell img { max-width: 64px; max-height: 44px; image-rendering: pixelated; }
+.pt-cell .coin.big, .pt-cell .goldc.big { width: 26px; height: 26px; }
+.pt-n { font-size: 10px; line-height: 1.2; }
+.pt-cell.lock { opacity: 0.55; }
+.pt-cell.got { opacity: 0.45; }
+.pt-cell.can { cursor: pointer; box-shadow: 0 0 0 2px #7df07d inset; animation: kblink 1.2s infinite; }
+.pt-ok, .pt-go { position: absolute; top: 2px; right: 2px; font-size: 9px; padding: 1px 3px; background: #2a7a2a; border: 1px solid #000; }
+.pt-go { background: #4cbf4c; }
+
+/* ================= 무기 숙련도 ================= */
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.mcard { border: 3px solid var(--line); background: rgba(10,12,20,0.55); padding: 6px; font-size: 12px; }
+.mtop { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.mtop img { height: 28px; image-rendering: pixelated; }
+.mcamos { display: flex; gap: 3px; margin-top: 5px; flex-wrap: wrap; }
+.mc { background: #1a2036; border: 2px solid #000; color: #fff; font-family: inherit; font-size: 10px; padding: 2px 4px; cursor: pointer; height: 26px; }
+.mc img { height: 16px; image-rendering: pixelated; }
+.mc.on { border-color: var(--mc, #ffd84a); box-shadow: 0 0 0 2px var(--mc, #ffd84a); }
+.mc:disabled { opacity: 0.25; cursor: default; }
+
+/* ================= 매치 기록 · 리플레이 ================= */
+.hrow { border: 3px solid var(--line); background: rgba(10,12,20,0.55); padding: 6px 8px; margin-bottom: 5px; font-size: 13px; }
+.hmain { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hkd { margin-left: auto; }
+.hwin { color: #7df07d; } .hloss { color: #ff6a5a; } .hdraw { color: #c8d0dc; }
+.hboard table { width: 100%; margin-top: 6px; font-size: 12px; }
+.hboard tr.me { color: #ffd84a; }
+#replayBar { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); width: min(900px, calc(100% - 20px)); z-index: 11; background: rgba(14,18,30,0.92); border: 3px solid var(--line); padding: 8px 10px; font-size: 13px; }
+.rp-top { display: flex; align-items: center; gap: 8px; }
+.rp-top .right { margin-left: auto; }
+#rpProg { position: relative; height: 14px; background: #0e1120; border: 2px solid #000; margin: 6px 0; cursor: pointer; }
+#rpFill { height: 100%; background: linear-gradient(#ffd84a 0 45%, #d4a520 45%); width: 0; }
+.rp-ctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#rpPlayers { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.rpp { background: #1a2036; border: 2px solid #555; color: #fff; font-family: inherit; font-size: 11px; padding: 2px 6px; cursor: pointer; }
+.rpp.on { background: #ffd84a; color: #3a2400; }
+.rpp.dead { opacity: 0.45; }
+body.replay #botLeft, body.replay #botRight, body.replay #cross, body.replay #buyHint, body.replay #hint, body.replay #clickToPlay, body.replay #death, body.replay #abilHud, body.replay #practiceHud { display: none !important; }
+body.abil #killBanner { bottom: 16%; }

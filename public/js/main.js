@@ -20,6 +20,11 @@ import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
 import { showIncome } from './hud/income.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
 import { SPRAY_BY, sprayCanvas } from './skins/sprays.js';
+import { initAbility, heroPickerHtml, bindHeroPicker, tryAbility, onAb, onBlk, abilityHud, abilityModelFx } from './ability.js';
+import { myRanked, applyRanked, leavePenalty, rankIcon, rankBadge, rankCardHtml } from './ranked.js';
+import { currentSeason, bp, bpTier, grantBpMatch, addBp, buyPremium, claim, claimAll, unclaimed, reward, rewardName, TIERS as BP_TIERS, TIER_XP, PREMIUM_GOLD } from './season.js';
+import { LEVELS as M_LEVELS, MASTERY_WEAPONS, masteryOf, checkMastery, setCamo, gskinFor } from './mastery.js';
+import { history, addHistory, recStart, recMsg, recRoom, recStop, recording, saveReplay, loadReplay, replayIds, purgeReplays, HISTORY_DAYS, REPLAY_DAYS } from './history.js';
 import { initGimmicks, startGimmicks, setGimMap, stopGimmicks, onGimMsg, updateGimmicks, afterMove, groundAccMul, ENV_KILL } from './gimmicks.js';
 
 const SH = window.SH;
@@ -69,11 +74,12 @@ const S = {
   pickups: new Map(), crates: new Map(), targets: [], rangeLabels: [], pst: null, spikeObjs: [], spk: null, specId: null, plantOn: false, defOn: false,
   ents: new Map(), projs: new Map(), drops: new Map(), off: null, endAt: 0, killLimit: 25,
   modal: null, locked: false, dead: true, killer: null, deathPos: null, streak: 0,
+  reveal: new Map(), replay: null, abil: { dashT: 0 },
   mode: 'ffa', score: [0, 0], target: 25, flags: null, flagObjs: [], kc: null, selfBuf: [], shotLog: [], myCaps: 0, ghost: null,
 };
 const TEAMS = SH.TEAMS;
 const myTeam = () => { const r = S.roster.get(S.myId); return r ? r.team : -1; };
-const isTeamMode = () => ['tdm', 'ctf', 'spike', 'zombie', 'boss'].includes(S.mode);
+const isTeamMode = () => ['tdm', 'ctf', 'spike', 'zombie', 'boss', 'ability'].includes(S.mode);
 const isMate = (id) => isTeamMode() && id !== S.myId && myTeam() >= 0 && (S.roster.get(id) || {}).team === myTeam();
 function nameColor(id) {
   const r = S.roster.get(id); if (!r) return '#ffffff';
@@ -89,7 +95,7 @@ const me = {
 const WS = { cur: 'pistol', last: 'knife', fireT: 0, reloadT: 0, reloading: false, switchT: 0, ads: 0, spin: 0, recoil: 0, bloom: 0, trigger: false, semiReady: true, kick: 0, slashT: 0, lastFire: 0 };
 const ammo = {};
 const keys = {};
-const serverNow = () => Date.now() + (S.off || 0);
+const serverNow = () => (S.replay ? S.replay.clock : Date.now() + (S.off || 0));
 
 function fullAmmo(w) { const W = WEAPONS[w]; if (W && W.mag) ammo[w] = { mag: W.mag, res: W.res }; }
 
@@ -106,7 +112,12 @@ function connect() {
   };
   ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMsg(m); };
 }
-function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+function send(o) {
+  if (S.replay) return;
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(o));
+  // 내 사격·칼질은 서버가 나한테 안 돌려주니 리플레이용으로 직접 기록
+  if (recording() && (o.t === 'shot' || o.t === 'swing')) recMsg(Object.assign({}, o, { id: S.myId }), serverNow());
+}
 setInterval(() => { if (wsOk && isAuthed() && !S.room) send({ t: 'list' }); }, 3000);
 
 // 로그인 완료 → 서버 프로필로 화면 갱신
@@ -117,8 +128,10 @@ function onLoggedIn(u) {
   send({ t: 'list' });
 }
 
-function onMsg(m) {
+function onMsg(m, replayed) {
   if (handleAuthMsg(m)) return;
+  if (S.replay && !replayed && !['rooms', 'err', 'hello', 'authed', 'rank'].includes(m.t)) return; // 리플레이 보는 중엔 실시간 게임 메시지 무시
+  if (S.inGame && !S.replay) recMsg(m, serverNow());
   switch (m.t) {
     case 'hello': S.myId = m.id; break;
     case 'rooms': renderRoomList(m.list); break;
@@ -163,6 +176,8 @@ function onMsg(m) {
     case 'sys': addChat(`<span style="color:#f4c22b">${esc(m.text)}</span>`); break;
     case 'end': onEnd(m); break;
     case 'gim': onGimMsg(m); break;
+    case 'ab': onAb(m); break;
+    case 'blk': onBlk(m); break;
   }
 }
 
@@ -177,7 +192,7 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 $('nameIn').value = CFG.name || '';
 $('nameIn').addEventListener('input', () => { CFG.name = $('nameIn').value.trim(); saveCfg(); });
 function myName() { const n = $('nameIn').value.trim(); return n || '플레이어' + (S.myId || '').slice(1); }
-function joinInfo() { return { name: myName(), color: CFG.color, skin: profile.skin, gskin: profile.gskin, title: myTitle(), lv: myLevel() }; }
+function joinInfo() { return { name: myName(), color: CFG.color, skin: profile.skin, gskin: profile.gskin, title: myTitle(), lv: myLevel(), hero: CFG.hero || 'jett', rp: myRanked().rp, wc: profile.wcamo || {} }; }
 function buildSwatches() {
   const box = $('colors'); box.innerHTML = '';
   PCOLORS.forEach((c, i) => {
@@ -214,6 +229,8 @@ refreshPreview();
 /* ---------- 프로필 / 꾸미기 상점 ---------- */
 function updateProfileUI() {
   const li = levelInfo(profile.xp);
+  $('rankCard').innerHTML = rankCardHtml();
+  updatePassUI();
   $('lvBadge').textContent = $('lockerLv').textContent = 'Lv.' + li.lv;
   $('xpFill').style.width = (li.cur / li.need * 100) + '%'; $('xpText').textContent = `${li.cur} / ${li.need} XP`;
   $('coinNum').textContent = $('lockerCoins').textContent = profile.coins;
@@ -272,6 +289,9 @@ function renderRoomList(list) {
   box.querySelectorAll('.roomitem').forEach(el => el.onclick = () => { A.initAudio(); send(Object.assign({ t: 'join', code: el.dataset.code }, joinInfo())); });
 }
 $('quickBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', quick: true, cfg: { map: 'village', mode: 'ffa', rmode: true, rmap: true, bots: 7, time: 300, kills: 25, diff: 'normal' } }, joinInfo())); };
+$('rankedBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'ranked' }, joinInfo())); };
+$('passBtn').onclick = () => { A.initAudio(); $('pass').classList.remove('hidden'); renderPass(); };
+$('passClose').onclick = () => { $('pass').classList.add('hidden'); updatePassUI(); };
 $('practiceBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', quick: true, cfg: { map: 'range', mode: 'practice', bots: 4, time: 300, kills: 25, diff: 'easy' } }, joinInfo())); };
 $('createBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', cfg: { map: 'village', mode: 'ffa', bots: 5, time: 300, kills: 25, diff: 'normal' } }, joinInfo())); };
 $('joinBtn').onclick = () => { A.initAudio(); const c = $('codeIn').value.trim(); if (c) send(Object.assign({ t: 'join', code: c }, joinInfo())); };
@@ -327,6 +347,7 @@ const MODE_DESC = {
   boss: '모두 힘을 합쳐 거대 골렘을 쓰러뜨리세요! 내려찍기·바위 던지기·돌진, 체력 절반이면 분노해서 졸개를 불러요.',
   spike: '발로란트식! 공격팀은 A/B 사이트에 스파이크 설치, 수비팀은 막거나 해체. 라운드 중 부활 없음 · 5라운드 먼저 이기면 승리 (4라운드 후 공수 교대)',
   ctf: '상대 기지의 깃발을 들고 와서 우리 깃발에 닿으면 득점! 우리 깃발이 기지에 있어야 해요.',
+  ability: '팀 데스매치 + 능력자! 6명 중 하나를 골라 Q 스킬과 X 궁극기를 써요. 궁극기는 처치하거나 30초마다 충전돼요. (상점 B에서 능력자 선택)',
 };
 $('startBtn').onclick = () => { A.initAudio(); send({ t: 'start' }); };
 $('leaveBtn').onclick = () => send({ t: 'leave' });
@@ -356,8 +377,10 @@ function renderBotMgr() {
 }
 
 function onRoom(m) {
+  if (S.replay) return;
   const wasIn = !!S.room;
   S.room = m;
+  recRoom(m);
   S.roster.clear();
   for (const p of m.players) S.roster.set(p.id, p);
   for (const [id, e] of S.ents) { const r = S.roster.get(id); if (r && (r.color !== e.color || r.name !== e.name || r.team !== e.team || r.skin !== e.skin || r.gskin !== e.gskin)) { removeEnt(id); } }
@@ -386,11 +409,22 @@ function onRoom(m) {
   $('hostNote').textContent = host ? '(방장)' : '방장만 바꿀 수 있어요';
   $('lobby').querySelector('.grow').classList.toggle('locked', !host);
   $('startBtn').disabled = !host; $('startBtn').textContent = host ? '게임 시작' : '방장을 기다리는 중…';
+  // 경쟁전 방: 설정 못 바꾸고 자동 시작
+  const ranked = !!m.cfg.ranked;
+  $('lobby').classList.toggle('ranked', ranked);
+  if (ranked) {
+    $('lobby').querySelector('.grow').classList.add('locked');
+    $('startBtn').disabled = true; $('hostNote').textContent = '경쟁전';
+    const sec = Math.max(0, Math.ceil((m.autoAt - Date.now() - (S.off || 0)) / 1000));
+    $('startBtn').textContent = m.state === 'wait' ? (m.autoAt ? `${sec}초 뒤 자동 시작` : '곧 시작') : '진행 중';
+    $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name}</b> · 이기면 점수가 크게 오르고, 져도 낮은 티어에선 조금 올라요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
+    clearTimeout(S.rankTick); if (m.state === 'wait' && m.autoAt) S.rankTick = setTimeout(() => { if (S.room === m) onRoom(m); }, 1000);
+  }
   $('botsVal').textContent = m.cfg.bots;
   document.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', rmap ? c.dataset.map === 'random' : c.dataset.map === m.cfg.map));
   $('timeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === m.cfg.time));
   $('killSeg').querySelectorAll('button').forEach(b => { const v = Number(b.dataset.v); b.textContent = SH.targetOf({ mode: md, kills: v }); b.classList.toggle('on', v === m.cfg.kills); });
-  const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${esc(p.name)} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
+  const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${p.rp != null && m.cfg.ranked ? rankBadge(p.rp, true) : ''}${esc(p.name)}${md === 'ability' && p.hero && SH.HEROES[p.hero] ? ` <span class="herotag" style="color:${SH.HEROES[p.hero].color}">${SH.HEROES[p.hero].name}</span>` : ''} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
   $('lobbyPlayers').innerHTML = md === 'ffa' ? m.players.map(pl).join('')
     : [0, 1].map(t => `<div class="teamhead" style="color:${TEAMS[t].css}">${TEAMS[t].name} 팀</div>` + m.players.filter(p => p.team === t).map(pl).join('')).join('');
   $('endBtn').classList.toggle('hidden', !host);
@@ -446,6 +480,8 @@ function startGame(m) {
   for (const d of m.drops || []) addDrop(d);
   clearFx();
   S.inGame = true; S.dead = true; me.alive = false; S.streak = 0;
+  S.reveal.clear(); S.heroPicked = false; WS.inspect = null; WS.flourish = null;
+  if (!S.replay && m.mode !== 'practice') recStart(m, S.room, S.myId, serverNow());
   me.x = S.map.W / 2; me.y = 22; me.z = S.map.D / 2;
   for (const k in ammo) delete ammo[k];
   fullAmmo('pistol');
@@ -470,11 +506,21 @@ function onEnd(m) {
   if (S.kc) endKc();
   const myIdx = r.findIndex(p => p.id === S.myId), mine = r[myIdx];
   const win = m.win == null ? myIdx === 0 : m.win === (mine ? mine.team : -2);
+  saveMatchRecord(m, myIdx, win);
   $('resultTeam').innerHTML = m.win == null ? '' : m.win < 0 ? '무승부!' : `<span style="color:${TEAMS[m.win].css}">${teamName(m.win)}${S.mode === 'zombie' || S.mode === 'boss' ? '' : ' 팀'} 승리!</span> <span class="dim">${m.score[0]} : ${m.score[1]}</span>`;
   if (mine) trackEnd(m.mode, win);
   if (mine) {
     const g = grantMatch({ kills: mine.k, caps: mine.caps || 0, win, rank: m.win == null ? myIdx : -1 });
-    $('rewards').innerHTML = `<span>+${g.xp} XP</span><span><i class="coin"></i> +${g.coins} 코인</span>` + (g.after > g.before ? `<span class="up">레벨 업! Lv.${g.after}</span>` : '');
+    const bpr = grantBpMatch({ kills: mine.k, win, ranked: !!m.ranked });
+    $('rewards').innerHTML = `<span>+${g.xp} XP</span><span><i class="coin"></i> +${g.coins} 코인</span><span class="bpx">패스 +${bpr.xp}</span>` + (g.after > g.before ? `<span class="up">레벨 업! Lv.${g.after}</span>` : '') + (bpr.after > bpr.before ? `<span class="up">패스 ${bpr.after}단계!</span>` : '');
+    // 경쟁전 점수
+    const rr = m.ranked && m.rp && m.rp[S.myId];
+    if (rr) {
+      const res = applyRanked(rr), inf = SH.RANKED.info(res.after);
+      $('rewards').innerHTML += `<div class="rk-res"><img src="${rankIcon(res.after, 3)}"><div><b style="color:${inf.tier.color}">${inf.name}</b> <span class="${rr.d >= 0 ? 'up' : 'down'}">${rr.d >= 0 ? '+' : ''}${rr.d} RP</span>${res.up ? ' <b class="up">승급!</b>' : ''}<div class="rk-bar"><i style="width:${inf.need ? inf.pt : 100}%;background:${inf.tier.color}"></i></div></div></div>`;
+      if (res.up) { celebrate('승급!', inf.name, 't-god'); }
+    }
+    updatePassUI();
     updateProfileUI();
   } else $('rewards').innerHTML = '';
   const pc = (p) => p.team >= 0 && m.win != null ? TEAMS[p.team].css : hexs(PCOLORS[p.color]);
@@ -489,13 +535,13 @@ function onEnd(m) {
 }
 
 /* ================= 입력 ================= */
-cv.addEventListener('click', () => { if (S.kc && S.kc.active) endKc(); if (S.inGame && !S.modal && !S.locked) lockPointer(); });
+cv.addEventListener('click', () => { if (S.replay) return; if (S.kc && S.kc.active) endKc(); if (S.inGame && !S.modal && !S.locked) lockPointer(); });
 $('clickToPlay').addEventListener('click', () => { A.initAudio(); lockPointer(); });
 function lockPointer() { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => {}); }
 document.addEventListener('pointerlockchange', () => {
   S.locked = document.pointerLockElement === cv;
   if (S.locked) { $('clickToPlay').classList.add('hidden'); if (S.modal === 'pause') closeModals(); }
-  else if (S.inGame && !S.modal && $('result').classList.contains('hidden') && document.activeElement !== $('chatIn')) openPause();
+  else if (S.inGame && !S.replay && !S.modal && $('result').classList.contains('hidden') && document.activeElement !== $('chatIn')) openPause();
   for (const k in keys) keys[k] = false;
   WS.trigger = false; WS.adsHeld = false;
 });
@@ -524,6 +570,7 @@ document.addEventListener('keydown', (e) => {
   if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
   if (ED.on) { editorKey(e); return; }
   if (settingsOpen()) { if (e.code === 'Escape') closeSettingsPanel(); return; }
+  if (S.replay) { replayKey(e); return; }
   if (!S.inGame) return;
   // 사용자가 바꾼 키 → 게임 기본 키 코드
   const code = toGame(e.code);
@@ -554,7 +601,8 @@ function onPress(code) {
     case 'Digit2': switchTo(me.secondary); break;
     case 'Digit3': case 'KeyV': switchTo(meleeId()); break;
     case 'Digit4': if (me.nades > 0) switchTo('nade'); break;
-    case 'KeyQ': if (WS.last && haveWeapon(WS.last)) switchTo(WS.last); break;
+    case 'KeyQ': if (S.mode === 'ability') tryAbility('q'); else if (WS.last && haveWeapon(WS.last)) switchTo(WS.last); break;
+    case 'KeyF': if (S.mode !== 'spike' || !mySite()) startInspect(); break;
     case 'KeyG': quickNade(); break;
     case 'KeyE': { const cr = nearCrate(); if (cr) send({ t: 'open', id: cr.id }); else tryPick(true); break; }
     case 'KeyP': if (S.mode === 'practice') { resetPracticeStats(); toast('연습 기록을 초기화했어요'); } break;
@@ -563,7 +611,7 @@ function onPress(code) {
     case 'KeyC': if (me.ground && !me.sliding && isSprinting() ) startSlide(); break;
     case 'KeyK': send({ t: 'suicide' }); break;
     case 'KeyZ': deployTurret(); break;
-    case 'KeyX': callAirstrike(); break;
+    case 'KeyX': if (S.mode === 'ability') tryAbility('x'); else callAirstrike(); break;
   }
 }
 function openChat() { const i = $('chatIn'); i.classList.remove('hidden'); i.value = ''; i.focus(); for (const k in keys) keys[k] = false; }
@@ -592,7 +640,11 @@ function closeModals(keep) {
 }
 function openPause() { openModal('pause'); }
 $('resumeBtn').onclick = () => { closeModals(); lockPointer(); };
-$('quitBtn').onclick = () => { send({ t: 'leave' }); };
+$('quitBtn').onclick = () => {
+  if (S.room && S.room.cfg.ranked && S.inGame && $('result').classList.contains('hidden')) { leavePenalty(); toast('경쟁전 중간에 나가서 -15점'); }
+  recStop();
+  send({ t: 'leave' });
+};
 $('endBtn').onclick = () => { send({ t: 'stop' }); };
 function updSettingsLbl() { $('sensVal').textContent = Number(CFG.sens).toFixed(2); $('fovVal').textContent = CFG.fov; $('volVal').textContent = Math.round(CFG.vol * 100) + '%'; }
 $('sens').oninput = (e) => { CFG.sens = Number(e.target.value); saveCfg(); updSettingsLbl(); };
@@ -675,7 +727,7 @@ function toggleBuy() {
 function statBar(lbl, v) { return `<div class="sbar"><span>${lbl}</span><i><b style="width:${Math.round(clamp(v, 0.04, 1) * 100)}%"></b></i></div>`; }
 function renderBuy() {
   $('buyMoney').textContent = '$' + me.money;
-  let h = '';
+  let h = S.mode === 'ability' ? heroPickerHtml(me.hero) : '';
   for (const [cat, items] of SHOP) {
     h += `<div class="bcat">${cat}</div>`;
     for (const id of items) {
@@ -692,6 +744,7 @@ function renderBuy() {
     }
   }
   $('buyGrid').innerHTML = h;
+  if (S.mode === 'ability') bindHeroPicker($('buyGrid'));
   $('buyGrid').querySelectorAll('.bcard').forEach(c => c.onclick = () => { if (!canBuyNow()) { toast('구매 시간이 끝났어요'); closeModals(); return; } send({ t: 'buy', item: c.dataset.item }); S.lastBuy = S.lastBuy || []; });
 }
 let _armorIcon = null;
@@ -807,7 +860,7 @@ function updateEnts(dt) {
       e.lastPos = { x: s.x, z: s.z };
       e.rx = s.x; e.ry = s.y; e.rz = s.z; e.ryaw = s.yaw; e.rpitch = s.pitch; e.fl = s.fl;
       e.model.position.set(s.x, s.y, s.z); e.model.rotation.y = s.yaw;
-      if (!e.boss && s.w && s.w !== e.w) { e.w = s.w; setCharGun(e.model, s.w === 'nade' ? 'nade' : s.w, e.gskin); }
+      if (!e.boss && s.w && s.w !== e.w) { e.w = s.w; const rr = S.roster.get(e.id); setCharGun(e.model, s.w === 'nade' ? 'nade' : s.w, (rr && rr.wc && rr.wc[s.w]) || e.gskin); }
       e.model.userData.firing = performance.now() - (e.lastShot || 0) < 150;
       if (e.boss) animBoss(e, dt, sp > 20 ? 0 : sp, false);
       else {
@@ -820,10 +873,12 @@ function updateEnts(dt) {
       // 보호막 깜빡임
       e.model.visible = !(s.fl & 16) || (Math.floor(performance.now() / 120) % 2 === 0);
       e.tag.visible = !kcOn;
-      const radar = serverNow() < (S.uavUntil || 0) && !isMate(e.id) && !kcOn;
+      const radar = (serverNow() < (S.uavUntil || 0) || serverNow() < (S.reveal.get(e.id) || 0)) && !isMate(e.id) && !kcOn;
       e.model.userData.uavMk.visible = radar;
       e.tag.material.depthTest = !(isMate(e.id) || radar);
+      if (s.fl & (256 | 512 | 1024)) abilityModelFx(e, s.fl, isMate(e.id));
       if (kcOn && e.id === S.kc.killer) e.model.visible = false;
+      if (S.replay && RP.view === 1 && e.id === RP.follow) { e.model.visible = false; e.tag.visible = false; }
     } else {
       if (e.alive) { e.alive = false; e.deadT = 0; }
       e.deadT += dt;
@@ -843,9 +898,12 @@ function onSpawn(m) {
   if (me.primary && !ammo[me.primary]) fullAmmo(me.primary);
   WS.reloading = false; WS.spin = 0; WS.recoil = 0; WS.bloom = 0;
   switchTo(me.primary || me.secondary || meleeId(), true);
+  // 능력전: 처음 부활하면 능력자 고르기 창
+  if (S.mode === 'ability' && !S.heroPicked) { S.heroPicked = true; setTimeout(() => { if (me.alive && !S.modal && canBuyNow()) openModal('buy'); }, 200); }
 }
 function onMe(m) {
   const prevPrim = me.primary, prevSec = me.secondary;
+  Object.assign(me, { hero: m.hero, qAt: m.qAt || 0, ult: m.ult || 0, haste: m.haste || 0, steel: m.steel || 0, invis: m.invis || 0 });
   Object.assign(me, { zombie: !!m.zombie, gg: m.gg || 0, hp: m.hp, armor: m.armor, money: m.money, primary: m.primary, secondary: m.secondary, nades: m.nades, buyUntil: m.buyUntil, respawnAt: m.respawnAt, helmet: !!m.helmet, perks: m.perks || [], sup: m.sup || { turret: 0, air: 0 }, maxHp: m.maxHp || 100 });
   if (!m.alive && me.alive) { me.alive = false; }
   if (m.primary && m.primary !== prevPrim && !ammo[m.primary]) fullAmmo(m.primary);
@@ -890,12 +948,13 @@ function updateMe(dt) {
   const wish = frozen ? null : wishDir();
   if (frozen && me.ground) { me.vx = 0; me.vz = 0; me.sliding = false; }
   const sprint = isSprinting() && !WS.reloading;
-  let speed = (me.crouch ? P.CROUCH : sprint ? P.RUN : P.WALK) * (W.speed || 1) * (WS.ads > 0.5 ? 0.62 : 1) * (me.perks.includes('perk_speed') ? 1.12 : 1) * (me.zombie ? SH.ZB.SPEED : 1);
+  let speed = (me.crouch ? P.CROUCH : sprint ? P.RUN : P.WALK) * (W.speed || 1) * (WS.ads > 0.5 ? 0.62 : 1) * (me.perks.includes('perk_speed') ? 1.12 : 1) * (me.zombie ? SH.ZB.SPEED : 1) * (serverNow() < (me.haste || 0) ? 1.35 : 1);
+  if (S.abil.dashT > 0) S.abil.dashT -= dt; // 돌진 중엔 감속 안 함
   if (me.sliding) {
     const f = 1 - dt * 1.4; me.vx *= f; me.vz *= f;
     me.slideT -= dt;
     if (me.slideT <= 0 || Math.hypot(me.vx, me.vz) < 3.5) me.sliding = false;
-  } else {
+  } else if (S.abil.dashT <= 0) {
     const tx = wish ? wish[0] * speed : 0, tz = wish ? wish[1] * speed : 0;
     const acc = (me.ground ? 55 * groundAccMul(me) : 14) * dt;
     const dx = tx - me.vx, dz = tz - me.vz, dl = Math.hypot(dx, dz);
@@ -937,7 +996,7 @@ function armMesh(len, shirt, skin) {
   g.add(sl, hd); return g;
 }
 function setViewModel(id, look) {
-  look = look || (me.zombie ? { ci: CFG.color, skin: 'zombie', gskin: 'default' } : { ci: CFG.color, skin: profile.skin, gskin: profile.gskin });
+  look = look || (me.zombie ? { ci: CFG.color, skin: 'zombie', gskin: 'default' } : { ci: CFG.color, skin: profile.skin, gskin: gskinFor(id, profile.gskin) });
   if (vm.gun) vm.holder.remove(vm.gun);
   if (vm.arms) vm.holder.remove(vm.arms);
   vm.id = id;
@@ -1278,6 +1337,7 @@ function onRemoteShot(m) {
   const e = S.ents.get(m.id); if (!e) return;
   logShot(m.id, m.w, m.e);
   e.lastShot = performance.now();
+  if (S.replay && m.id === RP.follow && RP.view === 1) { RP.kick = 1; vm.flashT = 0.05; }
   if (S.kc && S.kc.active) return; // 킬캠 중엔 실시간 이펙트 생략
   const st = muzzleOf(e);
   const d = Math.hypot(st.x - me.x, st.y - me.y, st.z - me.z);
@@ -1543,11 +1603,23 @@ function updateProjs(dt) {
 
 /* ================= 뷰모델 ================= */
 const _fe = new THREE.Euler(), _fp = new THREE.Vector3();
+// 살펴보기 키프레임 [시간, x, y, z, rx, ry, rz]
+const INSPECT_KF = [[0, 0, 0, 0, 0, 0, 0], [0.16, -0.13, 0.05, 0.1, 0.12, 1.05, 0.3], [0.44, -0.12, 0.06, 0.09, 0.08, 1.15, 0.36], [0.6, -0.1, 0.07, 0.07, 0.6, -0.45, -0.5], [0.84, -0.1, 0.06, 0.07, 0.5, -0.55, -0.55], [1, 0, 0, 0, 0, 0, 0]];
+function startInspect() {
+  const W = WEAPONS[WS.cur];
+  if (!me.alive || WS.reloading || WS.switchT > 0 || WS.cur === 'nade' || WS.inspect) return;
+  if (W && W.mag && ammo[WS.cur] && ammo[WS.cur].mag <= 0) return;
+  WS.flourish = null;
+  WS.inspect = { t0: performance.now(), dur: 3000 };
+  A.sfxSwitch();
+}
 const _hv = new THREE.Vector3(), _magFallback = new THREE.Vector3(0, -0.06, -0.1);
 function updateViewModel(dt) {
-  if (S.kc && S.kc.active) {
+  const rpPov = !!(S.replay && RP.view === 1 && RP.povOk);
+  if ((S.kc && S.kc.active) || rpPov) {
     vm.holder.visible = true; $('scope').classList.remove('on');
-    const k = S.kc.kick; S.kc.kick *= Math.pow(0.0005, dt);
+    const ko = S.kc && S.kc.active ? S.kc : RP;
+    const k = ko.kick || 0; ko.kick = k * Math.pow(0.0005, dt);
     const knife = vm.id === 'knife';
     vm.holder.position.set(0.2, knife ? -0.2 : -0.2, (knife ? -0.36 : -0.62) + k * 0.06); vm.holder.rotation.set(k * 0.12, 0.05, 0);
     vm.flashT -= dt; if (vm.flash) vm.flash.visible = vm.flashT > 0;
@@ -1597,6 +1669,20 @@ function updateViewModel(dt) {
       if (u > 0.78 && u < 0.9) { const k = Math.sin((u - 0.78) / 0.12 * Math.PI); z += 0.035 * k; rx += 0.07 * k; } // 노리쇠
     }
   }
+  // 총 살펴보기 (F): 가운데로 가져와서 옆면 → 뒤집어 반대쪽 → 원위치
+  if (WS.inspect) {
+    const ik = (performance.now() - WS.inspect.t0) / WS.inspect.dur;
+    if (ik >= 1 || WS.trigger || WS.adsHeld || WS.reloading || WS.switchT > 0 || !me.alive || WS.flourish) WS.inspect = null;
+    else {
+      const KF = INSPECT_KF;
+      let i = 0; while (i < KF.length - 2 && ik > KF[i + 1][0]) i++;
+      const a = KF[i], b = KF[i + 1], t = ease((ik - a[0]) / (b[0] - a[0]));
+      const v = (j) => a[j] + (b[j] - a[j]) * t;
+      x += v(1); y += v(2); z += v(3); rx += v(4); ry += v(5); rz += v(6);
+      // 칼은 손에서 한 바퀴 빙글
+      WS.inspectRz = WEAPONS[WS.cur] && WEAPONS[WS.cur].melee && ik > 0.45 && ik < 0.65 ? -ease((ik - 0.45) / 0.2) * Math.PI * 2 : 0;
+    }
+  }
   // 처치 후 총 돌리기: 영웅 = 손에서 한 바퀴, 전설 = 위로 던져 두 바퀴 돌려 받기 (쏘기·조준·장전·교체하면 취소)
   if (vm.gun) {
     const f = WS.flourish, fk = f ? (performance.now() - f.t0) / f.dur : -1;
@@ -1610,7 +1696,7 @@ function updateViewModel(dt) {
       _fp.copy(c).applyEuler(_fe);
       vm.gun.position.set(c.x - _fp.x, c.y - _fp.y + (f.tier === 'legend' ? up * 0.2 : up * 0.02), c.z - _fp.z - (f.tier === 'legend' ? up * 0.32 : 0));
       if (!f.snd && fk > 0.85) { f.snd = true; A.sfxSwitch(); }
-    } else { vm.gun.position.set(0, 0, 0); vm.gun.rotation.set(0, 0, 0); }
+    } else { vm.gun.position.set(0, 0, 0); vm.gun.rotation.set(0, 0, WS.inspect ? WS.inspectRz || 0 : 0); }
   }
   if (vm.gun && vm.gun.userData.mag) { vm.gun.userData.mag.position.y = magY; vm.gun.userData.mag.visible = !magHide; }
   if (vm.la && vm.laP) {
@@ -1641,7 +1727,9 @@ function updateCamera(dt) {
   const sh = S.shake * 0.05;
   const kcE = S.kc && S.kc.active && S.ents.get(S.kc.killer);
   const kcS = kcE && sampleBuf(kcE.buf, kcTime());
-  if (selfEmoteActive()) {
+  if (S.replay) {
+    replayCamera(dt);
+  } else if (selfEmoteActive()) {
     updateSelfEmoteCam(dt);
   } else if (kcS) {
     camera.position.set(kcS.x, kcS.y + ((kcS.fl & 2) ? P.EYEC : P.EYE), kcS.z);
@@ -1687,7 +1775,7 @@ function hitMarker(kind) {
 }
 function updateHud(dt) {
   hudT -= dt; if (hudT > 0) return; hudT = 0.05;
-  $('clickToPlay').classList.toggle('hidden', S.locked || S.touch || !!S.modal || !$('result').classList.contains('hidden') || document.activeElement === $('chatIn'));
+  $('clickToPlay').classList.toggle('hidden', S.locked || S.touch || !!S.replay || !!S.modal || !$('result').classList.contains('hidden') || document.activeElement === $('chatIn'));
   const now = serverNow();
   const left = Math.max(0, S.endAt - now) / 1000;
   $('timer').textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
@@ -1703,6 +1791,8 @@ function updateHud(dt) {
     $('leader').textContent = `${SH.MODES[S.mode].name} · 목표 ${S.target}${S.mode === 'ctf' ? '점' : '킬'} · 나 ${mine ? mine.k : 0}킬${myTeam() >= 0 ? ' · ' + TEAMS[myTeam()].name + ' 팀' : ''}`;
   } else $('leader').textContent = top ? `1위 ${top.name} ${top.k}킬 · 나 ${mine ? mine.k : 0}킬 · 목표 ${S.target}` : '';
   modeHud();
+  abilityHud();
+  if (S.replay) replayHud();
   if (S.mode === 'ctf' && S.flags) {
     const ft = (t) => { const f = S.flags[t]; if (f[4]) return '기지'; if (f[3]) return f[3] === S.myId ? '내가 운반 중!' : `${(S.roster.get(f[3]) || {}).name || '?'} 운반 중`; return '떨어짐'; };
     $('flagStat').innerHTML = [0, 1].map(t => `<span style="color:${TEAMS[t].css}">${TEAMS[t].name} 깃발: ${ft(t)}</span>`).join('');
@@ -2184,7 +2274,8 @@ function notify(text, color) {
 }
 const trackOn = () => S.mode !== 'practice';
 function noticeDone(done, ach) {
-  for (const m of done) notify(`미션 완료! ${m.name} · +${m.coins} 코인 +${m.gold} 골드`, '#7df07d');
+  for (const m of done) { notify(`미션 완료! ${m.name} · +${m.coins} 코인 +${m.gold} 골드 · 패스 +200`, '#7df07d'); addBp(200); }
+  if (done.length) updatePassUI();
   for (const a of ach) {
     notify(`업적 달성! [${a.name}] · +${a.gold} 골드`, '#ffd84a');
     for (const g of a.gifts || []) notify(`전설 스킨 획득! [${g}]`, '#f4c22b');
@@ -2202,6 +2293,8 @@ function trackKill(m) {
   if (!trackOn()) return;
   stats.kills++; if (m.hs) stats.hs++;
   stats.weapons[m.w] = (stats.weapons[m.w] || 0) + 1;
+  const ml = checkMastery(m.w);
+  if (ml) { notify(`무기 숙련도! ${(WEAPONS[m.w] || {}).name || m.w} ${ml.name} · +${ml.coins} 코인${ml.gold ? ' +' + ml.gold + ' 골드' : ''} · 위장 해금`, M_LEVELS[ml.lv].color); A.sfxStreak(); }
   stats.bestStreak = Math.max(stats.bestStreak, m.streak || 0); stats.multiMax = Math.max(stats.multiMax, m.multi || 0);
   saveProfile();
   const W = WEAPONS[m.w];
@@ -2250,9 +2343,13 @@ function renderHub() {
     body.innerHTML = `<div class="stgrid">${cell('처치', st.kills)}${cell('죽음', st.deaths)}${cell('K/D', kd)}${cell('헤드샷률', hsr + '%')}${cell('승리', st.wins + ' / ' + st.games)}${cell('승률', wr + '%')}${cell('최고 연속킬', st.bestStreak)}${cell('최대 멀티킬', st.multiMax)}${cell('스파이크 설치', st.plants)}${cell('스파이크 해체', st.defuses)}${cell('보급상자', st.crates)}${cell('힐팩', st.heals)}</div>`
       + `<div class="ptitle small">많이 쓴 무기</div>` + (topW.length ? topW.map(([w, n]) => `<div class="wrow"><img src="${gunIcon(w === 'nade' ? 'nade' : w, 2)}"><span>${(WEAPONS[w] || {}).name || (w === 'nade' ? '수류탄' : w)}</span><b>${n}킬</b></div>`).join('') : '<div class="dim">아직 기록이 없어요</div>')
       + `<div class="ptitle small">모드별 플레이</div><div class="dim">${Object.entries(st.modes).map(([m, n]) => `${(SH.MODES[m] || {}).name || m} ${n}판`).join(' · ') || '아직 없음'}</div>`;
+  } else if (hubTab === 'history') {
+    renderHistory(body);
+  } else if (hubTab === 'mastery') {
+    renderMastery(body);
   } else if (hubTab === 'rank') {
     send({ t: 'rank' });
-    body.innerHTML = `<div class="seg" id="rankSeg"><button data-r="kills">처치</button><button data-r="wins">승리</button><button data-r="kd">K/D</button></div><div id="rankList" class="dim">불러오는 중…</div>`;
+    body.innerHTML = `<div class="seg" id="rankSeg"><button data-r="rp">경쟁전</button><button data-r="kills">처치</button><button data-r="wins">승리</button><button data-r="kd">K/D</button></div><div id="rankList" class="dim">불러오는 중…</div>`;
     body.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { rankTab = b.dataset.r; renderRank(); });
     renderRank();
   }
@@ -2262,6 +2359,12 @@ function renderRank() {
   seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === rankTab));
   if (!rankData) return;
   const list = rankData[rankTab] || [], me2 = myName();
+  if (rankTab === 'rp') {
+    $('rankList').classList.remove('dim');
+    $('rankList').innerHTML = `<div class="dim" style="margin:6px 0">경쟁전 점수 상위 20명</div><table><tr><th>#</th><th>이름</th><th>티어</th><th class="num">점수</th><th class="num">경쟁전</th></tr>` +
+      (list.length ? list.map((v, i) => `<tr class="${v.name === me2 ? 'me' : ''}"><td>${i + 1}</td><td>${esc(v.name)}</td><td>${rankBadge(v.rp || 0, true)}</td><td class="num">${v.rp || 0}</td><td class="num">${v.rgames || 0}판</td></tr>`).join('') : '<tr><td colspan="5" class="dim">아직 경쟁전 기록이 없어요</td></tr>') + '</table>';
+    return;
+  }
   $('rankList').classList.remove('dim');
   $('rankList').innerHTML = `<div class="dim" style="margin:6px 0">이 서버에서 플레이한 ${rankData.total}명 중 상위 20명 (봇 제외)</div><table><tr><th>#</th><th>이름</th><th class="num">처치</th><th class="num">승리</th><th class="num">판수</th><th class="num">K/D</th></tr>` +
     (list.length ? list.map((v, i) => `<tr class="${v.name === me2 ? 'me' : ''}"><td>${i < 3 ? `<b style="color:${['#f4c22b', '#c9ced9', '#c98a4a'][i]}">${i + 1}</b>` : i + 1}</td><td><span class="sw" style="background:${hexs(PCOLORS[v.color || 0])}"></span><span class="lv" style="color:#f4c22b;font-size:11px">Lv${v.lv || 1}</span> ${esc(v.name)}</td><td class="num">${v.kills}</td><td class="num">${v.wins}</td><td class="num">${v.games}</td><td class="num">${(v.kills / Math.max(1, v.deaths)).toFixed(2)}</td></tr>`).join('') : '<tr><td colspan="6" class="dim">아직 기록이 없어요. 매치를 끝까지 해보세요!</td></tr>') + '</table>';
@@ -2965,8 +3068,216 @@ function replayShot(sh, rt) {
 }
 
 /* ================= 메인 루프 ================= */
+/* ================= 시즌 패스 ================= */
+function updatePassUI() {
+  const s = currentSeason(), b = bp(), n = unclaimed();
+  $('passSub').textContent = `· 시즌 ${s.n} ${s.name} · ${bpTier()}단계`;
+  $('passDot').textContent = n ? n : ''; $('passDot').classList.toggle('on', n > 0);
+  void b;
+}
+function rewardIcon(rw) {
+  if (rw.type === 'skin') return `<img src="${skinThumb(rw.v)}">`;
+  if (rw.type === 'gskin') return `<img src="${gunIcon('rifle', 1, rw.v)}">`;
+  if (rw.type === 'coins') return '<i class="coin big"></i>';
+  if (rw.type === 'gold') return '<i class="goldc big"></i>';
+  if (rw.type === 'gacha') return `<img src="${chestIcon()}">`;
+  if (rw.type === 'title') return '<span class="ttl r-legend">칭호</span>';
+  return '';
+}
+function renderPass() {
+  const s = currentSeason(), b = bp(), tier = bpTier(), left = Math.max(0, Math.ceil((s.end - Date.now()) / 864e5));
+  $('passSeason').textContent = `시즌 ${s.n}: ${s.name} · ${left}일 남음`;
+  const cur = b.xp - tier * TIER_XP;
+  $('passHead').innerHTML = `<div class="ph-lv"><b>${tier}</b><small>/ ${BP_TIERS}단계</small></div>
+    <div class="ph-bar">${tier >= BP_TIERS ? '<div class="dim">모두 달성!</div>' : `<div class="xpbar"><div style="width:${cur / TIER_XP * 100}%"></div><span>${cur} / ${TIER_XP}</span></div>`}<div class="dim">매치 끝 +120~ (처치·승리·경쟁전 보너스) · 일일 미션 완료 +200 · 시즌이 끝나면 새 패스로 바뀌어요</div></div>
+    <div class="ph-btns">${b.prem ? '<span class="prem-on">프리미엄 활성</span>' : `<button id="passPrem" class="btn yellow">프리미엄 열기 · <i class="goldc"></i> ${PREMIUM_GOLD}</button>`}<button id="passAll" class="btn green" ${unclaimed() ? '' : 'disabled'}>모두 받기</button></div>`;
+  let h = '<div class="pt-rows"><div class="pt-lbl"><div>단계</div><div>무료</div><div class="prem">프리미엄</div></div>';
+  for (let t = 1; t <= BP_TIERS; t++) {
+    const cell = (track) => {
+      const rw = reward(s.n, t, track), got = b.got[track].includes(t), can = t <= tier && !got && (track === 'free' || b.prem);
+      const lock = track === 'prem' && !b.prem;
+      const big = rw.type === 'skin' || rw.type === 'gskin' || rw.type === 'title';
+      return `<div class="pt-cell ${track} ${got ? 'got' : ''} ${can ? 'can' : ''} ${lock ? 'lock' : ''} ${big ? 'big' : ''}" data-t="${t}" data-tr="${track}" title="${esc(rewardName(rw))}">${rewardIcon(rw)}<div class="pt-n">${esc(rewardName(rw))}</div>${got ? '<div class="pt-ok">받음</div>' : can ? '<div class="pt-go">받기</div>' : ''}</div>`;
+    };
+    h += `<div class="pt-col ${t <= tier ? 'reached' : ''} ${t === tier + 1 ? 'next' : ''}"><div class="pt-t">${t}</div>${cell('free')}${cell('prem')}</div>`;
+  }
+  $('passTrack').innerHTML = h + '</div>';
+  const col = $('passTrack').querySelector('.pt-col.next') || $('passTrack').querySelector('.pt-col:last-child');
+  if (col) $('passTrack').scrollLeft = Math.max(0, col.offsetLeft - 200);
+  $('passTrack').querySelectorAll('.pt-cell.can').forEach(c => c.onclick = () => { const got = claim(+c.dataset.t, c.dataset.tr); if (got) { A.sfxBuy(); notify('시즌 패스 보상: ' + got.join(', '), '#c08aff'); updateProfileUI(); renderPass(); } });
+  const pb = $('passPrem'); if (pb) pb.onclick = () => { const r = buyPremium(); if (r === 'ok') { A.sfxFanfare(); toast('프리미엄 패스를 열었어요!'); updateProfileUI(); renderPass(); } else { A.sfxDeny(); toast('골드가 부족해요'); } };
+  $('passAll').onclick = () => { const got = claimAll(); if (got.length) { A.sfxBuy(); notify(`시즌 패스 보상 ${got.length}개 받음`, '#c08aff'); updateProfileUI(); renderPass(); } };
+}
+
+/* ================= 무기 숙련도 ================= */
+function renderMastery(body) {
+  const camoName = (id) => (GUN_SKINS[id] || {}).name || id;
+  body.innerHTML = `<div class="dim" style="margin-bottom:8px">무기로 처치할수록 숙련도가 올라요 (${M_LEVELS.slice(1).map(L => `<b style="color:${L.color}">${L.name} ${L.kills}</b>`).join(' · ')}킬). 레벨마다 보상과 그 무기 전용 위장이 열려요.</div><div class="mgrid">`
+    + MASTERY_WEAPONS.map(w => {
+      const m = masteryOf(w), cur = (profile.wcamo || {})[w];
+      const camos = M_LEVELS.slice(1).map((L, i) => { const ok = m.lv >= i + 1; return `<button class="mc ${cur === L.camo ? 'on' : ''}" ${ok ? '' : 'disabled'} data-w="${w}" data-c="${L.camo}" title="${camoName(L.camo)}${ok ? '' : ' (' + L.kills + '킬)'}" style="--mc:${L.color}"><img src="${gunIcon(w === 'knife' ? 'knife' : w, 1, L.camo)}"></button>`; }).join('');
+      return `<div class="mcard"><div class="mtop"><img src="${gunIcon(w, 2, cur || profile.gskin)}"><div><b>${(WEAPONS[w] || {}).name || w}</b><div style="color:${m.L.color}">${m.L.name}${m.lv ? '' : ''} · ${m.kills}킬</div></div></div>
+        <div class="mbar"><div style="width:${m.pct * 100}%;background:${(m.next || m.L).color}"></div><span>${m.next ? `${m.kills} / ${m.next.kills}` : '최고 레벨'}</span></div>
+        <div class="mcamos"><button class="mc ${cur ? '' : 'on'}" data-w="${w}" data-c="">기본</button>${camos}</div></div>`;
+    }).join('') + '</div>';
+  body.querySelectorAll('.mc[data-w]').forEach(b => b.onclick = () => { if (setCamo(b.dataset.w, b.dataset.c || null)) { A.sfxSwitch(); renderMastery(body); } });
+}
+
+/* ================= 매치 기록 ================= */
+function saveMatchRecord(m, myIdx, win) {
+  if (S.replay || m.mode === 'practice') { recStop(); return; }
+  const mine = m.rank[myIdx];
+  const data = recStop();
+  const id = 'm' + Date.now().toString(36);
+  const h = {
+    id, at: Date.now(), mode: m.mode, map: S.mapName || '', win: m.win === -1 ? null : !!win, team: mine ? mine.team : -1,
+    k: mine ? mine.k : 0, d: mine ? mine.d : 0, place: myIdx + 1, n: m.rank.length, score: m.score, ranked: !!m.ranked,
+    rp: m.ranked && m.rp && m.rp[S.myId] ? m.rp[S.myId].d : null,
+    board: m.rank.slice(0, 12).map(p => [p.name, p.k, p.d, p.team, p.bot ? 1 : 0, p.id === S.myId ? 1 : 0]),
+    replay: !!data,
+  };
+  addHistory(h);
+  if (data) { data.meta = { mode: m.mode, map: h.map, at: h.at }; saveReplay(id, data); }
+}
+async function renderHistory(body) {
+  const list = history(), have = await replayIds();
+  body.innerHTML = `<div class="dim" style="margin-bottom:8px">최근 매치 ${list.length}개 · 기록은 ${HISTORY_DAYS}일, 리플레이는 ${REPLAY_DAYS}일 지나면 사라져요 (리플레이는 이 기기에만 저장)</div>`
+    + (list.length ? list.map(h => {
+      const ago = Math.max(0, Date.now() - h.at), when = ago < 36e5 ? Math.floor(ago / 6e4) + '분 전' : ago < 864e5 ? Math.floor(ago / 36e5) + '시간 전' : Math.floor(ago / 864e5) + '일 전';
+      const res = h.win == null ? '<b class="hdraw">무승부</b>' : h.win ? '<b class="hwin">승리</b>' : '<b class="hloss">패배</b>';
+      const rp = h.rp != null ? ` <span class="${h.rp >= 0 ? 'up' : 'down'}">${h.rp >= 0 ? '+' : ''}${h.rp} RP</span>` : '';
+      const canRp = have.has(h.id);
+      return `<div class="hrow"><div class="hmain">${res} <span>${h.ranked ? '<b class="rk-mode">경쟁전</b> ' : ''}${(SH.MODES[h.mode] || {}).name || h.mode} · ${esc(h.map)}</span> <span class="dim">${when}</span>${rp}
+        <span class="hkd">${h.k} / ${h.d} · ${h.place}위</span>
+        <button class="btn tiny" data-board="${h.id}">점수판</button><button class="btn tiny blue" data-rp="${h.id}" ${canRp ? '' : 'disabled title="리플레이가 없거나 기간이 지났어요"'}>리플레이</button></div>
+        <div class="hboard hidden" id="hb_${h.id}"><table>${h.board.map((p, i) => `<tr class="${p[5] ? 'me' : ''}"><td>${i + 1}</td><td>${p[3] >= 0 && TEAMS[p[3]] ? `<span class="sw" style="background:${TEAMS[p[3]].css}"></span>` : ''}${esc(p[0])}${p[4] ? ' <span class="dim">봇</span>' : ''}</td><td class="num">${p[1]}</td><td class="num">${p[2]}</td></tr>`).join('')}</table></div></div>`;
+    }).join('') : '<div class="dim">아직 기록이 없어요. 매치를 끝까지 해보세요!</div>');
+  body.querySelectorAll('[data-board]').forEach(b => b.onclick = () => $('hb_' + b.dataset.board).classList.toggle('hidden'));
+  body.querySelectorAll('[data-rp]').forEach(b => b.onclick = () => openReplay(b.dataset.rp));
+}
+
+/* ================= 리플레이 ================= */
+const RP = { data: null, i: 0, clock: 0, t0: 0, t1: 0, speed: 1, paused: false, follow: null, view: 1, realId: null, povOk: false, vw: null, kick: 0 };
+async function openReplay(id) {
+  if (S.room) { toast('방에서 나온 뒤에 볼 수 있어요'); return; }
+  toast('리플레이 불러오는 중…');
+  const data = await loadReplay(id);
+  if (!data || !data.msgs || !data.msgs.length) { toast('리플레이가 없거나 기간이 지났어요'); return; }
+  $('hub').classList.add('hidden');
+  RP.data = data; RP.realId = S.myId; RP.speed = 1; RP.paused = false; RP.view = 1;
+  RP.t0 = data.msgs[0][0]; RP.t1 = data.msgs[data.msgs.length - 1][0];
+  RP.follow = data.myId;
+  S.myId = '__replay'; S.replay = RP;
+  document.body.classList.add('replay');
+  $('replayBar').classList.remove('hidden');
+  $('rpTitle').textContent = `리플레이 · ${(SH.MODES[data.meta && data.meta.mode] || {}).name || ''} · ${(data.meta && data.meta.map) || ''}`;
+  replaySeek(RP.t0);
+  renderReplayPlayers();
+}
+function replayDispatch(upTo) {
+  const msgs = RP.data.msgs;
+  while (RP.i < msgs.length && msgs[RP.i][0] <= upTo) { const m = msgs[RP.i++][1]; try { onMsg(m, true); } catch (e) { console.warn(e); } }
+}
+function replaySeek(t) {
+  t = clamp(t, RP.t0, RP.t1);
+  A.setVolume(0);
+  S.roster.clear();
+  for (const p of (RP.data.room && RP.data.room.players) || []) S.roster.set(p.id, p);
+  RP.clock = RP.t0; RP.i = 1;
+  startGame(RP.data.msgs[0][1]);
+  S.myId = '__replay';
+  $('clickToPlay').classList.add('hidden');
+  RP.clock = t; replayDispatch(t);
+  clearFx(); $('killfeed').innerHTML = ''; $('center').innerHTML = ''; clearKillBanner();
+  RP.vw = null;
+  A.setVolume(CFG.vol);
+}
+function replayTick(dt) {
+  if (!RP.data) return;
+  if (!RP.paused) {
+    RP.clock = Math.min(RP.t1, RP.clock + dt * 1000 * RP.speed);
+    replayDispatch(RP.clock);
+    if (RP.clock >= RP.t1) RP.paused = true;
+  }
+}
+function replayTarget() {
+  let e = S.ents.get(RP.follow);
+  if (!e || !e.alive) { // 따라가던 사람이 죽었으면 살아 있는 사람으로 (잠깐)
+    const alive = [...S.ents.values()].filter(x => x.alive && !x.boss);
+    if (e && !e.alive) return { e, dead: true };
+    e = alive[0];
+  }
+  return e ? { e, dead: false } : null;
+}
+function replayCamera(dt) {
+  const tg = replayTarget(), rt = serverNow() - 110;
+  RP.povOk = false;
+  camera.fov = CFG.fov;
+  if (!tg) { if (S.map) { camera.position.set(S.map.W / 2, 30, S.map.D / 2 + 30); camera.lookAt(S.map.W / 2, 4, S.map.D / 2); } return; }
+  const e = tg.e, s = sampleBuf(e.buf, rt);
+  if (!s) return;
+  if (RP.view === 1 && !tg.dead && (s.fl & 1)) {
+    camera.position.set(s.x, s.y + ((s.fl & 2) ? P.EYEC : P.EYE), s.z);
+    camera.rotation.set(s.pitch, s.yaw, 0);
+    RP.povOk = true;
+    const rr = S.roster.get(e.id) || {};
+    if (s.w && s.w !== RP.vw) { RP.vw = s.w; setViewModel(s.w, { ci: rr.color || 0, skin: rr.skin || 'default', gskin: (rr.wc && rr.wc[s.w]) || rr.gskin || 'default' }); }
+  } else {
+    const yaw = s.yaw;
+    camera.position.set(s.x + Math.sin(yaw) * 3.6, s.y + 2.4, s.z + Math.cos(yaw) * 3.6);
+    camera.lookAt(s.x - Math.sin(yaw) * 3, s.y + 1.2, s.z - Math.cos(yaw) * 3);
+  }
+}
+function replayHud() {
+  const tot = Math.max(1, RP.t1 - RP.t0), cur = RP.clock - RP.t0, f = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+  $('rpTime').textContent = `${f(cur)} / ${f(tot)}${RP.clock >= RP.t1 ? ' · 끝' : ''}`;
+  $('rpFill').style.width = (cur / tot * 100) + '%';
+  $('rpPlay').textContent = RP.paused ? '재생' : '일시정지';
+  $('rpView').textContent = RP.view === 1 ? '1인칭' : '3인칭';
+  $('rpSpeed').querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.s) === RP.speed));
+  const k = RP.follow + [...S.ents.values()].filter(e => e.alive).length;
+  if ($('rpPlayers').dataset.k !== k) { $('rpPlayers').dataset.k = k; renderReplayPlayers(); }
+}
+function renderReplayPlayers() {
+  const list = [...S.roster.values()].filter(p => !p.boss);
+  $('rpPlayers').innerHTML = list.map(p => `<button class="rpp ${p.id === RP.follow ? 'on' : ''} ${(S.ents.get(p.id) || {}).alive ? '' : 'dead'}" data-id="${p.id}" style="border-color:${p.team >= 0 && TEAMS[p.team] && S.mode !== 'ffa' ? TEAMS[p.team].css : '#555'}">${esc(p.name)}${p.id === RP.data.myId ? ' (나)' : ''}</button>`).join('');
+  $('rpPlayers').querySelectorAll('[data-id]').forEach(b => b.onclick = () => { RP.follow = b.dataset.id; RP.vw = null; renderReplayPlayers(); });
+}
+function replayNext(dir) {
+  const ids = [...S.roster.values()].filter(p => !p.boss).map(p => p.id);
+  const i = ids.indexOf(RP.follow); RP.follow = ids[(i + (dir || 1) + ids.length) % ids.length]; RP.vw = null; renderReplayPlayers();
+}
+function replayKey(e) {
+  if (e.code === 'Escape') { exitReplay(); return; }
+  if (e.code === 'Space') { RP.paused = !RP.paused; if (!RP.paused && RP.clock >= RP.t1) replaySeek(RP.t0); e.preventDefault(); }
+  else if (e.code === 'ArrowLeft') replaySeek(RP.clock - 10000);
+  else if (e.code === 'ArrowRight') replaySeek(RP.clock + 10000);
+  else if (e.code === 'Tab') { replayNext(e.shiftKey ? -1 : 1); e.preventDefault(); }
+  else if (e.code === 'KeyV') RP.view = RP.view === 1 ? 3 : 1;
+}
+function exitReplay() {
+  if (!S.replay) return;
+  S.replay = null; RP.data = null;
+  leaveGame();
+  for (const id of [...S.ents.keys()]) removeEnt(id);
+  S.myId = RP.realId; S.roster.clear();
+  document.body.classList.remove('replay');
+  $('replayBar').classList.add('hidden');
+  A.setVolume(CFG.vol);
+  showScreen('menu');
+}
+$('rpExit').onclick = exitReplay;
+$('rpPlay').onclick = () => { RP.paused = !RP.paused; if (!RP.paused && RP.clock >= RP.t1) replaySeek(RP.t0); };
+$('rpBack').onclick = () => replaySeek(RP.clock - 10000);
+$('rpFwd').onclick = () => replaySeek(RP.clock + 10000);
+$('rpView').onclick = () => { RP.view = RP.view === 1 ? 3 : 1; };
+$('rpSpeed').querySelectorAll('button').forEach(b => b.onclick = () => { RP.speed = Number(b.dataset.s); });
+$('rpProg').onclick = (ev) => { const r = $('rpProg').getBoundingClientRect(); replaySeek(RP.t0 + (ev.clientX - r.left) / r.width * (RP.t1 - RP.t0)); };
+purgeReplays();
+
 let lastT = performance.now();
 function frame(dt) {
+  if (S.replay) replayTick(dt);
   if (S.inGame) {
     updateKillcam();
     updateMe(dt);
@@ -2990,7 +3301,7 @@ function frame(dt) {
     renderer.clear();
     renderer.render(scene, camera);
     renderer.clearDepth();
-    if ((me.alive && !S.selfEmote) || (S.kc && S.kc.active)) renderer.render(viewScene, viewCam);
+    if ((me.alive && !S.selfEmote && !S.replay) || (S.kc && S.kc.active) || (S.replay && RP.view === 1 && RP.povOk)) renderer.render(viewScene, viewCam);
   } else {
     if (ED.on) { editorFrame(dt); return; }
     renderer.clear();
@@ -3015,6 +3326,9 @@ function loop() {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+initAbility({ send, cfg: CFG, saveCfg, A, me, S, serverNow, toast, showBig, isMate, spawnParticle, state: S.abil, BLOCK_COLOR,
+  rebuildBlocks: (cells) => rebuildBlocks(S.world, cells),
+  flash: (a, c) => { const v = $('vignette'); v.style.background = c; v.style.opacity = a; clearTimeout(v.ft); v.ft = setTimeout(() => { v.style.opacity = 0; v.style.background = ''; }, 160); } });
 initAuth({ send, onReady: onLoggedIn });
 connect();
 

@@ -44,6 +44,8 @@
       <div class="panel grow">
         <div class="ptitle">플레이</div>
         <button id="quickBtn" class="btn big yellow">빠른 시작 <small>봇과 바로 대전 (모드 무작위)</small></button>
+        <div class="row rankrow"><button id="rankedBtn" class="btn big red grow">경쟁전 <small>판수를 쌓으면 티어가 올라가요</small></button><div id="rankCard" class="rankcard"></div></div>
+        <button id="passBtn" class="btn wide purple">시즌 패스 <small id="passSub"></small><span id="passDot"></span></button>
         <div class="row"><button id="hubBtn" class="btn green grow">미션 · 업적 <span id="missionDot"></span></button><button id="rankBtn" class="btn blue grow">전적 · 랭킹</button></div>
         <button id="settingsBtn" class="btn wide">설정 <small>· 조준선 · 조작키 · 감도</small></button>
         <button id="editorBtn" class="btn wide">맵 에디터 <small>· 블록으로 나만의 맵 만들기</small></button>
@@ -58,8 +60,8 @@
         <div class="help">
           <b>WASD</b> 이동 · <b>Shift</b> 달리기 · <b>Space</b> 점프(2단) · <b>C</b> 앉기(달리면서 누르면 슬라이딩)<br>
           <b>좌클릭</b> 사격 · <b>우클릭</b> 조준 · <b>R</b> 재장전 · <b>1~4/휠</b> 무기 · <b>G</b> 수류탄 · <b>V</b> 칼<br>
-          <b>B</b> 상점(부활 후 8초) · 빨간 받침대 = 힐팩 · 파란 받침대 = 갑옷 상자 (시간 지나면 다시 생겨요) · <b>Z</b> 포탑 설치 · <b>X</b> 공습 · <b>Y</b> 감정표현 · <b>T</b> 스프레이 · <b>F</b>(길게) 스파이크 설치 · <b>E</b>(길게) 해체 / 보급상자 열기 · <b>E</b> 무기 줍기 · <b>Tab</b> 점수 · <b>Enter</b> 채팅 · <b>Esc</b> 메뉴<br>
-          로켓·수류탄으로 벽을 부술 수 있어요 · 죽으면 <b>킬캠</b> (Space로 건너뛰기) · 키는 <b>설정</b>에서 바꿀 수 있어요
+          <b>B</b> 상점(부활 후 8초) · 빨간 받침대 = 힐팩 · 파란 받침대 = 갑옷 상자 (시간 지나면 다시 생겨요) · <b>Z</b> 포탑 설치 · <b>X</b> 공습 · <b>Y</b> 감정표현 · <b>T</b> 스프레이 · <b>F</b> 총 살펴보기 · <b>F</b>(길게) 스파이크 설치 · <b>E</b>(길게) 해체 / 보급상자 열기 · <b>E</b> 무기 줍기 · <b>Tab</b> 점수 · <b>Enter</b> 채팅 · <b>Esc</b> 메뉴<br>
+          능력전: <b>Q</b> 스킬 · <b>X</b> 궁극기 · 로켓·수류탄으로 벽을 부술 수 있어요 · 죽으면 <b>킬캠</b> (Space로 건너뛰기) · 키는 <b>설정</b>에서 바꿀 수 있어요
         </div>
       </div>
     </div>
@@ -93,7 +95,7 @@
     <div class="panel grow">
       <div class="ptitle">매치 설정 <span id="hostNote" class="dim"></span></div>
       <div class="ptitle small">모드</div>
-      <div class="modegrid" id="modeSeg"><button data-v="random" class="rnd">? 랜덤</button><button data-v="ffa">개인전</button><button data-v="tdm">팀 데스매치</button><button data-v="ctf">깃발 뺏기</button><button data-v="spike">스파이크</button><button data-v="zombie">좀비 감염</button><button data-v="gungame">건게임</button><button data-v="br">배틀로얄</button><button data-v="boss">보스전</button></div>
+      <div class="modegrid" id="modeSeg"><button data-v="random" class="rnd">? 랜덤</button><button data-v="ffa">개인전</button><button data-v="tdm">팀 데스매치</button><button data-v="ctf">깃발 뺏기</button><button data-v="spike">스파이크</button><button data-v="zombie">좀비 감염</button><button data-v="gungame">건게임</button><button data-v="br">배틀로얄</button><button data-v="boss">보스전</button><button data-v="ability">능력전</button></div>
       <div id="modeDesc" class="dim modedesc"></div>
       <div class="ptitle small">맵 <span id="mapCount" class="dim"></span></div>
       <div class="mapscroll"><div id="mapCards" class="mapcards"></div></div>
@@ -138,6 +140,7 @@
   <div id="center"></div>
   <div id="streak"></div>
   <div id="killBanner"></div>
+  <div id="abilHud" class="hidden"></div>
   <div id="bigMsg"></div>
   <div id="hint"></div>
   <div id="buyHint"></div>
@@ -193,9 +196,27 @@
 <div id="hub" class="modal hidden">
   <div class="panel hub-panel">
     <div class="ptitle">내 기록 <button id="hubClose" class="btn tiny red right">닫기</button></div>
-    <div class="seg tabs" id="hubTabs"><button data-tab="mission">일일 미션</button><button data-tab="ach">업적</button><button data-tab="stats">전적</button><button data-tab="rank">랭킹</button></div>
+    <div class="seg tabs" id="hubTabs"><button data-tab="mission">일일 미션</button><button data-tab="ach">업적</button><button data-tab="stats">전적</button><button data-tab="history">매치 기록</button><button data-tab="mastery">무기 숙련도</button><button data-tab="rank">랭킹</button></div>
     <div id="hubBody"></div>
   </div>
+</div>
+<div id="pass" class="modal hidden">
+  <div class="panel pass-panel">
+    <div class="ptitle">시즌 패스 <span id="passSeason" class="dim"></span><button id="passClose" class="btn tiny red right">닫기</button></div>
+    <div id="passHead"></div>
+    <div id="passTrack"></div>
+  </div>
+</div>
+<div id="replayBar" class="hidden">
+  <div class="rp-top"><b id="rpTitle">리플레이</b> <span id="rpTime" class="dim"></span><button id="rpExit" class="btn tiny red right">나가기 (Esc)</button></div>
+  <div id="rpProg"><div id="rpFill"></div><div id="rpMarks"></div></div>
+  <div class="rp-ctl">
+    <button id="rpBack" class="btn tiny">-10초</button><button id="rpPlay" class="btn tiny green">일시정지</button><button id="rpFwd" class="btn tiny">+10초</button>
+    <span class="seg" id="rpSpeed"><button data-s="0.5">0.5x</button><button data-s="1">1x</button><button data-s="2">2x</button><button data-s="4">4x</button></span>
+    <button id="rpView" class="btn tiny blue">1인칭</button>
+    <span class="dim">Space 일시정지 · ←/→ 10초 · Tab 다음 사람 · V 시점</span>
+  </div>
+  <div id="rpPlayers"></div>
 </div>
 <div id="settings" class="modal hidden">
   <div class="panel set-panel">

@@ -33,6 +33,13 @@ export const TITLES = {
   immortal: { name: '불멸자', r: 'legend', req: { gold: 150 } },
   godhand: { name: '신의 손', r: 'legend', req: { gold: 250 } },
   king: { name: '픽셀의 왕', r: 'legend', req: { gold: 400 } },
+  // 시즌 패스 보상
+  s1_pioneer: { name: 'S1 개척자', r: 'rare', req: { bp: 1 } },
+  s1_champ: { name: 'S1 정복자', r: 'legend', req: { bp: 1 } },
+  // 경쟁전 최고 티어
+  rk_gold: { name: '골드 랭커', r: 'rare', req: { rp: 600 } },
+  rk_diamond: { name: '다이아 랭커', r: 'epic', req: { rp: 1200 } },
+  rk_god: { name: '신', r: 'legend', req: { rp: 1800 } },
 };
 
 function list() { if (!Array.isArray(profile.titles)) profile.titles = []; return profile.titles; }
@@ -41,7 +48,8 @@ export function titleOwned(id) {
   const q = t.req;
   if (q.lv) return myLevel() >= q.lv;
   if (q.ach) return !!(profile.ach && profile.ach[q.ach]);
-  if (q.coins || q.gold) return list().includes(id);
+  if (q.coins || q.gold || q.bp) return list().includes(id);
+  if (q.rp) return ((profile.ranked && profile.ranked.best) || 0) >= q.rp;
   return true;
 }
 export function titleHow(id) {
@@ -50,6 +58,8 @@ export function titleHow(id) {
   if (q.ach) return '업적 달성 시 획득';
   if (q.coins) return `${q.coins} 코인`;
   if (q.gold) return `${q.gold} 골드`;
+  if (q.bp) return `시즌 ${q.bp} 패스 보상`;
+  if (q.rp) return `경쟁전 최고 ${window.SH.RANKED.info(q.rp).name} 달성`;
   return '기본 칭호';
 }
 export function buyTitle(id) {

@@ -33,12 +33,12 @@ function achHtml(it) {
 export function renderSkinShop(kind) {
   if (pickKind !== kind) { pickKind = kind; pickId = curOf(kind); }
   const list = listOf(kind), owned = ownedOf(kind), cur = curOf(kind), lv = myLevel();
-  const ids = Object.keys(list).filter(id => filter === 'all' || (filter === 'own' ? owned.includes(id) : rarityOf(list[id]) === filter)).sort((a, b) => RARITY_ORDER[rarityOf(list[a])] - RARITY_ORDER[rarityOf(list[b])] || (list[a].gold || 0) - (list[b].gold || 0) || (list[a].price || 0) - (list[b].price || 0));
-  const cnt = (f) => Object.keys(list).filter(id => f === 'all' || (f === 'own' ? owned.includes(id) : rarityOf(list[id]) === f)).length;
+  const ids = Object.keys(list).filter(id => !list[id].hidden).filter(id => filter === 'all' || (filter === 'own' ? owned.includes(id) : rarityOf(list[id]) === filter)).sort((a, b) => RARITY_ORDER[rarityOf(list[a])] - RARITY_ORDER[rarityOf(list[b])] || (list[a].gold || 0) - (list[b].gold || 0) || (list[a].price || 0) - (list[b].price || 0));
+  const cnt = (f) => Object.keys(list).filter(id => !list[id].hidden).filter(id => f === 'all' || (f === 'own' ? owned.includes(id) : rarityOf(list[id]) === f)).length;
   $('lockerGrid').innerHTML = `<div class="sk-filter">${FILTERS.map(([f, n]) => `<button data-f="${f}" class="${filter === f ? 'on' : ''} ${f !== 'all' && f !== 'own' ? 'r-' + f : ''}">${n} <small>${cnt(f)}</small></button>`).join('')}</div>` + ids.map(id => {
     const it = list[id], r = rarityOf(it), own = owned.includes(id), lock = !own && lv < it.lv;
     const th = kind === 'skin' ? D.thumb(id) : gunIcon('rifle', 2, id);
-    const pr = own ? `<div class="pr own">${id === cur ? '장착 중' : '보유'}</div>` : lock ? `<div class="pr lv">Lv.${it.lv} 필요</div>` : `<div class="pr ${it.gold ? 'gold' : ''}">${priceHtml(it)}</div>`;
+    const pr = own ? `<div class="pr own">${id === cur ? '장착 중' : '보유'}</div>` : it.bp ? `<div class="pr lv">시즌 패스</div>` : lock ? `<div class="pr lv">Lv.${it.lv} 필요</div>` : `<div class="pr ${it.gold ? 'gold' : ''}">${priceHtml(it)}</div>`;
     const gc = it.glow ? `style="--gc:#${it.glow.c1.toString(16).padStart(6, '0')}"` : it.halo ? `style="--gc:#${it.halo.toString(16).padStart(6, '0')}"` : '';
     return `<div class="lcard r-${r} ${id === cur ? 'eq' : ''} ${id === pickId ? 'sel' : ''} ${lock ? 'lock' : ''}" data-id="${id}" ${gc}><div class="rtag">${RARITY_BY[r].name}</div><div class="th"><img src="${th}"></div><div class="nm">${esc(it.name)}</div>${pr}</div>`;
   }).join('');
@@ -53,6 +53,7 @@ function renderInfo(kind) {
   const r = rarityOf(it), R = RARITY_BY[r], own = ownedOf(kind).includes(pickId), eq = curOf(kind) === pickId, lock = !own && myLevel() < it.lv;
   const btn = eq ? '<button class="btn wide" disabled>장착 중</button>'
     : own ? '<button class="btn green wide" id="skAct">장착하기</button>'
+      : it.bp ? `<button class="btn wide" disabled>시즌 ${it.bp} 패스 보상</button>`
       : lock ? `<button class="btn wide" disabled>Lv.${it.lv} 필요</button>`
         : `<button class="btn yellow wide" id="skAct">구매 · ${priceHtml(it)}</button>`;
   $('lockerSel').innerHTML = `<div class="skinfo r-${r}"><div class="sk-r" style="color:${R.color}">${R.name}</div><div class="sk-n">${esc(it.name)}</div>

@@ -930,7 +930,52 @@
   }
 
   /* ================= 모드 ================= */
-  const MODES = { ffa: { name: '개인전' }, tdm: { name: '팀 데스매치' }, ctf: { name: '깃발 뺏기' }, spike: { name: '스파이크' }, zombie: { name: '좀비 감염' }, gungame: { name: '건게임' }, br: { name: '배틀로얄' }, boss: { name: '보스전' }, practice: { name: '연습장', hidden: true } };
+  const MODES = { ffa: { name: '개인전' }, tdm: { name: '팀 데스매치' }, ctf: { name: '깃발 뺏기' }, spike: { name: '스파이크' }, zombie: { name: '좀비 감염' }, gungame: { name: '건게임' }, br: { name: '배틀로얄' }, boss: { name: '보스전' }, ability: { name: '능력전' }, practice: { name: '연습장', hidden: true } };
+
+  /* ================= 능력전: 능력자 6명 (Q 스킬 + X 궁극기) ================= */
+  // cd: 쿨타임(초), cost: 궁극기 포인트 (처치 1 · 30초마다 1), dur: 지속(초)
+  const HEROES = {
+    jett: { name: '질풍', color: '#7af0ff', role: '돌격', q: { name: '돌진', cd: 7, desc: '보는 방향으로 순식간에 돌진' }, x: { name: '폭풍 질주', cost: 5, dur: 8, desc: '8초간 이동속도 +35%, 돌진 쿨타임 1.5초' } },
+    sage: { name: '수호자', color: '#7df07d', role: '지원', q: { name: '치유', cd: 16, desc: '나와 6m 안 아군 체력 50 회복' }, x: { name: '보호 결계', cost: 6, desc: '나와 8m 안 아군 방어막 +100 · 체력 가득' } },
+    sova: { name: '정찰병', color: '#6ab0ff', role: '정찰', q: { name: '정찰 화살', cd: 18, desc: '30m 안의 적을 4초간 팀에게 표시' }, x: { name: '전장 감시', cost: 5, dur: 10, desc: '10초간 모든 적 위치 표시' } },
+    raze: { name: '폭파병', color: '#ff9a3a', role: '화력', q: { name: '충격 폭탄', cd: 12, desc: '빨리 터지는 폭탄 투척 (피해 80)' }, x: { name: '로켓 일격', cost: 6, desc: '강력한 로켓 한 발 발사' } },
+    ghost: { name: '유령', color: '#c08aff', role: '잠입', q: { name: '순간이동', cd: 10, desc: '앞으로 최대 8m 순간이동' }, x: { name: '투명화', cost: 5, dur: 6, desc: '6초간 거의 안 보임 (공격하면 풀림)' } },
+    wall: { name: '철벽', color: '#c8b080', role: '방어', q: { name: '방벽', cd: 18, desc: '앞에 블록 벽을 세움 (8초 뒤 사라짐)' }, x: { name: '강철 피부', cost: 6, dur: 6, desc: '6초간 받는 피해 60% 감소' } },
+  };
+  const ABIL = { ULT_SEC: 30, ULT_MAX: 6, DASH: 19, BLINK: 8, WALL_LIFE: 8000 };
+
+  /* ================= 경쟁전 티어 ================= */
+  // 단계마다 100점. 브론즈~왕은 3단계(III→I), 신은 한 단계 (점수만 계속 쌓임)
+  const RANKED = {
+    TIERS: [
+      { id: 'bronze', name: '브론즈', color: '#c8834a', dark: '#6a3a1a' },
+      { id: 'silver', name: '실버', color: '#c8d0dc', dark: '#5a6270' },
+      { id: 'gold', name: '골드', color: '#f4c22b', dark: '#8a5a10' },
+      { id: 'plat', name: '플래티넘', color: '#5af0d0', dark: '#1a6a6a' },
+      { id: 'diamond', name: '다이아', color: '#8ab8ff', dark: '#2a3a9a' },
+      { id: 'king', name: '왕', color: '#ff6a5a', dark: '#7a1010' },
+      { id: 'god', name: '신', color: '#ffffff', dark: '#b08aff' },
+    ],
+    DIV: 100,
+    MODES: ['tdm', 'spike', 'ability'],
+    // 판수를 많이 하면 오르도록: 지더라도 골드까지는 점수가 오르고, 그 위로는 조금만 깎임
+    delta(rp, win, draw, perf) {
+      const ti = Math.min(6, Math.floor(rp / 300));
+      const bonus = Math.max(0, Math.min(8, Math.round(perf)));
+      if (draw) return 6 + Math.floor(bonus / 2);
+      if (win) return 26 - ti * 2 + bonus;
+      return [10, 8, 5, 0, -4, -8, -12][ti] + Math.floor(bonus / 2);
+    },
+    info(rp) {
+      rp = Math.max(0, rp | 0);
+      const T = RANKED.TIERS, ti = Math.min(T.length - 1, Math.floor(rp / 300));
+      if (ti === T.length - 1) return { ti, tier: T[ti], div: 0, name: T[ti].name, pt: rp - ti * 300, need: 0, rp };
+      const div = 2 - Math.floor((rp - ti * 300) / 100); // 2 → III, 0 → I
+      return { ti, tier: T[ti], div, name: T[ti].name + ' ' + ['I', 'II', 'III'][div], pt: rp % 100, need: 100, rp };
+    },
+    // 평균 점수 → 봇 실력 (0~1)
+    botSkill(rp) { return Math.min(0.95, 0.3 + rp / 2100 * 0.62); },
+  };
   const GG_LADDER = ['pistol', 'magnum', 'smg', 'shotgun', 'rifle', 'carbine', 'lmg', 'sniper', 'minigun', 'rocket', 'knife'];
   const ZB = { PREP: 20000, HP: 600, FIRST_HP: 1000, SPEED: 1.22 };
   const BOSS = { HP: 3000, PER: 1800, SPEED: 3.6, SPEED2: 5.2 };
@@ -944,7 +989,7 @@
     if (cfg.mode === 'practice') return 99999;
     if (cfg.mode === 'gungame') return GG_LADDER.length;
     if (cfg.mode === 'zombie' || cfg.mode === 'br' || cfg.mode === 'boss') return 1;
-    if (cfg.mode === 'tdm') return cfg.kills * 2;
+    if (cfg.mode === 'tdm' || cfg.mode === 'ability') return cfg.kills * 2;
     if (cfg.mode === 'ctf') return { 15: 3, 25: 5, 40: 7 }[cfg.kills] || 3;
     return cfg.kills;
   }
@@ -987,6 +1032,7 @@
   ITEMS.rock = { dmg: 45, radius: 3.6, blast: 1.6 };
   ITEMS.spike = { dmg: 500, radius: 11, blast: 3 };
   ITEMS.rocket = { dmg: WEAPONS.rocket.dmg, radius: WEAPONS.rocket.radius, blast: 2.3 };
+  ITEMS.sticky = { dmg: 80, radius: 3.6, blast: 1.2, fuse: 1.1 };
   function maxShotDamage(w) {
     const W = WEAPONS[w]; if (!W) return 0;
     if (W.melee) return W.dmg * 3;
@@ -1030,5 +1076,5 @@
     return null;
   }
 
-  return { MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });
