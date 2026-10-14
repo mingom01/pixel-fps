@@ -20,7 +20,7 @@ const ownedOf = (kind) => kind === 'skin' ? profile.skins : profile.gskins;
 const curOf = (kind) => kind === 'skin' ? profile.skin : profile.gskin;
 
 function priceHtml(it) {
-  if (it.r === 'legend') return `<i class="coin"></i> ${it.price.toLocaleString()} + <i class="goldc"></i> ${it.gold}`;
+  if (it.r === 'legend') return `<i class="coin"></i> ${it.price.toLocaleString()} + <i class="goldc"></i> ${it.gold.toLocaleString()}`;
   return it.gold ? `<i class="goldc"></i> ${it.gold} 골드` : `<i class="coin"></i> ${it.price}`;
 }
 // 전설: 무료로 받을 수 있는 업적 안내

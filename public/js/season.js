@@ -5,7 +5,7 @@ import { CHAR_SKINS } from './skins/charSkins.js';
 import { GUN_SKINS } from './skins/gunSkins.js';
 import { TITLES } from './titles.js';
 
-export const TIERS = 50, TIER_XP = 500, PREMIUM_GOLD = 150;
+export const TIERS = 50, TIER_XP = 500, PREMIUM_GOLD = 3000;
 const EPOCH = { y: 2026, m: 9 }; // 2026년 10월 = 시즌 1 (월은 0부터)
 const NAMES = ['픽셀 개막', '불꽃 전선', '얼음 왕국', '네온 시티', '사막의 폭풍', '심해 작전'];
 

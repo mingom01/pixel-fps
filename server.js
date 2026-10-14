@@ -1049,7 +1049,7 @@ function handle(c, m) {
   const r = c.room;
   switch (m.t) {
     case 'list':
-      c.send({ t: 'rooms', list: [...rooms.values()].filter(x => x.pub && x.clients.size < MAX_ROOM).map(x => ({ code: x.code, n: x.clients.size, map: x.cfg.map, mode: x.cfg.mode, rmode: !!x.cfg.rmode, rmap: !!x.cfg.rmap, state: x.state, host: (x.ents.get(x.hostId) || {}).name })) });
+      c.send({ t: 'rooms', list: [...rooms.values()].filter(x => x.pub && x.clients.size < MAX_ROOM).map(x => ({ code: x.code, n: x.clients.size, map: x.cfg.map, mode: x.cfg.mode, rmode: !!x.cfg.rmode, rmap: !!x.cfg.rmap, state: x.state, ranked: !!x.cfg.ranked, host: (x.ents.get(x.hostId) || {}).name })) });
       break;
     case 'create': {
       const nr = createRoom(c, m.cfg, !m.quick);
@@ -1060,7 +1060,6 @@ function handle(c, m) {
     case 'join': {
       const nr = rooms.get(String(m.code || '').trim());
       if (!nr) { c.send({ t: 'err', text: '방을 찾을 수 없어요' }); break; }
-      if (nr.cfg.ranked) { c.send({ t: 'err', text: '경쟁전 방은 경쟁전 버튼으로 들어가요' }); break; }
       if (nr.clients.size >= MAX_ROOM) { c.send({ t: 'err', text: '방이 꽉 찼어요' }); break; }
       joinRoom(c, nr, m);
       break;
@@ -1093,6 +1092,7 @@ function handle(c, m) {
     }
     case 'team': {
       if (!r || r.state === 'play' || !teamMode(r)) break;
+      if (r.cfg.ranked) { c.send({ t: 'err', text: '경쟁전에서는 팀을 바꿀 수 없어요 (자동 배정)' }); break; }
       const e = r.ents.get(c.id); if (!e) break;
       e.team = e.team === 0 ? 1 : 0; ensureTeams(r); pushRoom(r);
       break;
@@ -1657,16 +1657,17 @@ function aimAt(b, t) { if (!t) return false; const dx = t.x - b.x, dz = t.z - b.
 /* ---------- 경쟁전 ---------- */
 // 대기 중인 경쟁전 방이 있으면 들어가고, 없으면 새로 만듦 (10초 뒤 자동 시작, 빈자리는 실력 맞춘 봇)
 function rankedQueue(c, m) {
-  let r = [...rooms.values()].find(x => x.cfg.ranked && x.state === 'wait' && x.clients.size < 6);
+  const open = [...rooms.values()].filter(x => x.cfg.ranked && x.clients.size < 6 && x.state !== 'end');
+  let r = open.find(x => x.state === 'wait') || open.find(x => x.state === 'play' && x.endAt - Date.now() > 60000);
   if (!r) {
     const mode = pick(RANKED.MODES);
     r = createRoom(c, { mode, map: 'village', bots: 9, time: 300, kills: 25, diff: 'hard' }, false);
-    r.cfg.ranked = true; r.cfg.rmap = true;
+    r.cfg.ranked = true; r.cfg.rmap = true; r.pub = true;
     rollRandom(r); r.cfg.rmap = false;
     r.autoAt = Date.now() + 10000;
   }
   joinRoom(c, r, m);
-  if (r.autoAt - Date.now() < 5000) r.autoAt = Date.now() + 5000;
+  if (r.state === 'wait' && r.autoAt - Date.now() < 5000) r.autoAt = Date.now() + 5000;
   pushRoom(r);
 }
 function rankedStart(r) {

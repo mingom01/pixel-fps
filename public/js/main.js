@@ -285,7 +285,7 @@ function renderTitles() {
 function renderRoomList(list) {
   const box = $('roomList');
   if (!list.length) { box.innerHTML = '<div class="dim">방이 없어요. 새로 만들어 보세요!</div>'; return; }
-  box.innerHTML = list.map(r => `<div class="roomitem" data-code="${r.code}"><span class="code">${r.code}</span><span>${esc(r.host || '')}의 방</span><span class="dim">${r.rmode && r.state !== 'play' ? '랜덤 모드' : SH.MODES[r.mode || 'ffa'].name} · ${(r.rmode || r.rmap) && r.state !== 'play' ? '랜덤 맵' : (SH.MAPS[r.map] || { name: '커스텀 맵' }).name} · ${r.n}명</span><span class="tag ${r.state === 'play' ? 'play' : ''}">${r.state === 'play' ? '게임 중' : '대기 중'}</span></div>`).join('');
+  box.innerHTML = list.map(r => `<div class="roomitem" data-code="${r.code}"><span class="code">${r.code}</span><span>${r.ranked ? '<b class="rk-mode">경쟁전</b>' : esc(r.host || '') + '의 방'}</span><span class="dim">${r.rmode && r.state !== 'play' ? '랜덤 모드' : SH.MODES[r.mode || 'ffa'].name} · ${(r.rmode || r.rmap) && r.state !== 'play' ? '랜덤 맵' : (SH.MAPS[r.map] || { name: '커스텀 맵' }).name} · ${r.n}명</span><span class="tag ${r.state === 'play' ? 'play' : ''}">${r.state === 'play' ? '게임 중' : '대기 중'}</span></div>`).join('');
   box.querySelectorAll('.roomitem').forEach(el => el.onclick = () => { A.initAudio(); send(Object.assign({ t: 'join', code: el.dataset.code }, joinInfo())); });
 }
 $('quickBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', quick: true, cfg: { map: 'village', mode: 'ffa', rmode: true, rmap: true, bots: 7, time: 300, kills: 25, diff: 'normal' } }, joinInfo())); };

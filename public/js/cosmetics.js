@@ -8,9 +8,10 @@ export { RARITY, rarityOf };
 export const EMOTE_SLOTS = 8; // 감정표현 휠 칸 수
 
 /* ================= 전설 스킨: 얻기 어렵게 =================
-   1) 구매: Lv.15 이상 + 코인과 골드를 둘 다 많이 냄
+   1) 구매: 종류(캐릭터/총)별로 줄을 세워서 첫 번째는 Lv.15, 다음은 Lv.20, 25 … (5레벨씩)
+      가격도 하나 올라갈 때마다 2배 (코인과 골드를 둘 다 냄)
    2) 지정된 업적을 달성하면 무료로 받음 */
-export const LEGEND_LV = 15;
+export const LEGEND_LV = 15, LEGEND_LV_STEP = 5, LEGEND_BASE = { coins: 20000, gold: 300 };
 export const LEGEND_ACH = {
   skin: { shadow: 'st10', dragon: 'k1000', golden: 'w100', valkyrie: 'hs200', voidwalker: 'penta', frostqueen: 'st15', phoenixlord: 'k2000' },
   gskin: {
@@ -19,11 +20,13 @@ export const LEGEND_ACH = {
   },
 };
 for (const [kind, list] of [['skin', CHAR_SKINS], ['gskin', GUN_SKINS]]) {
-  for (const [id, it] of Object.entries(list)) {
-    if (it.r !== 'legend' || it.legendFixed || it.bp || it.hidden) continue;
-    const g = it.gold || 200;
-    Object.assign(it, { legendFixed: true, lv: LEGEND_LV, price: 20000 + Math.round(g / 10) * 400, gold: g * 2, ach: LEGEND_ACH[kind][id] || null });
-  }
+  // 원래 골드 가격이 싼 것부터 순서대로
+  const ids = Object.keys(list).filter(id => { const it = list[id]; return it.r === 'legend' && !it.legendFixed && !it.bp && !it.hidden; })
+    .sort((a, b) => (list[a].gold || 0) - (list[b].gold || 0) || a.localeCompare(b));
+  ids.forEach((id, i) => {
+    const it = list[id], mul = Math.pow(2, i);
+    Object.assign(it, { legendFixed: true, lv: LEGEND_LV + LEGEND_LV_STEP * i, price: LEGEND_BASE.coins * mul, gold: LEGEND_BASE.gold * mul, ach: LEGEND_ACH[kind][id] || null });
+  });
 }
 
 const KEY = 'pf_profile';
@@ -249,7 +252,7 @@ export function checkAchievements() {
 }
 
 /* ================= 골드 뽑기 상자 ================= */
-export const GACHA_COST = 30;
+export const GACHA_COST = 100;
 export function rollGacha() {
   if (profile.gold < GACHA_COST) return { err: 'gold' };
   profile.gold -= GACHA_COST;
