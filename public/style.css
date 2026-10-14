@@ -688,7 +688,7 @@ body.touch #botRight { top: 56px; left: 14px; right: auto; transform-origin: top
 .bpx { color: #c08aff; }
 
 /* ================= 능력전 ================= */
-.heroes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.heroes { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
 .hero { border: 3px solid var(--line); background: rgba(10,12,20,0.6); padding: 6px 8px; cursor: pointer; font-size: 12px; }
 .hero:hover { background: rgba(40,48,80,0.8); }
 .hero.on { border-color: var(--hc); box-shadow: 0 0 0 2px var(--hc) inset; }
@@ -775,3 +775,6 @@ body.touch #abilHud { bottom: 160px; }
 .rpp.dead { opacity: 0.45; }
 body.replay #botLeft, body.replay #botRight, body.replay #cross, body.replay #buyHint, body.replay #hint, body.replay #clickToPlay, body.replay #death, body.replay #abilHud, body.replay #practiceHud { display: none !important; }
 body.abil #killBanner { bottom: 16%; }
+/* 경쟁전 대기실: 설정·봇 관리 숨김 */
+#lobby.ranked #modeSeg, #lobby.ranked .grow > .ptitle.small, #lobby.ranked .mapscroll, #lobby.ranked .cfgrow, #lobby.ranked #lobbyBotBtns, #lobby.ranked .kick, #lobby.ranked #teamBtn { display: none !important; }
+#lobby.ranked #modeDesc { font-size: 14px; color: var(--text); margin: 10px 0; }

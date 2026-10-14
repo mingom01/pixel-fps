@@ -417,7 +417,7 @@ function onRoom(m) {
     $('startBtn').disabled = true; $('hostNote').textContent = '경쟁전';
     const sec = Math.max(0, Math.ceil((m.autoAt - Date.now() - (S.off || 0)) / 1000));
     $('startBtn').textContent = m.state === 'wait' ? (m.autoAt ? `${sec}초 뒤 자동 시작` : '곧 시작') : '진행 중';
-    $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name}</b> · 이기면 점수가 크게 오르고, 져도 낮은 티어에선 조금 올라요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
+    $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>이기면 점수가 크게 오르고, 져도 낮은 티어에선 조금 올라요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
     clearTimeout(S.rankTick); if (m.state === 'wait' && m.autoAt) S.rankTick = setTimeout(() => { if (S.room === m) onRoom(m); }, 1000);
   }
   $('botsVal').textContent = m.cfg.bots;
@@ -441,7 +441,7 @@ function onRoom(m) {
 
 /* ================= 게임 시작/종료 ================= */
 function startGame(m) {
-  S.off = m.now - Date.now();
+  if (!S.replay) S.off = m.now - Date.now();
   S.endAt = m.endAt; S.target = m.target; S.mode = m.mode; S.score = m.score || [0, 0]; S.myCaps = 0;
   // 맵은 방마다 복제 (블록 파괴)
   if (S.world) { scene.remove(S.world); disposeWorld(S.world); }
@@ -796,7 +796,7 @@ function removeEnt(id) { const e = S.ents.get(id); if (!e) return; scene.remove(
 
 function onSnap(m) {
   const sample = m.now - Date.now();
-  S.off = S.off == null ? sample : S.off + (sample - S.off) * 0.05;
+  if (!S.replay) S.off = S.off == null ? sample : S.off + (sample - S.off) * 0.05;
   if (!S.inGame) return;
   for (const p of m.p) {
     const [id, x, y, z, yaw, pitch, fl, w, hp] = p;
@@ -3164,7 +3164,7 @@ async function openReplay(id) {
   const data = await loadReplay(id);
   if (!data || !data.msgs || !data.msgs.length) { toast('리플레이가 없거나 기간이 지났어요'); return; }
   $('hub').classList.add('hidden');
-  RP.data = data; RP.realId = S.myId; RP.speed = 1; RP.paused = false; RP.view = 1;
+  RP.data = data; RP.realId = S.myId; RP.off = S.off; RP.speed = 1; RP.paused = false; RP.view = 1;
   RP.t0 = data.msgs[0][0]; RP.t1 = data.msgs[data.msgs.length - 1][0];
   RP.follow = data.myId;
   S.myId = '__replay'; S.replay = RP;
@@ -3260,7 +3260,7 @@ function exitReplay() {
   S.replay = null; RP.data = null;
   leaveGame();
   for (const id of [...S.ents.keys()]) removeEnt(id);
-  S.myId = RP.realId; S.roster.clear();
+  S.myId = RP.realId; S.roster.clear(); S.off = RP.off;
   document.body.classList.remove('replay');
   $('replayBar').classList.add('hidden');
   A.setVolume(CFG.vol);
