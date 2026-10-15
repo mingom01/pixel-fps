@@ -5,6 +5,7 @@ import { GUN_SKINS } from './skins/gunSkins.js';
 import { glowMaterial, glowWeight } from './skins/gunMaterial.js';
 import { CHAR_SKINS } from './skins/charSkins.js';
 import { decorateChar, decorateGun } from './skins/skinFx.js';
+import { makeCharm } from './skins/charms.js';
 
 const PAL = {
   d: 0x2b2f36, m: 0x4a505a, l: 0x9aa1ab, b: 0x17191c, w: 0x9a6430, W: 0x5e3b1c, g: 0x56663a, G: 0x3c4a2a,
@@ -308,15 +309,26 @@ const shadowMat = (() => {
   return new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
 })();
 
-export function setCharGun(ch, id, gskin) {
+// 총기 장식 매달기: 손잡이 앞쪽 몸통 왼편 아래
+export function attachCharm(gun, id, charm, scale) {
+  if (!charm || id === 'knife' || id === 'claw' || id === 'nade') return null;
+  const def = GUNS[id]; if (!def) return null;
+  const c = makeCharm(charm, scale * 0.9); if (!c) return null;
+  let minX = 0; for (const b of def.boxes) if (b[2] <= def.grip[2] + 6 && b[5] >= def.grip[2] - 1 && b[4] > def.grip[1] + 2) minX = Math.min(minX, b[0]);
+  c.position.set((minX - 0.3 - def.grip[0]) * scale, (3.2 - def.grip[1]) * scale, -((def.grip[2] + 3) - def.grip[2]) * scale);
+  gun.add(c); gun.userData.charm = c;
+  return c;
+}
+export function setCharGun(ch, id, gskin, charm) {
   const u = ch.userData;
-  if (u.gunId === id && u.gskin === gskin) return;
-  u.gskin = gskin;
+  if (u.gunId === id && u.gskin === gskin && u.charm === charm) return;
+  u.gskin = gskin; u.charm = charm;
   if (u.gun) u.gunMount.remove(u.gun);
   u.gunId = id;
   if (!id) { u.gun = null; return; }
   const g = makeGun(id, 0.026, gskin);
   decorateGun(g, GUN_SKINS[gskin], gunLength(id, 0.026), true);
+  attachCharm(g, id, charm, 0.026);
   g.rotation.x = -Math.PI / 2; // 팔(-y) 방향 = 총구(-z)
   u.gunMount.add(g); u.gun = g;
 }

@@ -154,6 +154,14 @@ export const GUN_SKINS = {
   s1_neon: Object.assign(E('S1 네온 시티', 0, 1, TW([0x0a0c18, 0x141a30, 0xff3ad0], [0x101830, 0x18224a], 0x3af0ff), [0xff3ad0, 'synth', 0xff3ad0, 0x3af0ff, 0xffffff], ['flow', 0xff3ad0, 0x3af0ff, 2]), { bp: 1 }),
   s1_crown: Object.assign(L('S1 픽셀 왕관', 300, TW([0x1a1206, 0x3a2a10, 0xffffff], [0xffd84a, 0xf4c22b], 0xff3a5a), [0xffe680, 'chime', 0xffd84a, 0xffffff, 0xff5a7a], ['rainbow', 0xffd84a, 0xffffff, 1.2], ['star', 0xffd84a, 0xffffff, 0xff8ab0], ['#ffe680', '#c81a4a', 'rgba(255,220,120,0.8)'], 'supernova'), { bp: 1 }),
 
+  /* ================= 경쟁전 티어 보상 (rank: 그 티어에 처음 도달하면 받음) ================= */
+  rk_silver: Object.assign(R('랭크 실버', 0, 1, TW([0x40464e, 0xa8b0b8, 0xffffff], [0xd8e0ea, 0xa8b0b8], 0x5ab8ff), 0xd8e0ea, 'chime'), { rank: 'silver' }),
+  rk_gold: Object.assign(R('랭크 골드', 0, 1, TW([0x6a4a10, 0xd4a520, 0xfff2b0], [0xf4c22b, 0xd4a520], 0xffffff), 0xffd84a, 'chime', 0xfff2b0), { rank: 'gold' }),
+  rk_plat: Object.assign(E('랭크 플래티넘', 0, 1, TW([0x0e3a3a, 0x2a8a8a, 0xd8fff4], [0x5af0d0, 0x3ac8b0], 0xffffff), [0x5af0d0, 'crystal', 0x5af0d0, 0xffffff], ['pulse', 0x5af0d0, 0xffffff]), { rank: 'plat' }),
+  rk_diamond: Object.assign(E('랭크 다이아', 0, 1, TW([0x10184a, 0x3a5ad0, 0xe0ecff], [0x8ab8ff, 0x5a8af0], 0xffffff), [0x8ab8ff, 'crystal', 0x8ab8ff, 0xffffff, 0x5ad8ff], ['stars', 0xd8e8ff, 0x5a8af0]), { rank: 'diamond' }),
+  rk_king: Object.assign(L('랭크 왕', 0, TW([0x2a0606, 0x7a1010, 0xffd84a], [0xc82a2a, 0x9a1a1a], 0xffd84a), [0xff6a5a, 'gong', 0xff4a3a, 0xffd84a, 0xffffff], ['flow', 0xff3a2a, 0xffd84a, 2], ['ember', 0xff5a3a, 0xffd84a, 0xffffff], ['#ff8a7a', '#ffd84a', 'rgba(255,110,90,0.8)'], 'eruption'), { rank: 'king' }),
+  rk_god: Object.assign(L('랭크 신', 0, TW([0x1a1030, 0xf0f0ff, 0xffffff], [0xffffff, 0xe8e0ff], 0xffd84a), ['rainbow', 'chime', 0xffffff, 0xffd84a, 0xd0b0ff], ['rainbow', 0xffffff, 0xffffff, 1.4], ['halo', 0xffffff, 0xffd84a], ['#ffffff', '#b08aff', 'rgba(255,255,255,0.9)'], 'supernova'), { rank: 'god' }),
+
   /* ================= 무기 숙련도 위장 (그 무기에만 · 상점에 안 보임) ================= */
   m_bronze: Object.assign(C('숙련 브론즈', 0, 1, TW([0x3a2210, 0x8a5a2a, 0xe0a060], [0xb07a3a, 0x8a5a2a], 0xffd0a0)), { hidden: 1 }),
   m_silver: Object.assign(C('숙련 실버', 0, 1, TW([0x40464e, 0xa8b0b8, 0xffffff], [0xc8d0d8, 0xa8b0b8], 0xffffff)), { hidden: 1 }),

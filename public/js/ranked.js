@@ -9,6 +9,35 @@ export function myRanked() {
 }
 export const rankInfo = (rp) => RANKED.info(rp);
 
+/* ---------- 티어 보상 ----------
+   한 단계(III → II 등) 오를 때마다: 300 코인 + 10 골드
+   새 티어에 처음 오르면: 티어 총 스킨 + 티어 총기 장식 + 골드 (브론즈는 장식만) */
+export const TIER_SKIN = { silver: 'rk_silver', gold: 'rk_gold', plat: 'rk_plat', diamond: 'rk_diamond', king: 'rk_king', god: 'rk_god' };
+export const TIER_GOLD = { silver: 30, gold: 50, plat: 80, diamond: 120, king: 200, god: 400 };
+const divIndex = (rp) => { const i = RANKED.info(rp); return i.tier.id === 'god' ? i.ti * 3 : i.ti * 3 + (2 - i.div); };
+// 지금까지 받은 보상보다 높은 단계에 오르면 지급 → 받은 보상 설명 목록
+export function grantRankRewards() {
+  const R = myRanked(), got = [];
+  const now = divIndex(R.best || R.rp);
+  if (R.claimed == null) R.claimed = 0;
+  if (!Array.isArray(profile.charms)) profile.charms = [];
+  if (!profile.charms.includes('c_bronze')) { profile.charms.push('c_bronze'); if (!profile.charm) profile.charm = 'c_bronze'; got.push('브론즈 장식'); }
+  for (let i = R.claimed + 1; i <= now; i++) {
+    const ti = Math.floor(i / 3), first = i % 3 === 0, T = RANKED.TIERS[ti];
+    profile.coins += 300; profile.gold += 10;
+    if (first) {
+      const sk = TIER_SKIN[T.id], ch = 'c_' + T.id;
+      if (sk && !profile.gskins.includes(sk)) profile.gskins.push(sk);
+      if (!profile.charms.includes(ch)) profile.charms.push(ch);
+      profile.gold += TIER_GOLD[T.id] || 0;
+      got.push(`${T.name} 달성! 총 스킨 [랭크 ${T.name}] · ${T.name} 장식 · 골드 ${(TIER_GOLD[T.id] || 0) + 10}`);
+    } else got.push(`${RANKED.info(i * 100).name} 승급 · 300 코인 + 10 골드`);
+  }
+  R.claimed = Math.max(R.claimed, now);
+  saveProfile();
+  return got;
+}
+
 // 결과 적용 (서버가 계산한 점수 변화)
 export function applyRanked(r) {
   const R = myRanked(), before = R.rp;

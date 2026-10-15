@@ -19,6 +19,7 @@ const listOf = (kind) => kind === 'skin' ? CHAR_SKINS : GUN_SKINS;
 const ownedOf = (kind) => kind === 'skin' ? profile.skins : profile.gskins;
 const curOf = (kind) => kind === 'skin' ? profile.skin : profile.gskin;
 
+const tierName = (id) => ((window.SH.RANKED.TIERS.find(t => t.id === id)) || {}).name || id;
 function priceHtml(it) {
   if (it.r === 'legend') return `<i class="coin"></i> ${it.price.toLocaleString()} + <i class="goldc"></i> ${it.gold.toLocaleString()}`;
   return it.gold ? `<i class="goldc"></i> ${it.gold} 골드` : `<i class="coin"></i> ${it.price}`;
@@ -38,7 +39,7 @@ export function renderSkinShop(kind) {
   $('lockerGrid').innerHTML = `<div class="sk-filter">${FILTERS.map(([f, n]) => `<button data-f="${f}" class="${filter === f ? 'on' : ''} ${f !== 'all' && f !== 'own' ? 'r-' + f : ''}">${n} <small>${cnt(f)}</small></button>`).join('')}</div>` + ids.map(id => {
     const it = list[id], r = rarityOf(it), own = owned.includes(id), lock = !own && lv < it.lv;
     const th = kind === 'skin' ? D.thumb(id) : gunIcon('rifle', 2, id);
-    const pr = own ? `<div class="pr own">${id === cur ? '장착 중' : '보유'}</div>` : it.bp ? `<div class="pr lv">시즌 패스</div>` : lock ? `<div class="pr lv">Lv.${it.lv} 필요</div>` : `<div class="pr ${it.gold ? 'gold' : ''}">${priceHtml(it)}</div>`;
+    const pr = own ? `<div class="pr own">${id === cur ? '장착 중' : '보유'}</div>` : it.bp ? `<div class="pr lv">시즌 패스</div>` : it.rank ? `<div class="pr lv">경쟁전 ${tierName(it.rank)}</div>` : lock ? `<div class="pr lv">Lv.${it.lv} 필요</div>` : `<div class="pr ${it.gold ? 'gold' : ''}">${priceHtml(it)}</div>`;
     const gc = it.glow ? `style="--gc:#${it.glow.c1.toString(16).padStart(6, '0')}"` : it.halo ? `style="--gc:#${it.halo.toString(16).padStart(6, '0')}"` : '';
     return `<div class="lcard r-${r} ${id === cur ? 'eq' : ''} ${id === pickId ? 'sel' : ''} ${lock ? 'lock' : ''}" data-id="${id}" ${gc}><div class="rtag">${RARITY_BY[r].name}</div><div class="th"><img src="${th}"></div><div class="nm">${esc(it.name)}</div>${pr}</div>`;
   }).join('');
@@ -54,6 +55,7 @@ function renderInfo(kind) {
   const btn = eq ? '<button class="btn wide" disabled>장착 중</button>'
     : own ? '<button class="btn green wide" id="skAct">장착하기</button>'
       : it.bp ? `<button class="btn wide" disabled>시즌 ${it.bp} 패스 보상</button>`
+      : it.rank ? `<button class="btn wide" disabled>경쟁전 ${tierName(it.rank)} 달성 보상</button>`
       : lock ? `<button class="btn wide" disabled>Lv.${it.lv} 필요</button>`
         : `<button class="btn yellow wide" id="skAct">구매 · ${priceHtml(it)}</button>`;
   $('lockerSel').innerHTML = `<div class="skinfo r-${r}"><div class="sk-r" style="color:${R.color}">${R.name}</div><div class="sk-n">${esc(it.name)}</div>

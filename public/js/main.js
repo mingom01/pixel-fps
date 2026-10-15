@@ -21,7 +21,9 @@ import { showIncome } from './hud/income.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
 import { SPRAY_BY, sprayCanvas } from './skins/sprays.js';
 import { initAbility, heroPickerHtml, bindHeroPicker, tryAbility, onAb, onBlk, abilityHud, abilityModelFx } from './ability.js';
-import { myRanked, applyRanked, leavePenalty, rankIcon, rankBadge, rankCardHtml } from './ranked.js';
+import { myRanked, applyRanked, leavePenalty, rankIcon, rankBadge, rankCardHtml, grantRankRewards } from './ranked.js';
+import { CHARMS, charmIcon } from './skins/charms.js';
+import { attachCharm } from './models.js';
 import { currentSeason, bp, bpTier, grantBpMatch, addBp, buyPremium, claim, claimAll, unclaimed, reward, rewardName, TIERS as BP_TIERS, TIER_XP, PREMIUM_GOLD } from './season.js';
 import { LEVELS as M_LEVELS, MASTERY_WEAPONS, masteryOf, checkMastery, setCamo, gskinFor } from './mastery.js';
 import { history, addHistory, recStart, recMsg, recRoom, recStop, recording, saveReplay, loadReplay, replayIds, purgeReplays, HISTORY_DAYS, REPLAY_DAYS } from './history.js';
@@ -192,7 +194,7 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 $('nameIn').value = CFG.name || '';
 $('nameIn').addEventListener('input', () => { CFG.name = $('nameIn').value.trim(); saveCfg(); });
 function myName() { const n = $('nameIn').value.trim(); return n || '플레이어' + (S.myId || '').slice(1); }
-function joinInfo() { return { name: myName(), color: CFG.color, skin: profile.skin, gskin: profile.gskin, title: myTitle(), lv: myLevel(), hero: CFG.hero || 'jett', rp: myRanked().rp, wc: profile.wcamo || {} }; }
+function joinInfo() { return { name: myName(), color: CFG.color, skin: profile.skin, gskin: profile.gskin, title: myTitle(), lv: myLevel(), hero: CFG.hero || 'jett', rp: myRanked().rp, wc: profile.wcamo || {}, charm: profile.charm || null }; }
 function buildSwatches() {
   const box = $('colors'); box.innerHTML = '';
   PCOLORS.forEach((c, i) => {
@@ -222,7 +224,7 @@ function refreshPreview(o) {
     pv.gun = holder; pv.scene.add(holder);
     return;
   }
-  pv.ch = makeChar(CFG.color, skin); setCharGun(pv.ch, 'rifle', gskin); pv.ch.userData.shadow.visible = false; pv.scene.add(pv.ch);
+  pv.ch = makeChar(CFG.color, skin); setCharGun(pv.ch, 'rifle', gskin, o.charm !== undefined ? o.charm : profile.charm); pv.ch.userData.shadow.visible = false; pv.scene.add(pv.ch);
 }
 refreshPreview();
 
@@ -255,12 +257,31 @@ function renderLocker() {
   $('lockerTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === lockerTab));
   if (lockerTab === 'spray' || lockerTab === 'emote') { refreshPreview(); renderExtras(lockerTab); return; }
   if (lockerTab === 'title') { refreshPreview(); renderTitles(); return; }
+  if (lockerTab === 'charm') { renderCharms(); return; }
   if (lockerTab === 'gacha') { refreshPreview(); renderGacha(); $('lockerSel').textContent = `${CHAR_SKINS[profile.skin].name} · ${GUN_SKINS[profile.gskin].name}`; return; }
   renderSkinShop(lockerTab);
 }
 initSkinShop({ thumb: (id) => skinThumb(id), preview: (o) => refreshPreview(o), toast, changed: () => updateProfileUI() });
 initExtrasShop({ previewEmote: (id) => { const em = EMOTE_BY[id]; if (em && pv.ch) pv.emote = { anim: em.anim, fx: em.fx, t0: performance.now(), until: performance.now() + 3000 }; }, toast });
 
+// 총기 장식 탭 (경쟁전 티어 보상)
+function renderCharms(pick) {
+  grantRankRewards(); // 예전에 오른 티어 보상도 받기
+  const own = profile.charms || [], cur = profile.charm || null;
+  const sel = pick !== undefined ? pick : cur;
+  $('lockerGrid').innerHTML = `<div class="dim" style="grid-column:1/-1">경쟁전 티어에 처음 오르면 그 티어 장식을 받아요. 총 옆에 매달려 흔들려요.</div>`
+    + `<div class="lcard ${!cur ? 'eq' : ''} ${sel === null ? 'sel' : ''}" data-ch=""><div class="th" style="font-size:12px">없음</div><div class="nm">장식 없음</div><div class="pr own">${!cur ? '장착 중' : ''}</div></div>`
+    + Object.entries(CHARMS).map(([id, c]) => { const ok = own.includes(id), t = SH.RANKED.TIERS.find(x => x.id === c.tier);
+      return `<div class="lcard ${id === cur ? 'eq' : ''} ${id === sel ? 'sel' : ''} ${ok ? '' : 'lock'}" data-ch="${id}"><div class="th"><img src="${charmIcon(id, 4)}"></div><div class="nm">${esc(c.name)}</div>${ok ? `<div class="pr own">${id === cur ? '장착 중' : '보유'}</div>` : `<div class="pr lv">경쟁전 ${t ? t.name : ''}</div>`}</div>`; }).join('');
+  $('lockerGrid').querySelectorAll('[data-ch]').forEach(el => el.onclick = () => {
+    const id = el.dataset.ch || null;
+    refreshPreview({ charm: id });
+    if (!id || own.includes(id)) { profile.charm = id; saveProfile(); A.sfxSwitch(); }
+    else toast('경쟁전에서 그 티어에 오르면 받아요');
+    renderCharms(id);
+  });
+  $('lockerSel').innerHTML = `<div class="skinfo"><div class="sk-n">${cur ? esc(CHARMS[cur].name) : '장식 없음'}</div><div class="sk-p">장착 중인 총기 장식</div></div>`;
+}
 // 칭호 탭
 function renderTitles() {
   const cur = myTitle(), order = { common: 0, rare: 1, epic: 2, legend: 3 };
@@ -285,7 +306,7 @@ function renderTitles() {
 function renderRoomList(list) {
   const box = $('roomList');
   if (!list.length) { box.innerHTML = '<div class="dim">방이 없어요. 새로 만들어 보세요!</div>'; return; }
-  box.innerHTML = list.map(r => `<div class="roomitem" data-code="${r.code}"><span class="code">${r.code}</span><span>${r.ranked ? '<b class="rk-mode">경쟁전</b>' : esc(r.host || '') + '의 방'}</span><span class="dim">${r.rmode && r.state !== 'play' ? '랜덤 모드' : SH.MODES[r.mode || 'ffa'].name} · ${(r.rmode || r.rmap) && r.state !== 'play' ? '랜덤 맵' : (SH.MAPS[r.map] || { name: '커스텀 맵' }).name} · ${r.n}명</span><span class="tag ${r.state === 'play' ? 'play' : ''}">${r.state === 'play' ? '게임 중' : '대기 중'}</span></div>`).join('');
+  box.innerHTML = list.map(r => `<div class="roomitem" data-code="${r.code}"><span class="code">${r.code}</span><span>${r.ranked ? '<b class="rk-mode">경쟁전</b>' + (r.closed ? ' <span class="dim">(진행 중 · 입장 불가)</span>' : '') : esc(r.host || '') + '의 방'}</span><span class="dim">${r.rmode && r.state !== 'play' ? '랜덤 모드' : SH.MODES[r.mode || 'ffa'].name} · ${(r.rmode || r.rmap) && r.state !== 'play' ? '랜덤 맵' : (SH.MAPS[r.map] || { name: '커스텀 맵' }).name} · ${r.n}명</span><span class="tag ${r.state === 'play' ? 'play' : ''}">${r.state === 'play' ? '게임 중' : '대기 중'}</span></div>`).join('');
   box.querySelectorAll('.roomitem').forEach(el => el.onclick = () => { A.initAudio(); send(Object.assign({ t: 'join', code: el.dataset.code }, joinInfo())); });
 }
 $('quickBtn').onclick = () => { A.initAudio(); send(Object.assign({ t: 'create', quick: true, cfg: { map: 'village', mode: 'ffa', rmode: true, rmap: true, bots: 7, time: 300, kills: 25, diff: 'normal' } }, joinInfo())); };
@@ -519,6 +540,9 @@ function onEnd(m) {
       const res = applyRanked(rr), inf = SH.RANKED.info(res.after);
       $('rewards').innerHTML += `<div class="rk-res"><img src="${rankIcon(res.after, 3)}"><div><b style="color:${inf.tier.color}">${inf.name}</b> <span class="${rr.d >= 0 ? 'up' : 'down'}">${rr.d >= 0 ? '+' : ''}${rr.d} RP</span>${res.up ? ' <b class="up">승급!</b>' : ''}<div class="rk-bar"><i style="width:${inf.need ? inf.pt : 100}%;background:${inf.tier.color}"></i></div></div></div>`;
       if (res.up) { celebrate('승급!', inf.name, 't-god'); }
+      const tr = grantRankRewards();
+      for (const t of tr) notify('경쟁전 보상: ' + t, inf.tier.color);
+      if (tr.length) $('rewards').innerHTML += `<div class="rk-rw">${tr.map(esc).join('<br>')}</div>`;
     }
     updatePassUI();
     updateProfileUI();
@@ -860,7 +884,7 @@ function updateEnts(dt) {
       e.lastPos = { x: s.x, z: s.z };
       e.rx = s.x; e.ry = s.y; e.rz = s.z; e.ryaw = s.yaw; e.rpitch = s.pitch; e.fl = s.fl;
       e.model.position.set(s.x, s.y, s.z); e.model.rotation.y = s.yaw;
-      if (!e.boss && s.w && s.w !== e.w) { e.w = s.w; const rr = S.roster.get(e.id); setCharGun(e.model, s.w === 'nade' ? 'nade' : s.w, (rr && rr.wc && rr.wc[s.w]) || e.gskin); }
+      if (!e.boss && s.w && s.w !== e.w) { e.w = s.w; const rr = S.roster.get(e.id); setCharGun(e.model, s.w === 'nade' ? 'nade' : s.w, (rr && rr.wc && rr.wc[s.w]) || e.gskin, rr && !rr.zombie ? rr.charm : null); }
       e.model.userData.firing = performance.now() - (e.lastShot || 0) < 150;
       if (e.boss) animBoss(e, dt, sp > 20 ? 0 : sp, false);
       else {
@@ -1002,6 +1026,7 @@ function setViewModel(id, look) {
   vm.id = id;
   const gun = makeGun(id === 'nade' ? 'nade' : id, id === 'nade' ? 0.022 : VMS, look.gskin);
   vm.gun = gun; vm.holder.add(gun);
+  vm.charm = attachCharm(gun, id, look.charm !== undefined ? look.charm : (me.zombie ? null : profile.charm), VMS);
   const sm = skinMats(look.ci, look.skin);
   const arms = new THREE.Group(); vm.la = null;
   const ra = armMesh(0.55, sm.shirt, sm.skin); ra.position.set(0.015, -0.05, 0.02); ra.rotation.set(0.45, 0.25, 0); arms.add(ra);
@@ -1698,6 +1723,8 @@ function updateViewModel(dt) {
       if (!f.snd && fk > 0.85) { f.snd = true; A.sfxSwitch(); }
     } else { vm.gun.position.set(0, 0, 0); vm.gun.rotation.set(0, 0, WS.inspect ? WS.inspectRz || 0 : 0); }
   }
+  // 장식 흔들림 (움직임·반동)
+  if (vm.charm) { const t = performance.now() / 1000; vm.charm.rotation.x = Math.sin(t * 2.2) * 0.12 + WS.kick * 0.6 + clamp(WS.swayY || 0, -0.05, 0.05) * 4; vm.charm.rotation.z = Math.sin(WS.bob || 0) * 0.15 - clamp(WS.swayX || 0, -0.05, 0.05) * 4; }
   if (vm.gun && vm.gun.userData.mag) { vm.gun.userData.mag.position.y = magY; vm.gun.userData.mag.visible = !magHide; }
   if (vm.la && vm.laP) {
     const mp = (vm.gun && vm.gun.userData.magPos) || _magFallback;
@@ -1735,7 +1762,7 @@ function updateCamera(dt) {
     camera.position.set(kcS.x, kcS.y + ((kcS.fl & 2) ? P.EYEC : P.EYE), kcS.z);
     camera.rotation.set(kcS.pitch, kcS.yaw, 0);
     camera.fov = CFG.fov;
-    if (kcS.w && kcS.w !== S.kc.vw) { S.kc.vw = kcS.w; setViewModel(kcS.w, { ci: kcE.color, skin: kcE.skin, gskin: kcE.gskin }); }
+    if (kcS.w && kcS.w !== S.kc.vw) { S.kc.vw = kcS.w; setViewModel(kcS.w, { ci: kcE.color, skin: kcE.skin, gskin: kcE.gskin, charm: (S.roster.get(S.kc.killer) || {}).charm || null }); }
     $('kcInfo').textContent = `남은 체력 ${kcS.hp || 0}`;
   } else if (me.alive) {
     camera.position.set(me.x + (Math.random() - 0.5) * sh, me.y + me.eye + me.camOff + (Math.random() - 0.5) * sh, me.z + (Math.random() - 0.5) * sh);
@@ -3221,7 +3248,7 @@ function replayCamera(dt) {
     camera.rotation.set(s.pitch, s.yaw, 0);
     RP.povOk = true;
     const rr = S.roster.get(e.id) || {};
-    if (s.w && s.w !== RP.vw) { RP.vw = s.w; setViewModel(s.w, { ci: rr.color || 0, skin: rr.skin || 'default', gskin: (rr.wc && rr.wc[s.w]) || rr.gskin || 'default' }); }
+    if (s.w && s.w !== RP.vw) { RP.vw = s.w; setViewModel(s.w, { ci: rr.color || 0, skin: rr.skin || 'default', gskin: (rr.wc && rr.wc[s.w]) || rr.gskin || 'default', charm: rr.charm || null }); }
   } else {
     const yaw = s.yaw;
     camera.position.set(s.x + Math.sin(yaw) * 3.6, s.y + 2.4, s.z + Math.cos(yaw) * 3.6);

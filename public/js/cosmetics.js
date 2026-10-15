@@ -21,7 +21,7 @@ export const LEGEND_ACH = {
 };
 for (const [kind, list] of [['skin', CHAR_SKINS], ['gskin', GUN_SKINS]]) {
   // 원래 골드 가격이 싼 것부터 순서대로
-  const ids = Object.keys(list).filter(id => { const it = list[id]; return it.r === 'legend' && !it.legendFixed && !it.bp && !it.hidden; })
+  const ids = Object.keys(list).filter(id => { const it = list[id]; return it.r === 'legend' && !it.legendFixed && !it.bp && !it.hidden && !it.rank; })
     .sort((a, b) => (list[a].gold || 0) - (list[b].gold || 0) || a.localeCompare(b));
   ids.forEach((id, i) => {
     const it = list[id], mul = Math.pow(2, i);
@@ -99,7 +99,7 @@ export function buyItem(kind, id) {
   const list = kind === 'skin' ? CHAR_SKINS : GUN_SKINS, owned = kind === 'skin' ? profile.skins : profile.gskins;
   const it = list[id]; if (!it) return 'bad';
   if (owned.includes(id)) return 'have';
-  if (it.bp || it.hidden) return 'bp';
+  if (it.bp || it.hidden || it.rank) return 'bp';
   if (myLevel() < it.lv) return 'level';
   if (it.r === 'legend') { // 전설은 코인 + 골드 둘 다
     if (profile.coins < it.price) return 'coins';
@@ -258,7 +258,7 @@ export function rollGacha() {
   profile.gold -= GACHA_COST;
   const all = [];
   for (const [id, it] of Object.entries(CHAR_SKINS)) if (id !== 'default' && !it.bp) all.push({ kind: 'skin', id, it, r: rarityOf(it) });
-  for (const [id, it] of Object.entries(GUN_SKINS)) if (id !== 'default' && !it.bp && !it.hidden) all.push({ kind: 'gskin', id, it, r: rarityOf(it) });
+  for (const [id, it] of Object.entries(GUN_SKINS)) if (id !== 'default' && !it.bp && !it.hidden && !it.rank) all.push({ kind: 'gskin', id, it, r: rarityOf(it) });
   for (const it of EMOTES) if (!it.free) all.push({ kind: 'emote', id: it.id, it, r: it.r });
   for (const it of SPRAYS) if (!it.free) all.push({ kind: 'spray', id: it.id, it, r: it.r });
   let x = Math.random() * RARITY.reduce((a, b) => a + b.w, 0), tier = 'common';

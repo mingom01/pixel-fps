@@ -210,7 +210,7 @@ function createRoom(c, cfg, isPublic) {
   return r;
 }
 function broadcast(r, obj, except) { const s = JSON.stringify(obj); for (const c of r.clients) if (c !== except) c.send(s); }
-function roster(r) { return [...r.ents.values()].map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, skin: e.skin, gskin: e.gskin, title: e.title, lv: e.lv, caps: e.caps, boss: !!e.boss, zombie: !!e.zombie, gg: e.gg || 0, hero: e.hero, rp: e.bot ? null : e.rp, wc: e.wc })); }
+function roster(r) { return [...r.ents.values()].map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, skin: e.skin, gskin: e.gskin, title: e.title, lv: e.lv, caps: e.caps, boss: !!e.boss, zombie: !!e.zombie, gg: e.gg || 0, hero: e.hero, rp: e.bot ? null : e.rp, wc: e.wc, charm: e.charm })); }
 function roomMsg(r) { return { t: 'room', autoAt: r.autoAt || 0, customName: r.custom ? r.custom.name : null, code: r.code, host: r.hostId, cfg: r.cfg, state: r.state, endAt: r.endAt, score: r.score, players: roster(r) }; }
 function pushRoom(r) { broadcast(r, roomMsg(r)); }
 function meMsg(e) { return { t: 'me', hp: Math.ceil(e.hp), armor: Math.ceil(e.armor), money: e.money, primary: e.primary, secondary: e.secondary, nades: e.nades, alive: e.alive, buyUntil: e.buyUntil, respawnAt: e.respawnAt, zombie: !!e.zombie, gg: e.gg || 0, helmet: e.helmet, perks: Object.keys(e.perks), sup: e.sup, maxHp: e.maxHp, hero: e.hero, qAt: e.qAt || 0, ult: Math.floor(e.ult || 0), haste: e.hasteUntil || 0, steel: e.steelUntil || 0, invis: e.invisUntil || 0 }; }
@@ -222,6 +222,7 @@ function joinRoom(c, r, m) {
   c.room = r; r.clients.add(c);
   const e = newEnt(c.id, cleanName(m.name), clamp(Math.round(num(m.color, 0)), 0, COLORS - 1), false);
   e.skin = cleanId(m.skin); e.gskin = cleanId(m.gskin); e.title = cleanId(m.title); e.lv = clamp(Math.round(num(m.lv, 1)), 1, 999);
+  e.charm = m.charm ? cleanId(m.charm) : null;
   e.hero = cleanHero(m.hero); e.rp = clamp(Math.round(num(m.rp, 0)), 0, 99999); e.wc = cleanWc(m.wc);
   r.ents.set(c.id, e);
   fitBots(r);
@@ -1049,7 +1050,7 @@ function handle(c, m) {
   const r = c.room;
   switch (m.t) {
     case 'list':
-      c.send({ t: 'rooms', list: [...rooms.values()].filter(x => x.pub && x.clients.size < MAX_ROOM).map(x => ({ code: x.code, n: x.clients.size, map: x.cfg.map, mode: x.cfg.mode, rmode: !!x.cfg.rmode, rmap: !!x.cfg.rmap, state: x.state, ranked: !!x.cfg.ranked, host: (x.ents.get(x.hostId) || {}).name })) });
+      c.send({ t: 'rooms', list: [...rooms.values()].filter(x => x.pub && x.clients.size < MAX_ROOM).map(x => ({ code: x.code, n: x.clients.size, map: x.cfg.map, mode: x.cfg.mode, rmode: !!x.cfg.rmode, rmap: !!x.cfg.rmap, state: x.state, ranked: !!x.cfg.ranked, closed: !!x.cfg.ranked && x.state !== 'wait', host: (x.ents.get(x.hostId) || {}).name })) });
       break;
     case 'create': {
       const nr = createRoom(c, m.cfg, !m.quick);
@@ -1061,6 +1062,7 @@ function handle(c, m) {
       const nr = rooms.get(String(m.code || '').trim());
       if (!nr) { c.send({ t: 'err', text: '방을 찾을 수 없어요' }); break; }
       if (nr.clients.size >= MAX_ROOM) { c.send({ t: 'err', text: '방이 꽉 찼어요' }); break; }
+      if (nr.cfg.ranked && nr.state !== 'wait') { c.send({ t: 'err', text: '이미 시작한 경쟁전에는 들어갈 수 없어요' }); break; }
       joinRoom(c, nr, m);
       break;
     }
@@ -1657,8 +1659,8 @@ function aimAt(b, t) { if (!t) return false; const dx = t.x - b.x, dz = t.z - b.
 /* ---------- 경쟁전 ---------- */
 // 대기 중인 경쟁전 방이 있으면 들어가고, 없으면 새로 만듦 (10초 뒤 자동 시작, 빈자리는 실력 맞춘 봇)
 function rankedQueue(c, m) {
-  const open = [...rooms.values()].filter(x => x.cfg.ranked && x.clients.size < 6 && x.state !== 'end');
-  let r = open.find(x => x.state === 'wait') || open.find(x => x.state === 'play' && x.endAt - Date.now() > 60000);
+  // 경쟁전은 시작 전 방에만 들어갈 수 있음 (중간 입장 X)
+  let r = [...rooms.values()].find(x => x.cfg.ranked && x.clients.size < 6 && x.state === 'wait');
   if (!r) {
     const mode = pick(RANKED.MODES);
     r = createRoom(c, { mode, map: 'village', bots: 9, time: 300, kills: 25, diff: 'hard' }, false);
