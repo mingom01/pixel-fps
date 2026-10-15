@@ -53,7 +53,7 @@ class Client {
     socket.on('data', d => this.onData(d));
     socket.on('close', () => this.onClose());
     socket.on('error', () => this.onClose());
-    this.send({ t: 'hello', id: this.id });
+    this.send({ t: 'hello', id: this.id, ver: SERVER_VER });
   }
   send(obj) { if (!this.alive) return; try { this.socket.write(encodeFrame(typeof obj === 'string' ? obj : JSON.stringify(obj))); } catch (e) { /* */ } }
   onData(d) {
@@ -123,6 +123,8 @@ const SPK = SH.SPK;
 const isSpike = (r) => r.cfg.mode === 'spike';
 const isPractice = (r) => r.cfg.mode === 'practice';
 
+// 서버가 새로 뜰 때마다 바뀌는 값 → 열려 있던 옛 화면에 새로고침하라고 알려줌
+const SERVER_VER = Date.now().toString(36);
 const rooms = new Map();
 
 /* ---------- 랭킹 (계정 저장소의 '__rank' 칸에 저장: Supabase 또는 data/users.json) ---------- */

@@ -136,7 +136,12 @@ function onMsg(m, replayed) {
   if (S.replay && !replayed && !['rooms', 'err', 'hello', 'authed', 'rank'].includes(m.t)) return; // 리플레이 보는 중엔 실시간 게임 메시지 무시
   if (S.inGame && !S.replay) recMsg(m, serverNow());
   switch (m.t) {
-    case 'hello': S.myId = m.id; break;
+    case 'hello':
+      S.myId = m.id;
+      // 배포로 서버가 바뀌었으면 (열어 둔 옛 화면) 새로고침 — 게임 중이 아니면 바로
+      if (m.ver && S.ver && m.ver !== S.ver) { if (!S.inGame && !S.room) location.reload(); else toast('새 버전이 나왔어요! 새로고침(F5) 해주세요'); }
+      if (m.ver) S.ver = S.ver || m.ver;
+      break;
     case 'rooms': renderRoomList(m.list); break;
     case 'err': toast(m.text); break;
     case 'left': S.room = null; leaveGame(); showScreen('menu'); break;
