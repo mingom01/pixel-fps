@@ -33,6 +33,13 @@ export const TITLES = {
   immortal: { name: '불멸자', r: 'legend', req: { gold: 150 } },
   godhand: { name: '신의 손', r: 'legend', req: { gold: 250 } },
   king: { name: '픽셀의 왕', r: 'legend', req: { gold: 400 } },
+  // 골드 뽑기 전용
+  g_lucky: { name: '행운아', r: 'common', req: { gacha: 1 } },
+  g_clover: { name: '네잎클로버', r: 'common', req: { gacha: 1 } },
+  g_gambler: { name: '도박사', r: 'rare', req: { gacha: 1 } },
+  g_star: { name: '별을 쏜 자', r: 'rare', req: { gacha: 1 } },
+  g_jackpot: { name: '잭팟', r: 'epic', req: { gacha: 1 } },
+  g_chosen: { name: '선택받은 자', r: 'legend', req: { gacha: 1 } },
   // 시즌 패스 보상
   s1_pioneer: { name: 'S1 개척자', r: 'rare', req: { bp: 1 } },
   s1_champ: { name: 'S1 정복자', r: 'legend', req: { bp: 1 } },
@@ -48,7 +55,7 @@ export function titleOwned(id) {
   const q = t.req;
   if (q.lv) return myLevel() >= q.lv;
   if (q.ach) return !!(profile.ach && profile.ach[q.ach]);
-  if (q.coins || q.gold || q.bp) return list().includes(id);
+  if (q.coins || q.gold || q.bp || q.gacha) return list().includes(id);
   if (q.rp) return ((profile.ranked && profile.ranked.best) || 0) >= q.rp;
   return true;
 }
@@ -59,6 +66,7 @@ export function titleHow(id) {
   if (q.coins) return `${q.coins} 코인`;
   if (q.gold) return `${q.gold} 골드`;
   if (q.bp) return `시즌 ${q.bp} 패스 보상`;
+  if (q.gacha) return '골드 뽑기에서 획득';
   if (q.rp) return `경쟁전 최고 ${window.SH.RANKED.info(q.rp).name} 달성`;
   return '기본 칭호';
 }

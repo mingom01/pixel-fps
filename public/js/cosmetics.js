@@ -4,6 +4,7 @@ import { GUN_SKINS } from './skins/gunSkins.js';
 import { RARITY, rarityOf } from './skins/rarity.js';
 import { EMOTES, FREE_EMOTES } from './skins/emotes.js';
 import { SPRAYS, FREE_SPRAYS, OLD_SPRAY_IDS } from './skins/sprays.js';
+import { TITLES } from './titles.js';
 export { RARITY, rarityOf };
 export const EMOTE_SLOTS = 8; // 감정표현 휠 칸 수
 
@@ -81,9 +82,25 @@ export function levelInfo(xp) {
 export const myLevel = () => levelInfo(profile.xp).lv;
 
 // 매치 보상 계산 + 적용
+/* ================= 경험치 부스터 (골드 뽑기에서 나옴) ================= */
+export const BOOSTS = [
+  { id: 'xp15_1', name: '경험치 1.5배 (1판)', r: 'common', mul: 1.5, n: 1 },
+  { id: 'xp15_3', name: '경험치 1.5배 (3판)', r: 'rare', mul: 1.5, n: 3 },
+  { id: 'xp2_3', name: '경험치 2배 (3판)', r: 'epic', mul: 2, n: 3 },
+  { id: 'xp3_5', name: '경험치 3배 (5판)', r: 'legend', mul: 3, n: 5 },
+];
+export function activeBoosts() { if (!Array.isArray(profile.boosts)) profile.boosts = []; return profile.boosts; }
+// 매치 하나에 쓸 배율 (앞에 있는 부스터부터 한 판씩 씀)
+function useBoost() {
+  const b = activeBoosts(); if (!b.length) return 1;
+  const cur = b[0], mul = cur.mul;
+  if (--cur.n <= 0) b.shift();
+  return mul;
+}
 export function grantMatch({ kills, caps, win, rank }) {
   const before = myLevel();
-  const xp = 100 + kills * 25 + caps * 80 + (win ? 150 : 0) + (rank === 0 ? 100 : 0);
+  const boost = useBoost();
+  const xp = Math.round((100 + kills * 25 + caps * 80 + (win ? 150 : 0) + (rank === 0 ? 100 : 0)) * boost);
   // 코인 획득량 (이전 대비 약 40% 감소)
   const coins = 18 + kills * 6 + caps * 24 + (win ? 60 : 0) + (rank === 0 ? 30 : 0);
   profile.xp += xp; profile.coins += coins; profile.games++; profile.kills += kills; if (win) { profile.wins++; profile.gold += 5; }
@@ -92,7 +109,7 @@ export function grantMatch({ kills, caps, win, rank }) {
   const bonus = (after - before) * 100;
   profile.coins += bonus;
   saveProfile();
-  return { xp, coins: coins + bonus, before, after, gold: win ? 5 : 0 };
+  return { xp, coins: coins + bonus, before, after, gold: win ? 5 : 0, boost: boost > 1 ? boost : 0 };
 }
 
 export function buyItem(kind, id) {
@@ -257,18 +274,22 @@ export function rollGacha() {
   if (profile.gold < GACHA_COST) return { err: 'gold' };
   profile.gold -= GACHA_COST;
   const all = [];
-  for (const [id, it] of Object.entries(CHAR_SKINS)) if (id !== 'default' && !it.bp) all.push({ kind: 'skin', id, it, r: rarityOf(it) });
-  for (const [id, it] of Object.entries(GUN_SKINS)) if (id !== 'default' && !it.bp && !it.hidden && !it.rank) all.push({ kind: 'gskin', id, it, r: rarityOf(it) });
+  // 감정표현 · 스프레이 · 칭호 · 경험치 부스터 (스킨은 안 나옴)
+  for (const [id, it] of Object.entries(TITLES)) if (it.req.coins || it.req.gold || it.req.gacha) all.push({ kind: 'title', id, it, r: it.r });
+  for (const it of BOOSTS) for (let i = 0; i < 4; i++) all.push({ kind: 'boost', id: it.id, it, r: it.r }); // 부스터는 잘 나오게 4배
   for (const it of EMOTES) if (!it.free) all.push({ kind: 'emote', id: it.id, it, r: it.r });
   for (const it of SPRAYS) if (!it.free) all.push({ kind: 'spray', id: it.id, it, r: it.r });
   let x = Math.random() * RARITY.reduce((a, b) => a + b.w, 0), tier = 'common';
   for (const t of RARITY) { if ((x -= t.w) < 0) { tier = t.id; break; } }
   const pool = all.filter(o => o.r === tier);
   const pickd = pool[Math.floor(Math.random() * pool.length)];
-  const owned = ownedList(pickd.kind);
   let dup = false;
-  if (owned.includes(pickd.id)) { dup = true; profile.coins += RARITY.find(t => t.id === tier).dup; }
-  else owned.push(pickd.id);
+  if (pickd.kind === 'boost') activeBoosts().push({ mul: pickd.it.mul, n: pickd.it.n });
+  else {
+    const owned = pickd.kind === 'title' ? (Array.isArray(profile.titles) ? profile.titles : (profile.titles = [])) : ownedList(pickd.kind);
+    if (owned.includes(pickd.id)) { dup = true; profile.coins += RARITY.find(t => t.id === tier).dup; }
+    else owned.push(pickd.id);
+  }
   saveProfile();
   return Object.assign({ dup }, pickd);
 }

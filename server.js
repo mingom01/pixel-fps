@@ -338,7 +338,7 @@ function endMatch(r) {
   broadcast(r, { t: 'end', rank, mode: r.cfg.mode, win, score: r.score, ranked: !!r.cfg.ranked, rp });
   log(`방 ${r.code} 매치 종료 — ${teamMode(r) ? '점수 ' + r.score.join(':') : '1위 ' + (rank[0] && rank[0].name)}`);
   clearTimeout(r.timer);
-  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; if (r.cfg.ranked) r.autoAt = Date.now() + 20000; pushRoom(r); }, 6000);
+  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; pushRoom(r); }, 6000);
 }
 // 경쟁전 점수 변화: 이기면 크게, 져도 낮은 티어에선 조금 오름. 활약(킬·데스·순위)에 따라 보너스
 function rankedResult(r, rank, win) {
@@ -1100,7 +1100,8 @@ function handle(c, m) {
       break;
     }
     case 'start':
-      if (!r || r.hostId !== c.id || r.state === 'play' || r.cfg.ranked) break;
+      if (!r || r.hostId !== c.id || r.state === 'play') break;
+      if (r.cfg.ranked) { rankedStart(r); break; } // 경쟁전: 설정은 그대로, 방장이 시작
       if (m.cfg) r.cfg = fixCfg(cleanCfg(m.cfg, r.cfg));
       startMatch(r);
       break;
@@ -1666,10 +1667,8 @@ function rankedQueue(c, m) {
     r = createRoom(c, { mode, map: 'village', bots: 9, time: 300, kills: 25, diff: 'hard' }, false);
     r.cfg.ranked = true; r.cfg.rmap = true; r.pub = true;
     rollRandom(r); r.cfg.rmap = false;
-    r.autoAt = Date.now() + 10000;
   }
   joinRoom(c, r, m);
-  if (r.state === 'wait' && r.autoAt - Date.now() < 5000) r.autoAt = Date.now() + 5000;
   pushRoom(r);
 }
 function rankedStart(r) {
@@ -1685,7 +1684,6 @@ function rankedStart(r) {
 setInterval(() => {
   const now = Date.now(), dt = TICK / 1000;
   for (const r of rooms.values()) {
-    if (r.cfg.ranked && r.state === 'wait' && r.autoAt && now >= r.autoAt && r.clients.size) { rankedStart(r); continue; }
     if (r.state !== 'play') continue;
     if (isAbility(r)) abilityTick(r, now);
     if (!isSpike(r)) for (const e of r.ents.values()) if (!e.alive && e.respawnAt && now >= e.respawnAt) respawn(r, e);

@@ -4,6 +4,7 @@ import { initTouch } from './touch.js';
 import { FACES, ATLAS_COLS, makeAtlas, PCOLORS, flashTex, smokeTex, holeTex, textSprite, BLOCK_COLOR, skinMats, CHAR_SKINS } from './tex.js';
 import { makeGun, makeChar, setCharGun, animChar, gunIcon, gunLength, GUNS, GUN_SKINS } from './models.js';
 import { buildWorld, buildSky, rebuildBlocks, disposeWorld } from './world.js';
+import { activeBoosts } from './cosmetics.js';
 import { profile, saveProfile, levelInfo, myLevel, grantMatch, buyItem, equip, addGold, stats, dailyMissions, missionEvent, ACHIEVEMENTS, achLegends, checkAchievements, GACHA_COST, RARITY, rollGacha } from './cosmetics.js';
 import * as A from './audio.js';
 import { initAuth, onSocketOpen, handleAuthMsg, isAuthed } from './auth.js';
@@ -430,16 +431,14 @@ function onRoom(m) {
   $('hostNote').textContent = host ? '(방장)' : '방장만 바꿀 수 있어요';
   $('lobby').querySelector('.grow').classList.toggle('locked', !host);
   $('startBtn').disabled = !host; $('startBtn').textContent = host ? '게임 시작' : '방장을 기다리는 중…';
-  // 경쟁전 방: 설정 못 바꾸고 자동 시작
+  // 경쟁전 방: 설정은 못 바꾸고, 방장이 시작 (시작하면 더 못 들어옴)
   const ranked = !!m.cfg.ranked;
   $('lobby').classList.toggle('ranked', ranked);
   if (ranked) {
     $('lobby').querySelector('.grow').classList.add('locked');
-    $('startBtn').disabled = true; $('hostNote').textContent = '경쟁전';
-    const sec = Math.max(0, Math.ceil((m.autoAt - Date.now() - (S.off || 0)) / 1000));
-    $('startBtn').textContent = m.state === 'wait' ? (m.autoAt ? `${sec}초 뒤 자동 시작` : '곧 시작') : '진행 중';
-    $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>이기면 점수가 크게 오르고, 져도 낮은 티어에선 조금 올라요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
-    clearTimeout(S.rankTick); if (m.state === 'wait' && m.autoAt) S.rankTick = setTimeout(() => { if (S.room === m) onRoom(m); }, 1000);
+    $('hostNote').textContent = '경쟁전';
+    $('startBtn').textContent = host ? '경쟁전 시작' : '방장을 기다리는 중…';
+    $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>친구를 기다렸다가 방장이 시작해요 (시작하면 더 못 들어와요). 이기면 점수가 크게 오르고, 져도 낮은 티어에선 조금 올라요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
   }
   $('botsVal').textContent = m.cfg.bots;
   document.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', rmap ? c.dataset.map === 'random' : c.dataset.map === m.cfg.map));
@@ -533,7 +532,7 @@ function onEnd(m) {
   if (mine) {
     const g = grantMatch({ kills: mine.k, caps: mine.caps || 0, win, rank: m.win == null ? myIdx : -1 });
     const bpr = grantBpMatch({ kills: mine.k, win, ranked: !!m.ranked });
-    $('rewards').innerHTML = `<span>+${g.xp} XP</span><span><i class="coin"></i> +${g.coins} 코인</span><span class="bpx">패스 +${bpr.xp}</span>` + (g.after > g.before ? `<span class="up">레벨 업! Lv.${g.after}</span>` : '') + (bpr.after > bpr.before ? `<span class="up">패스 ${bpr.after}단계!</span>` : '');
+    $('rewards').innerHTML = `<span>+${g.xp} XP${g.boost ? ` <b class="up">(부스터 ${g.boost}배)</b>` : ''}</span><span><i class="coin"></i> +${g.coins} 코인</span><span class="bpx">패스 +${bpr.xp}</span>` + (g.after > g.before ? `<span class="up">레벨 업! Lv.${g.after}</span>` : '') + (bpr.after > bpr.before ? `<span class="up">패스 ${bpr.after}단계!</span>` : '');
     // 경쟁전 점수
     const rr = m.ranked && m.rp && m.rp[S.myId];
     if (rr) {
@@ -2408,9 +2407,25 @@ function chestIcon() {
   rows.forEach((r, yy) => [...r].forEach((ch, xx) => { if (col[ch]) { x.fillStyle = col[ch]; x.fillRect(xx + 1, yy + 3, 1, 1); } }));
   return (CHEST_URL = c.toDataURL());
 }
+// 경험치 부스터 아이콘 (배율 숫자 픽셀)
+const boostIconCache = {};
+function boostIcon(mul) {
+  if (boostIconCache[mul]) return boostIconCache[mul];
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  x.fillStyle = '#0b0c0e'; x.fillRect(8, 4, 48, 56);
+  x.fillStyle = mul >= 3 ? '#f4c22b' : mul >= 2 ? '#b05ae8' : '#3d8bf0'; x.fillRect(12, 8, 40, 48);
+  x.fillStyle = '#ffffff'; x.fillRect(16, 12, 32, 6);
+  x.font = 'bold 20px monospace'; x.textAlign = 'center'; x.fillStyle = '#ffffff'; x.fillText('x' + mul, 32, 44);
+  x.font = 'bold 10px monospace'; x.fillText('EXP', 32, 28);
+  return (boostIconCache[mul] = c.toDataURL());
+}
+function boostLine() {
+  const b = activeBoosts();
+  return b.length ? `<div class="boostline">사용 중인 부스터: ${b.map(o => `경험치 ${o.mul}배 ${o.n}판`).join(' → ')}</div>` : '';
+}
 function renderGacha() {
   $('lockerGrid').innerHTML = `<div class="gacha"><img class="chest" id="gChest" src="${chestIcon()}"><div class="gtitle">골드 뽑기 상자</div>
-    <div class="dim">캐릭터 스킨 · 총 스킨 · 감정표현 · 스프레이 중 하나가 랜덤으로 나와요 (레벨 제한 무시!) · 이미 가진 거면 코인으로 돌려받아요</div>
+    <div class="dim">감정표현 · 스프레이 · 칭호 · 경험치 부스터 중 하나가 랜덤으로 나와요 · 이미 가진 거면 코인으로 돌려받아요 (부스터는 쌓여요)</div><div id="boostBox">${boostLine()}</div>
     <div class="grates">${RARITY.map(r => `<span style="color:${r.color}">${r.name} ${r.w}%</span>`).join(' · ')}</div>
     <button id="gachaBtn" class="btn big yellow">뽑기 <small><i class="goldc"></i> ${GACHA_COST} 골드 (보유 ${profile.gold})</small></button>
     <div id="gachaOut"></div></div>`;
@@ -2425,13 +2440,15 @@ function doGacha() {
   const R = RARITY.find(r => r.id === res.r);
   setTimeout(() => {
     chest.classList.remove('shake');
-    const th = res.kind === 'skin' ? skinThumb(res.id) : res.kind === 'gskin' ? gunIcon('rifle', 2, res.id) : res.kind === 'emote' ? emoteIcon(res.id, 64) : sprayCanvas(res.id, 5).toDataURL();
-    $('gachaOut').innerHTML = `<div class="greveal" style="--rc:${R.color}"><div class="grar" style="color:${R.color}">${R.name}</div><img src="${th}"><div class="gname">${esc(res.it.name)} <span class="dim">(${{ skin: '캐릭터 스킨', gskin: '총 스킨', emote: '감정표현', spray: '스프레이' }[res.kind]})</span></div>${res.dup ? '<div class="dim">이미 가지고 있어서 코인으로 돌려받았어요</div>' : `<button class="btn green" id="gEquip">바로 장착</button>`}</div>`;
-    if (!res.dup) $('gEquip').onclick = () => { equip(res.kind, res.id); refreshPreview(); A.sfxBuy(); renderGacha(); };
+    const th = res.kind === 'emote' ? `<img src="${emoteIcon(res.id, 64)}">` : res.kind === 'spray' ? `<img src="${sprayCanvas(res.id, 5).toDataURL()}">` : res.kind === 'title' ? `<div class="gtitlebig">${titleHtml(res.id)}</div>` : `<img src="${boostIcon(res.it.mul)}">`;
+    const canEquip = !res.dup && res.kind !== 'boost';
+    $('gachaOut').innerHTML = `<div class="greveal" style="--rc:${R.color}"><div class="grar" style="color:${R.color}">${R.name}</div>${th}<div class="gname">${esc(res.it.name)} <span class="dim">(${{ emote: '감정표현', spray: '스프레이', title: '칭호', boost: '경험치 부스터' }[res.kind]})</span></div>${res.dup ? '<div class="dim">이미 가지고 있어서 코인으로 돌려받았어요</div>' : res.kind === 'boost' ? '<div class="dim">다음 매치부터 자동으로 적용돼요</div>' : `<button class="btn green" id="gEquip">바로 장착</button>`}</div>`;
+    if (canEquip) $('gEquip').onclick = () => { if (res.kind === 'title') equipTitle(res.id); else equip(res.kind, res.id); updateProfileUI(); refreshPreview(); A.sfxBuy(); renderGacha(); };
     if (!res.dup && res.kind === 'emote' && pv.ch) pv.emote = { anim: res.it.anim, fx: res.it.fx, t0: performance.now(), until: performance.now() + 3000 };
     if (res.r === 'legend') { A.sfxFanfare(); } else A.sfxBuy();
     btn.disabled = false; $('gachaBtn').querySelector('small').innerHTML = `<i class="goldc"></i> ${GACHA_COST} 골드 (보유 ${profile.gold})`;
     updateProfileUI(); noticeDone([], checkAchievements());
+    if ($('boostBox')) $('boostBox').innerHTML = boostLine();
   }, 1300);
 }
 
