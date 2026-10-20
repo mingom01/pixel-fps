@@ -1665,8 +1665,18 @@ function botAbility(r, b, t, now) {
     if (go && (b.hero !== 'raze' || aimAt(b, t))) { useAbility(r, b, { k: 'x' }); return; }
   }
   if (now < (b.qAt || 0)) return;
-  const go = { sage: hurt, sova: !!t || Math.random() < 0.05, raze: t && d > 5 && d < 20, wall: !!t && hurt && d > 6, jett: false, ghost: false }[b.hero];
-  if (go && (b.hero !== 'raze' || aimAt(b, t))) useAbility(r, b, { k: 'q' });
+  const go = { sage: hurt, sova: !!t || Math.random() < 0.05, raze: t && d > 5 && d < 20, wall: !!t && hurt && d > 6, jett: t && d > 9 && d < 30, ghost: t && d > 10 && d < 40 }[b.hero];
+  if (go && (b.hero !== 'raze' || aimAt(b, t)) && useAbility(r, b, { k: 'q' })) botMoveAbility(r, b, t);
+}
+// 봇 돌진(질풍) · 순간이동(유령): 적 쪽으로
+function botMoveAbility(r, b, t) {
+  const bd = b.body; if (!bd || !t) return;
+  const dx = t.x - bd.x, dz = t.z - bd.z, l = Math.hypot(dx, dz) || 1, fx = dx / l, fz = dz / l;
+  if (b.hero === 'jett') { bd.vx = fx * ABIL.DASH; bd.vz = fz * ABIL.DASH; bd.vy = Math.max(bd.vy, 2.5); bd.ground = false; }
+  else if (b.hero === 'ghost') {
+    const h = SH.raycast(r.map, bd.x, bd.y + 1, bd.z, fx, 0, fz, ABIL.BLINK);
+    for (let dd = h ? Math.max(0, h.t - 0.6) : Math.min(ABIL.BLINK, l - 3); dd > 0; dd -= 0.25) { const nx = bd.x + fx * dd, nz = bd.z + fz * dd; if (!SH.bodyHits(r.map, nx, bd.y, nz, P.H)) { bd.x = nx; bd.z = nz; b.x = nx; b.z = nz; break; } }
+  }
 }
 function aimAt(b, t) { if (!t) return false; const dx = t.x - b.x, dz = t.z - b.z, d = Math.hypot(dx, dz); b.yaw = Math.atan2(-dx, -dz); b.pitch = Math.atan2(t.y - b.y, d) + 0.12; return true; }
 
