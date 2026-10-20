@@ -20,7 +20,10 @@ export function initTouch(T) {
     <button class="tb small" data-b="buy">상점</button>
     <button class="tb small" data-b="emote">감정</button>
     <button class="tb small" data-b="spray">스프레이</button>
-    <button class="tb small" data-b="menu">메뉴</button>`;
+    <button class="tb small" data-b="menu">메뉴</button>
+    <button class="tb" data-b="abq">Q 스킬</button>
+    <button class="tb" data-b="abx">X 궁극</button>
+    <button class="tb small" data-b="inspect">살펴보기</button>`;
   document.body.appendChild(ui);
   const K = T.keys;
   // 조이스틱
@@ -76,6 +79,9 @@ export function initTouch(T) {
       else if (b === 'emote') T.press('KeyY');
       else if (b === 'spray') T.press('KeyT');
       else if (b === 'menu') T.pause();
+      else if (b === 'abq') T.press('KeyQ');
+      else if (b === 'abx') T.press('KeyX');
+      else if (b === 'inspect') T.press('KeyF');
     }, { passive: false });
     const up = (e) => {
       btn.classList.remove('down');
@@ -92,6 +98,7 @@ export function initTouch(T) {
     ui.classList.toggle('hidden', !show);
     ui.querySelector('[data-b="ads"]').classList.toggle('on', !!T.WS.adsHeld);
     ui.querySelector('[data-b="plant"]').style.display = T.mode() === 'spike' ? '' : 'none';
+    for (const k of ['abq', 'abx']) ui.querySelector('[data-b="' + k + '"]').style.display = T.mode() === 'ability' ? '' : 'none';
   }, 200);
   return true;
 }

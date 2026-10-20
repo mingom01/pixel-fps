@@ -442,7 +442,11 @@ function onRoom(m) {
   if (ranked) {
     $('lobby').querySelector('.grow').classList.add('locked');
     $('hostNote').textContent = '경쟁전';
-    $('startBtn').textContent = host ? '경쟁전 시작' : '방장을 기다리는 중…';
+    // 방장이 1분 넘게 시작을 안 하면 누구나 시작 가능
+    const left = Math.ceil((m.waitSince + 60000 - Date.now() - (S.off || 0)) / 1000), anyone = m.state === 'wait' && m.waitSince && left <= 0;
+    $('startBtn').disabled = !(host || anyone);
+    $('startBtn').textContent = host || anyone ? '경쟁전 시작' : `방장을 기다리는 중… (${left}초 뒤 누구나 시작 가능)`;
+    clearTimeout(S.rkT); if (m.state === 'wait' && !host && !anyone) S.rkT = setTimeout(() => { if (S.room === m) onRoom(m); }, 1000);
     $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>친구를 기다렸다가 방장이 시작해요 (시작하면 더 못 들어와요). 이기면 점수가 크게 오르고, 져도 낮은 티어에선 조금 올라요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
   }
   $('botsVal').textContent = m.cfg.bots;

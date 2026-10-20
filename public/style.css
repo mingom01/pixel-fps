@@ -780,3 +780,6 @@ body.abil #killBanner { bottom: 16%; }
 #lobby.ranked #modeDesc { font-size: 14px; color: var(--text); margin: 10px 0; }
 .rk-rw { width: 100%; text-align: center; color: #ffd84a; margin-top: 6px; font-size: 13px; }
 .boostline { color: #7df07d; margin: 6px 0; font-size: 13px; } .gtitlebig { font-size: 20px; margin: 14px 0; } .gtitlebig .ttl { font-size: 18px; padding: 4px 10px; }
+#touchUI [data-b="abq"] { right: 40px; bottom: 236px; background: rgba(90, 200, 255, 0.5); }
+#touchUI [data-b="abx"] { right: 210px; bottom: 236px; background: rgba(244, 194, 43, 0.5); }
+#touchUI [data-b="inspect"] { left: 194px; top: 160px !important; }

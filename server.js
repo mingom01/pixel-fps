@@ -213,7 +213,7 @@ function createRoom(c, cfg, isPublic) {
 }
 function broadcast(r, obj, except) { const s = JSON.stringify(obj); for (const c of r.clients) if (c !== except) c.send(s); }
 function roster(r) { return [...r.ents.values()].map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, skin: e.skin, gskin: e.gskin, title: e.title, lv: e.lv, caps: e.caps, boss: !!e.boss, zombie: !!e.zombie, gg: e.gg || 0, hero: e.hero, rp: e.bot ? null : e.rp, wc: e.wc, charm: e.charm })); }
-function roomMsg(r) { return { t: 'room', autoAt: r.autoAt || 0, customName: r.custom ? r.custom.name : null, code: r.code, host: r.hostId, cfg: r.cfg, state: r.state, endAt: r.endAt, score: r.score, players: roster(r) }; }
+function roomMsg(r) { return { t: 'room', autoAt: r.autoAt || 0, waitSince: r.waitSince || 0, customName: r.custom ? r.custom.name : null, code: r.code, host: r.hostId, cfg: r.cfg, state: r.state, endAt: r.endAt, score: r.score, players: roster(r) }; }
 function pushRoom(r) { broadcast(r, roomMsg(r)); }
 function meMsg(e) { return { t: 'me', hp: Math.ceil(e.hp), armor: Math.ceil(e.armor), money: e.money, primary: e.primary, secondary: e.secondary, nades: e.nades, alive: e.alive, buyUntil: e.buyUntil, respawnAt: e.respawnAt, zombie: !!e.zombie, gg: e.gg || 0, helmet: e.helmet, perks: Object.keys(e.perks), sup: e.sup, maxHp: e.maxHp, hero: e.hero, qAt: e.qAt || 0, ult: Math.floor(e.ult || 0), haste: e.hasteUntil || 0, steel: e.steelUntil || 0, invis: e.invisUntil || 0 }; }
 function clientOf(r, id) { for (const c of r.clients) if (c.id === id) return c; return null; }
@@ -340,7 +340,7 @@ function endMatch(r) {
   broadcast(r, { t: 'end', rank, mode: r.cfg.mode, win, score: r.score, ranked: !!r.cfg.ranked, rp });
   log(`방 ${r.code} 매치 종료 — ${teamMode(r) ? '점수 ' + r.score.join(':') : '1위 ' + (rank[0] && rank[0].name)}`);
   clearTimeout(r.timer);
-  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; pushRoom(r); }, 6000);
+  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; r.waitSince = Date.now(); pushRoom(r); }, 6000);
 }
 // 경쟁전 점수 변화: 이기면 크게, 져도 낮은 티어에선 조금 오름. 활약(킬·데스·순위)에 따라 보너스
 function rankedResult(r, rank, win) {
@@ -1102,8 +1102,9 @@ function handle(c, m) {
       break;
     }
     case 'start':
-      if (!r || r.hostId !== c.id || r.state === 'play') break;
-      if (r.cfg.ranked) { rankedStart(r); break; } // 경쟁전: 설정은 그대로, 방장이 시작
+      // 경쟁전: 방장이 시작. 방장이 1분 넘게 안 누르면 아무나 시작 가능
+      if (r && r.cfg.ranked && r.state === 'wait' && (r.hostId === c.id || Date.now() - (r.waitSince || 0) > 60000)) { rankedStart(r); break; }
+      if (!r || r.hostId !== c.id || r.state === 'play') break; // 경쟁전: 설정은 그대로, 방장이 시작
       if (m.cfg) r.cfg = fixCfg(cleanCfg(m.cfg, r.cfg));
       startMatch(r);
       break;
@@ -1667,7 +1668,7 @@ function rankedQueue(c, m) {
   if (!r) {
     const mode = pick(RANKED.MODES);
     r = createRoom(c, { mode, map: 'village', bots: 9, time: 300, kills: 25, diff: 'hard' }, false);
-    r.cfg.ranked = true; r.cfg.rmap = true; r.pub = true;
+    r.cfg.ranked = true; r.cfg.rmap = true; r.pub = true; r.waitSince = Date.now();
     rollRandom(r); r.cfg.rmap = false;
   }
   joinRoom(c, r, m);
