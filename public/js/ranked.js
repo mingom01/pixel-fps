@@ -41,7 +41,7 @@ export function grantRankRewards() {
 // 결과 적용 (서버가 계산한 점수 변화)
 export function applyRanked(r) {
   const R = myRanked(), before = R.rp;
-  R.rp = Math.max(0, R.rp + r.d); R.games++; if (r.win) R.wins++;
+  R.rp = r.after != null ? r.after : Math.max(0, R.rp + r.d); R.games++; if (r.win) R.wins++;
   R.best = Math.max(R.best || 0, R.rp);
   saveProfile();
   return { before, after: R.rp, up: RANKED.info(R.rp).ti > RANKED.info(before).ti || (RANKED.info(R.rp).ti === RANKED.info(before).ti && RANKED.info(R.rp).div < RANKED.info(before).div) };

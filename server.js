@@ -136,6 +136,11 @@ STORE.get(RANK_ID).then(d => {
   STORE.set(RANK_ID, rankDb);
 }).catch(e => console.log('랭킹 불러오기 실패: ' + e.message));
 function saveRank() { STORE.set(RANK_ID, rankDb); }
+// 경쟁전 점수는 서버가 계정별로 보관 (브라우저가 보낸 값은 처음 한 번만, 300점까지만 믿음)
+const RP_ID = '__rp';
+let rpDb = {};
+STORE.get(RP_ID).then(d => { if (d) rpDb = Object.assign(d, rpDb); STORE.set(RP_ID, rpDb); }).catch(e => console.log('경쟁전 점수 불러오기 실패: ' + e.message));
+function setRp(e, v) { e.rp = Math.max(0, Math.round(v)); if (e.sub) { rpDb[e.sub] = e.rp; STORE.set(RP_ID, rpDb); } }
 function recordMatch(r, rank, win) {
   if (isPractice(r)) return;
   const first = rank[0] && rank[0].id;
@@ -225,7 +230,9 @@ function joinRoom(c, r, m) {
   const e = newEnt(c.id, cleanName(m.name), clamp(Math.round(num(m.color, 0)), 0, COLORS - 1), false);
   e.skin = cleanId(m.skin); e.gskin = cleanId(m.gskin); e.title = cleanId(m.title); e.lv = clamp(Math.round(num(m.lv, 1)), 1, 999);
   e.charm = m.charm ? cleanId(m.charm) : null;
-  e.hero = cleanHero(m.hero); e.rp = clamp(Math.round(num(m.rp, 0)), 0, 99999); e.wc = cleanWc(m.wc);
+  e.hero = cleanHero(m.hero); e.wc = cleanWc(m.wc);
+  e.sub = c.user ? c.user.sub : null;
+  e.rp = e.sub && rpDb[e.sub] != null ? rpDb[e.sub] : clamp(Math.round(num(m.rp, 0)), 0, 300);
   r.ents.set(c.id, e);
   fitBots(r);
   c.send(roomMsg(r));
@@ -242,6 +249,8 @@ function leaveRoom(c) {
   const r = c.room; if (!r) return;
   c.room = null; r.clients.delete(c);
   const e = r.ents.get(c.id);
+  // 경쟁전 도중에 나가면 -15점
+  if (e && r.cfg.ranked && r.state === 'play') setRp(e, (e.rp || 0) - 15);
   r.ents.delete(c.id);
   if (!r.clients.size) { clearTimeout(r.timer); rooms.delete(r.code); log(`방 ${r.code} 삭제`); return; }
   if (r.hostId === c.id) r.hostId = [...r.clients][0].id;
@@ -351,8 +360,9 @@ function rankedResult(r, rank, win) {
     const draw = win === -1;
     const perf = (e.kills - e.deaths) * 0.5 + (i === 0 ? 3 : i < 3 ? 1.5 : 0);
     const d = RANKED.delta(e.rp || 0, won, draw, perf);
-    out[e.id] = { d, before: e.rp || 0, win: won, draw };
-    e.rp = Math.max(0, (e.rp || 0) + d);
+    const before = e.rp || 0;
+    setRp(e, before + d);
+    out[e.id] = { d, before, after: e.rp, win: won, draw };
   });
   return out;
 }
