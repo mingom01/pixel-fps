@@ -958,7 +958,6 @@
     ],
     DIV: 100,
     MODES: ['tdm', 'spike', 'ability'],
-    // 판수를 많이 하면 오르도록: 지더라도 골드까지는 점수가 오르고, 그 위로는 조금만 깎임
     // 점수 변화 = 기본(승패·티어) + 킬뎃 + 연승/연패
     //  킬뎃: K/D 1 기준으로 높으면 최대 +10, 낮으면 최대 -10 (순위 1등 +3, 3등 안 +1)
     //  연승: 2연승부터 한 번 더 이길 때마다 +3 (최대 +12) / 연패: 2연패부터 -3 (최대 -12)
@@ -968,12 +967,13 @@
       const kd = (kills || 0) / Math.max(1, deaths || 0);
       let perf = Math.round(Math.max(-10, Math.min(10, (kd - 1) * 6)) + (place === 0 ? 3 : place < 3 ? 1 : 0));
       let base, str = 0, ns = streak || 0;
-      if (draw) { base = 6; perf = Math.round(perf / 2); }
+      if (draw) { base = 0; perf = Math.round(perf / 2); }
       else if (win) { base = 26 - ti * 2; ns = ns > 0 ? ns + 1 : 1; str = Math.min(12, (ns - 1) * 3); }
       else {
-        base = [10, 8, 5, 0, -4, -8, -12][ti];
+        base = [-8, -10, -12, -14, -16, -18, -20][ti];
         if (perf > 0) perf = Math.round(perf / 2); // 져도 잘했으면 덜 깎임
         ns = ns < 0 ? ns - 1 : -1; str = -Math.min(12, (-ns - 1) * 3);
+        if (base + perf + str > -3) perf = -3 - base - str; // 지면 무조건 최소 3점은 깎임
       }
       return { d: base + perf + str, base, perf, str, streak: ns, kd: +kd.toFixed(2) };
     },

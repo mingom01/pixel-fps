@@ -449,7 +449,7 @@ function onRoom(m) {
     $('startBtn').disabled = !(host || anyone);
     $('startBtn').textContent = host || anyone ? '경쟁전 시작' : `방장을 기다리는 중… (${left}초 뒤 누구나 시작 가능)`;
     clearTimeout(S.rkT); if (m.state === 'wait' && !host && !anyone) S.rkT = setTimeout(() => { if (S.room === m) onRoom(m); }, 1000);
-    $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>친구를 기다렸다가 방장이 시작해요 (시작하면 더 못 들어와요). 이기면 점수가 크게 오르고, 져도 낮은 티어에선 조금 올라요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
+    $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>친구를 기다렸다가 방장이 시작해요 (시작하면 더 못 들어와요). 이기면 점수가 오르고 지면 깎여요. 킬뎃이 좋을수록·연승할수록 더 오르고, 못할수록·연패할수록 더 깎여요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
   }
   $('botsVal').textContent = m.cfg.bots;
   document.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', rmap ? c.dataset.map === 'random' : c.dataset.map === m.cfg.map));

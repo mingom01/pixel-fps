@@ -12,7 +12,12 @@ export const EMOTE_SLOTS = 8; // 감정표현 휠 칸 수
    1) 구매: 종류(캐릭터/총)별로 줄을 세워서 첫 번째는 Lv.15, 다음은 Lv.20, 25 … (5레벨씩)
       가격도 하나 올라갈 때마다 2배 (코인과 골드를 둘 다 냄)
    2) 지정된 업적을 달성하면 무료로 받음 */
-export const LEGEND_LV = 15, LEGEND_LV_STEP = 5, LEGEND_BASE = { coins: 20000, gold: 300 };
+export const LEGEND_LV = 15, LEGEND_LV_STEP = 5, LEGEND_BASE = { coins: 16000, gold: 240 };
+// 일반~영웅 스킨 가격 20% 낮춤 (50 단위로 반올림)
+export const SKIN_PRICE_MUL = 0.8;
+for (const list of [CHAR_SKINS, GUN_SKINS]) for (const it of Object.values(list)) {
+  if (it.r !== 'legend' && it.price && !it.priceCut) { it.price = Math.max(50, Math.round(it.price * SKIN_PRICE_MUL / 50) * 50); it.priceCut = true; }
+}
 export const LEGEND_ACH = {
   skin: { shadow: 'st10', dragon: 'k1000', golden: 'w100', valkyrie: 'hs200', voidwalker: 'penta', frostqueen: 'st15', phoenixlord: 'k2000' },
   gskin: {
