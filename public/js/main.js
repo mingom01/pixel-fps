@@ -552,7 +552,7 @@ function onEnd(m) {
     const rr = m.ranked && m.rp && m.rp[S.myId];
     if (rr) {
       const res = applyRanked(rr), inf = SH.RANKED.info(res.after);
-      $('rewards').innerHTML += `<div class="rk-res"><img src="${rankIcon(res.after, 3)}"><div><b style="color:${inf.tier.color}">${inf.name}</b> <span class="${rr.d >= 0 ? 'up' : 'down'}">${rr.d >= 0 ? '+' : ''}${rr.d} RP</span>${res.up ? ' <b class="up">승급!</b>' : ''}<div class="rk-bar"><i style="width:${inf.need ? inf.pt : 100}%;background:${inf.tier.color}"></i></div></div></div>`;
+      $('rewards').innerHTML += `<div class="rk-res"><img src="${rankIcon(res.after, 3)}"><div><b style="color:${inf.tier.color}">${inf.name}</b> <span class="${rr.d >= 0 ? 'up' : 'down'}">${rr.d >= 0 ? '+' : ''}${rr.d} RP</span>${res.up ? ' <b class="up">승급!</b>' : ''}${rr.base != null ? `<div class="rk-why">${rr.draw ? '무승부' : rr.win ? '승리' : '패배'} ${rr.base >= 0 ? '+' : ''}${rr.base} · 킬뎃 ${rr.kd} ${rr.perf >= 0 ? '+' : ''}${rr.perf}${rr.str ? ` · ${rr.str > 0 ? rr.streak + '연승 +' + rr.str : -rr.streak + '연패 ' + rr.str}` : ''}</div>` : ''}<div class="rk-bar"><i style="width:${inf.need ? inf.pt : 100}%;background:${inf.tier.color}"></i></div></div></div>`;
       if (res.up) { celebrate('승급!', inf.name, 't-god'); }
       const tr = grantRankRewards();
       for (const t of tr) notify('경쟁전 보상: ' + t, inf.tier.color);

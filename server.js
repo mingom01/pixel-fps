@@ -370,11 +370,12 @@ function rankedResult(r, rank, win) {
     const e = r.ents.get(p.id); if (!e || e.bot) return;
     const won = win != null ? (win >= 0 && e.team === win) : i === 0;
     const draw = win === -1;
-    const perf = (e.kills - e.deaths) * 0.5 + (i === 0 ? 3 : i < 3 ? 1.5 : 0);
-    const d = RANKED.delta(e.rp || 0, won, draw, perf);
+    const sk = e.sub ? rpDb['s:' + e.sub] || 0 : 0; // 연승(+)/연패(-) 기록
+    const c = RANKED.calc({ rp: e.rp || 0, win: won, draw, kills: e.kills, deaths: e.deaths, place: i, streak: sk });
+    if (e.sub) rpDb['s:' + e.sub] = c.streak;
     const before = e.rp || 0;
-    setRp(e, before + d);
-    out[e.id] = { d, before, after: e.rp, win: won, draw };
+    setRp(e, before + c.d);
+    out[e.id] = { d: c.d, before, after: e.rp, win: won, draw, base: c.base, perf: c.perf, str: c.str, streak: c.streak, kd: c.kd };
   });
   return out;
 }

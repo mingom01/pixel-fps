@@ -784,3 +784,4 @@ body.abil #killBanner { bottom: 16%; }
 #touchUI [data-b="abx"] { right: 210px; bottom: 236px; background: rgba(244, 194, 43, 0.5); }
 #touchUI [data-b="inspect"] { left: 194px; top: 160px !important; }
 .botfill { margin-top: 6px; font-size: 12px; }
+.rk-why { font-size: 11px; color: var(--dim); }
