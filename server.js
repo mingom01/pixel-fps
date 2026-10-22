@@ -327,7 +327,7 @@ function startMatch(r) {
   r.map = r.cfg.map === 'custom' ? r.custom.map.clone() : SH.getMap(r.cfg.map).clone();
   GIM.start(r);
   r.pickups = isSpike(r) || isPractice(r) ? [] : r.map.pickups.map(p => Object.assign({ readyAt: 0 }, p));
-  r.endAt = Date.now() + (isSpike(r) || isPractice(r) ? 3 * 3600 : r.cfg.time) * 1000;
+  r.endAt = Date.now() + (isSpike(r) || isPractice(r) ? 3 * 3600 : Number(process.env.TEST_MATCH_SEC) || r.cfg.time) * 1000; // TEST_MATCH_SEC: 테스트 서버에서만 판 시간 줄이기
   INCOME.start(r, Date.now());
   fitBots(r);
   for (const e of r.ents.values()) if (e.bot) e.skill = skillFor(r);
