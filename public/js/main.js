@@ -385,8 +385,9 @@ fetch('/info').then(r => r.json()).then(d => { S.lan = d.ips && d.ips[0] ? `${d.
 const amHost = () => !!(S.room && S.room.host === S.myId);
 function bindKicks(box) { box.querySelectorAll('[data-kick]').forEach(b => b.onclick = (ev) => { ev.stopPropagation(); send({ t: 'bot', op: 'kick', id: b.dataset.kick }); }); }
 function renderBotBtns(box) {
-  if (!amHost()) { box.innerHTML = ''; return; }
-  const md = S.room.cfg.mode, full = S.room.players.length >= 12, nb = S.room.players.filter(p => p.bot).length;
+  // 대기실에선 봇이 없음 (시작할 때 빈자리를 채움) → 아래 '봇 수'로 조절
+  if (!amHost() || S.room.state === 'wait' || S.room.cfg.ranked) { box.innerHTML = ''; return; }
+  const md = S.room.cfg.mode, full = S.room.players.length >= 12, nb = S.room.state === 'wait' ? S.room.cfg.bots : S.room.players.filter(p => p.bot).length;
   const add = md === 'ffa' ? `<button class="btn green" data-add="-1" ${full ? 'disabled' : ''}>+ 봇 추가</button>`
     : `<button class="btn red" data-add="0" ${full ? 'disabled' : ''}>+ 레드 봇</button><button class="btn blue" data-add="1" ${full ? 'disabled' : ''}>+ 블루 봇</button>`;
   box.innerHTML = add + `<button class="btn" data-clear="1" ${nb ? '' : 'disabled'}>봇 모두 빼기</button>`;
@@ -395,8 +396,9 @@ function renderBotBtns(box) {
 }
 function renderBotMgr() {
   const host = amHost();
-  $('botMgr').classList.toggle('hidden', !host || !S.room);
-  if (!host || !S.room) return;
+  const rk = !!(S.room && S.room.cfg.ranked); // 경쟁전은 봇을 못 넣고 뺌
+  $('botMgr').classList.toggle('hidden', !host || !S.room || rk);
+  if (!host || !S.room || rk) return;
   const bots = S.room.players.filter(p => p.bot);
   $('botMgrList').innerHTML = bots.length ? bots.map(p => `<div><span class="sw" style="width:12px;height:12px;border:2px solid #000;background:${p.team >= 0 ? TEAMS[p.team].css : hexs(PCOLORS[p.color])}"></span>${esc(p.name)} <span class="dim">${p.k}킬</span><button class="kick" data-kick="${p.id}">빼기</button></div>`).join('') : '<span class="dim">봇이 없어요</span>';
   bindKicks($('botMgrList'));
@@ -456,7 +458,11 @@ function onRoom(m) {
   const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${p.rp != null && m.cfg.ranked ? rankBadge(p.rp, true) : ''}${esc(p.name)}${md === 'ability' && p.hero && SH.HEROES[p.hero] ? ` <span class="herotag" style="color:${SH.HEROES[p.hero].color}">${SH.HEROES[p.hero].name}</span>` : ''} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
   $('lobbyPlayers').innerHTML = md === 'ffa' ? m.players.map(pl).join('')
     : [0, 1].map(t => `<div class="teamhead" style="color:${TEAMS[t].css}">${TEAMS[t].name} 팀</div>` + m.players.filter(p => p.team === t).map(pl).join('')).join('');
-  $('endBtn').classList.toggle('hidden', !host);
+  if (m.state === 'wait') {
+    const total = Math.min(12, m.cfg.bots + 1), empty = Math.max(0, total - m.players.length);
+    $('lobbyPlayers').insertAdjacentHTML('beforeend', `<div class="dim botfill">총 ${total}명 · 시작하면 빈자리 ${empty}개를 봇이 채워요 (게임 중에 들어오면 봇 대신 들어가요)</div>`);
+  }
+  $('endBtn').classList.toggle('hidden', !host || !!m.cfg.ranked);
   bindKicks($('lobbyPlayers'));
   renderBotBtns($('lobbyBotBtns'));
   if (S.modal === 'pause') renderBotMgr();

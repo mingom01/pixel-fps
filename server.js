@@ -282,13 +282,24 @@ function removeBot(r, b) {
   broadcast(r, { t: 'gone', id: b.id });
   if (r.turrets) for (const t of r.turrets) if (t.owner === b.id) t.hp = 0;
 }
+// 봇 인원: cfg.bots = 혼자 할 때의 봇 수 → 전체 인원은 bots + 1 로 고정
+// 대기실에는 사람만 있고, 게임이 시작되면 빈자리를 봇으로 채움.
+// 게임 도중 사람이 들어오면 봇 한 명과 자리를 바꾸고, 나가면 다시 봇으로 채움
+const botTarget = (r) => Math.max(0, Math.min(MAX_ROOM, r.cfg.bots + 1) - r.clients.size);
+const botsOf = (r) => [...r.ents.values()].filter(e => e.bot && !e.boss && !e.minion);
 function fitBots(r) {
-  const humans = r.clients.size;
-  const want = Math.max(0, Math.min(r.cfg.bots, MAX_ROOM - humans));
-  const bots = [...r.ents.values()].filter(e => e.bot);
-  while (bots.length > want) removeBot(r, bots.pop());
-  while (bots.length < want) bots.push(addBot(r));
-  ensureTeams(r);
+  const want = r.state === 'wait' ? 0 : botTarget(r);
+  ensureTeams(r); // 새로 들어온 사람 팀부터 정함
+  let list = botsOf(r);
+  while (list.length > want) {
+    // 사람이 많은 팀(사람+봇) 쪽 봇부터, 죽어 있는 봇 우선으로 뺌
+    const cnt = [0, 0]; for (const e of r.ents.values()) if (e.team >= 0 && !e.boss && !e.minion) cnt[e.team]++;
+    const big = cnt[0] > cnt[1] ? 0 : cnt[1] > cnt[0] ? 1 : -2;
+    const pool = list.filter(b => big === -2 || b.team === big);
+    const pickb = (pool.length ? pool : list).sort((a, b) => (a.alive ? 1 : 0) - (b.alive ? 1 : 0))[0];
+    removeBot(r, pickb); list = botsOf(r);
+  }
+  while (list.length < want) { list.push(addBot(r)); ensureTeams(r); }
 }
 // 팀 배정: 사람은 고른 팀 유지, 봇으로 인원 맞춤
 function ensureTeams(r) {
@@ -296,11 +307,12 @@ function ensureTeams(r) {
   if (!teamMode(r)) { for (const e of all) e.team = -1; return; }
   if (isZombie(r)) { for (const e of all) e.team = e.zombie ? 1 : 0; return; }
   if (isBoss(r)) { for (const e of all) e.team = e.boss || e.minion ? 1 : 0; return; }
+  const play = r.state !== 'wait';
+  const keep = (e) => e.team >= 0 && (!e.bot || e.teamLock || play);
   const cnt = [0, 0];
-  for (const e of all) if (!e.bot && e.team >= 0) cnt[e.team]++;
-  for (const e of all) if (!e.bot && e.team < 0) { e.team = cnt[0] <= cnt[1] ? 0 : 1; cnt[e.team]++; }
-  for (const e of all) if (e.bot && e.teamLock && e.team >= 0) cnt[e.team]++;
-  for (const e of all) if (e.bot && !(e.teamLock && e.team >= 0)) { e.team = cnt[0] <= cnt[1] ? 0 : 1; cnt[e.team]++; }
+  for (const e of all) if (keep(e)) cnt[e.team]++;
+  for (const e of all) if (!e.bot && !keep(e)) { e.team = cnt[0] <= cnt[1] ? 0 : 1; cnt[e.team]++; }
+  for (const e of all) if (e.bot && !keep(e)) { e.team = cnt[0] <= cnt[1] ? 0 : 1; cnt[e.team]++; }
 }
 
 /* ---------- 매치 ---------- */
@@ -349,7 +361,7 @@ function endMatch(r) {
   broadcast(r, { t: 'end', rank, mode: r.cfg.mode, win, score: r.score, ranked: !!r.cfg.ranked, rp });
   log(`방 ${r.code} 매치 종료 — ${teamMode(r) ? '점수 ' + r.score.join(':') : '1위 ' + (rank[0] && rank[0].name)}`);
   clearTimeout(r.timer);
-  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; r.waitSince = Date.now(); pushRoom(r); }, 6000);
+  r.timer = setTimeout(() => { if (r.state !== 'end') return; r.state = 'wait'; r.waitSince = Date.now(); fitBots(r); pushRoom(r); }, 6000);
 }
 // 경쟁전 점수 변화: 이기면 크게, 져도 낮은 티어에선 조금 오름. 활약(킬·데스·순위)에 따라 보너스
 function rankedResult(r, rank, win) {
@@ -1124,19 +1136,25 @@ function handle(c, m) {
       break;
     case 'bot': {
       if (!r || r.hostId !== c.id || r.cfg.ranked) break;
-      const bots = [...r.ents.values()].filter(e => e.bot);
+      const bots = botsOf(r), hum = r.clients.size;
+      if (r.state === 'wait') { // 대기실: 시작할 때 채울 봇 수만 조절
+        if (m.op === 'add') r.cfg.bots = Math.min(MAX_ROOM - 1, r.cfg.bots + 1);
+        else if (m.op === 'clear') r.cfg.bots = 0;
+        pushRoom(r);
+        break;
+      }
       if (m.op === 'add') {
         if (r.ents.size >= MAX_ROOM) { c.send({ t: 'err', text: '방이 꽉 찼어요 (최대 12명)' }); break; }
         const b = addBot(r, teamMode(r) ? num(m.team, -1) : -1);
-        r.cfg.bots = bots.length + 1;
+        r.cfg.bots = bots.length + 1 + hum - 1;
         broadcast(r, { t: 'sys', text: `봇 ${b.name} 추가` });
       } else if (m.op === 'kick') {
-        const b = r.ents.get(String(m.id)); if (!b || !b.bot) break;
-        removeBot(r, b); r.cfg.bots = bots.length - 1;
+        const b = r.ents.get(String(m.id)); if (!b || !b.bot || b.boss || b.minion) break;
+        removeBot(r, b); r.cfg.bots = Math.max(0, bots.length - 1 + hum - 1);
         broadcast(r, { t: 'sys', text: `봇 ${b.name} 퇴장` });
       } else if (m.op === 'clear') {
         for (const b of bots) removeBot(r, b);
-        r.cfg.bots = 0;
+        r.cfg.bots = Math.max(0, hum - 1);
         broadcast(r, { t: 'sys', text: '봇을 모두 뺐어요' });
       }
       ensureTeams(r); pushRoom(r);
