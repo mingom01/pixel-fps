@@ -63,9 +63,12 @@ fixProfile();
 let syncFn = null, syncT = 0;
 export function setProfileSync(fn) { syncFn = fn; }
 export function saveProfile() {
+  profile.savedAt = Date.now(); // 마지막으로 바뀐 시각 (다시 로그인할 때 서버 것과 비교)
   try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (e) { /* */ }
-  if (syncFn) { clearTimeout(syncT); syncT = setTimeout(() => syncFn(profile), 400); }
+  if (syncFn) { clearTimeout(syncT); syncT = setTimeout(() => { syncT = 0; syncFn(profile); }, 400); }
 }
+// 아직 서버로 안 보낸 저장을 바로 보냄 (새로고침·창 닫기 직전)
+export function flushProfile() { if (syncFn && syncT) { clearTimeout(syncT); syncT = 0; syncFn(profile); } }
 // 서버에서 받은 프로필로 교체 (객체는 그대로 두고 내용만 바꿈 — 다른 모듈이 참조 중)
 export function loadProfile(p) {
   const st = profile.stats;

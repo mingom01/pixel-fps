@@ -1,5 +1,5 @@
 // 구글 로그인 화면 + 세션 유지 + 계정별 프로필 동기화
-import { profile, loadProfile, saveProfile, setProfileSync } from './cosmetics.js';
+import { profile, loadProfile, saveProfile, setProfileSync, flushProfile } from './cosmetics.js';
 
 const $ = (id) => document.getElementById(id);
 const TOK = 'pf_session';
@@ -66,7 +66,10 @@ export function handleAuthMsg(m) {
 function onAuthed(m) {
   user = { sub: m.sub, email: m.email, name: m.name };
   try { localStorage.setItem(TOK, m.token); } catch (e) { /* */ }
-  if (m.profile) loadProfile(m.profile);
+  // 연결이 끊겨서 서버에 못 보낸 변경(예: 산 스킨)이 이 브라우저에 더 최신으로 남아 있으면 그걸 유지하고 서버에 올림
+  const localNewer = m.profile && profile.owner === m.sub && (profile.savedAt || 0) > (m.profile.savedAt || 0);
+  if (localNewer) { /* 이 브라우저 기록 유지 → 아래 saveProfile 로 서버에 저장 */ }
+  else if (m.profile) loadProfile(m.profile);
   else if (!profile.owner || profile.owner === m.sub) { profile.owner = m.sub; } // 이 브라우저의 기존 기록을 첫 로그인 계정으로 옮김
   else loadProfile({ owner: m.sub });
   profile.owner = m.sub;
@@ -84,3 +87,6 @@ export function logout() {
   if (window.google && window.google.accounts) window.google.accounts.id.disableAutoSelect();
   user = null; showLogin(true); status('로그아웃했어요');
 }
+
+// 새로고침·창 닫기 직전에 남은 저장 보내기
+for (const ev of ['pagehide', 'beforeunload']) window.addEventListener(ev, () => flushProfile());

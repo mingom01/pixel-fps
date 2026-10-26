@@ -4,7 +4,7 @@ import { initTouch } from './touch.js';
 import { FACES, ATLAS_COLS, makeAtlas, PCOLORS, flashTex, smokeTex, holeTex, textSprite, BLOCK_COLOR, skinMats, CHAR_SKINS } from './tex.js';
 import { makeGun, makeChar, setCharGun, animChar, gunIcon, gunLength, GUNS, GUN_SKINS } from './models.js';
 import { buildWorld, buildSky, rebuildBlocks, disposeWorld } from './world.js';
-import { activeBoosts } from './cosmetics.js';
+import { activeBoosts, flushProfile } from './cosmetics.js';
 import { profile, saveProfile, levelInfo, myLevel, grantMatch, buyItem, equip, addGold, stats, dailyMissions, missionEvent, ACHIEVEMENTS, achLegends, checkAchievements, GACHA_COST, RARITY, rollGacha } from './cosmetics.js';
 import * as A from './audio.js';
 import { initAuth, onSocketOpen, handleAuthMsg, isAuthed } from './auth.js';
@@ -139,7 +139,7 @@ function onMsg(m, replayed) {
     case 'hello':
       S.myId = m.id;
       // 배포로 서버가 바뀌었으면 (열어 둔 옛 화면) 새로고침 — 게임 중이 아니면 바로
-      if (m.ver && S.ver && m.ver !== S.ver) { if (!S.inGame && !S.room) location.reload(); else toast('새 버전이 나왔어요! 새로고침(F5) 해주세요'); }
+      if (m.ver && S.ver && m.ver !== S.ver) { if (!S.inGame && !S.room) { flushProfile(); location.reload(); } else toast('새 버전이 나왔어요! 새로고침(F5) 해주세요'); }
       if (m.ver) S.ver = S.ver || m.ver;
       break;
     case 'rooms': renderRoomList(m.list); break;
