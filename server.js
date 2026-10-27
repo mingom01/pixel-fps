@@ -8,6 +8,7 @@ const AUTH = require('./server/auth.js');
 const STORE = require('./server/store.js');
 const GIM = require('./server/gimmicks.js');
 const INCOME = require('./server/income.js');
+const USERMAPS = require('./server/maps.js');
 // 맵 파일 (public/js/maps/*.js) 등록
 for (const f of fs.readdirSync(path.join(__dirname, 'public', 'js', 'maps')).sort()) if (f.endsWith('.js')) require(path.join(__dirname, 'public', 'js', 'maps', f));
 
@@ -1072,6 +1073,7 @@ function handleAuth(c, m) {
 function handle(c, m) {
   if (m.t === 'auth' || m.t === 'logout' || m.t === 'profile') return handleAuth(c, m);
   if (!c.user) { c.send({ t: 'needauth' }); return; }
+  if (USERMAPS.handle(c, m)) return;
   const r = c.room;
   switch (m.t) {
     case 'list':

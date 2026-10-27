@@ -711,15 +711,16 @@
     for (let i = 0; i < d.length;) { const v = d[i]; let n = 1; while (i + n < d.length && d[i + n] === v && n < 65535) n++; out.push(v, n & 255, n >> 8); i += n; }
     return { W: m.W, H: m.H, D: m.D, data: toB64(new Uint8Array(out)) };
   }
-  const MAXB = 47;
+  // 저장 데이터에 있는 블록 번호 중 이보다 큰 건 공기로 읽음 (기믹 블록이 추가될 때마다 자동으로 늘어남)
+  const MAXB = Math.max(...Object.values(B));
   function mapFromData(o) {
     const W = o.W | 0, H = o.H | 0, D = o.D | 0;
-    if (W < 16 || D < 16 || W > 96 || D > 96 || H < 12 || H > 32 || typeof o.data !== 'string' || o.data.length > 400000) return null;
+    if (W < 16 || D < 16 || W > 96 || D > 96 || H < 12 || H > 40 || typeof o.data !== 'string' || o.data.length > 400000) return null;
     const m = new VMap(W, H, D), raw = fromB64(o.data);
     let p = 0;
     for (let i = 0; i + 2 < raw.length && p < m.d.length; i += 3) { const v = raw[i] <= MAXB ? raw[i] : 0, n = raw[i + 1] | (raw[i + 2] << 8); m.d.fill(v, p, Math.min(m.d.length, p + n)); p += n; }
     m.id = 'custom'; m.grav = 1; m.theme = MAPS[o.theme] && (MAPS[o.theme].kind || 'normal') === 'normal' ? o.theme : 'village';
-    m.spawns = computeSpawns(m, 'custom' + W + D);
+    m.spawns = computeSpawns(m, 'custom' + W + D, true);
     if (m.spawns.length < 2) return m; // 호출한 쪽에서 스폰 부족 처리
     const cz = m.D / 2, sc = (s, t) => (t ? m.W - s[0] : s[0]) + Math.abs(s[2] - cz) * 0.6;
     m.bases = [0, 1].map(t => m.spawns.slice().sort((a, b) => sc(a, t) - sc(b, t))[0]);
@@ -766,13 +767,19 @@
     return out.map((p, i) => ({ id: 'k' + i, kind: kinds[i], x: p[0], y: p[1], z: p[2] }));
   }
 
-  function computeSpawns(m, id) {
+  // anyY: 커스텀 맵 — 지면 높이(G)에 빈 땅이 부족하면 높이 상관없이 하늘이 뚫린 3×3 평평한 곳도 스폰 후보로
+  function computeSpawns(m, id, anyY) {
     const c = [];
-    for (let z = 3; z < m.D - 3; z++) for (let x = 3; x < m.W - 3; x++) {
-      const y = G;
-      let ok = true;
-      for (let dz = -1; dz <= 1 && ok; dz++) for (let dx = -1; dx <= 1 && ok; dx++) if (!walkable(m, x + dx, y, z + dz) || m.solid(x + dx, y + 2, z + dz) || NOSPAWN.has(m.get(x + dx, y - 1, z + dz))) ok = false;
-      if (ok && openSky(m, x, y, z)) c.push([x + 0.5, y, z + 0.5]);
+    const flat = (x, y, z) => {
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!walkable(m, x + dx, y, z + dz) || m.solid(x + dx, y + 2, z + dz) || NOSPAWN.has(m.get(x + dx, y - 1, z + dz))) return false;
+      return openSky(m, x, y, z);
+    };
+    for (let z = 3; z < m.D - 3; z++) for (let x = 3; x < m.W - 3; x++) if (flat(x, G, z)) c.push([x + 0.5, G, z + 0.5]);
+    if (anyY && c.length < 12) {
+      for (let z = 3; z < m.D - 3; z++) for (let x = 3; x < m.W - 3; x++) {
+        let y = m.H - 2; while (y > 1 && !m.solid(x, y - 1, z)) y--; // 이 칸의 맨 위 바닥
+        if (y !== G && y > 1 && y < m.H - 3 && flat(x, y, z)) c.push([x + 0.5, y, z + 0.5]);
+      }
     }
     const r = rng(id.length * 97 + 5), out = [];
     if (!c.length) return [[m.W / 2, G + 2, m.D / 2]];
