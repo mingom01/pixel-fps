@@ -446,7 +446,10 @@ td.num { text-align: right; width: 60px; }
 .bpi { background: #1a2036; border: 2px solid var(--line); padding: 5px; text-align: center; cursor: pointer; font-size: 11px; }
 .bpi:hover { border-color: var(--yellow); }
 .bpi img { width: 36px; height: 36px; image-rendering: pixelated; display: block; margin: 0 auto 3px; }
-.mapcard.custom { border-style: dashed; }
+/* 내 맵 카드: 청록 테두리 + '내 맵' 표시 (선택하면 노란 테두리) */
+.mapcard.custom { border-color: #3ab8a8; }
+.mapcard.custom .mdesc { color: #5fe0d0; }
+.mapcard.custom.on { border-color: var(--yellow); }
 /* ---------- 모바일 터치 ---------- */
 #touchUI { position: fixed; inset: 0; z-index: 8; pointer-events: none; touch-action: none; user-select: none; }
 #touchUI.hidden { display: none; }

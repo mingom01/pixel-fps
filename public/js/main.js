@@ -2772,6 +2772,9 @@ function refreshCustomCards(m) {
   const host = m.host === S.myId, md = m.cfg.mode;
   if (md === 'spike') return;
   const saved = savedMaps();
+  // 내 맵은 랜덤 카드 바로 뒤(맨 앞쪽)에 — 맵이 많아져도 스크롤 안 하고 바로 보이게
+  let at = box.querySelector('.mapcard.rnd');
+  const put = (d) => { box.insertBefore(d, at ? at.nextSibling : box.firstChild); at = d; };
   const add = (ent, sel) => {
     const d = document.createElement('div'); d.className = 'mapcard custom' + (sel ? ' on' : ''); d.dataset.map = 'custom';
     const c = document.createElement('canvas'); c.width = 64; c.height = 64;
@@ -2780,13 +2783,15 @@ function refreshCustomCards(m) {
     const sm = document.createElement('div'); sm.className = 'mdesc'; sm.textContent = '내 맵'; d.appendChild(sm);
     // 랜덤 맵/모드가 켜져 있으면 시작할 때 다른 맵으로 바뀌므로 끔 (랜덤 모드였으면 개인전으로)
     if (host && ent.data) d.onclick = () => send({ t: 'cfg', cfg: Object.assign({}, m.cfg, { map: 'custom', rmap: false, rmode: false, mode: m.cfg.rmode ? 'ffa' : m.cfg.mode }), custom: ent });
-    box.appendChild(d);
+    put(d);
   };
   let shownCurrent = false;
-  for (const ent of saved) { const sel = m.cfg.map === 'custom' && m.customName === ent.name; if (sel) shownCurrent = true; if (host || sel) add(ent, sel); }
+  // 고른 맵 찾기: id 로 (이름이 같은 맵이 여러 개여도 하나만 선택), 예전 서버면 이름으로
+  const isSel = (ent) => m.cfg.map === 'custom' && (m.customId ? m.customId === ent.id : m.customName === ent.name);
+  for (const ent of saved) { const sel = !shownCurrent && isSel(ent); if (sel) shownCurrent = true; if (host || sel) add(ent, sel); }
   if (m.cfg.map === 'custom' && !shownCurrent) {
     const d = document.createElement('div'); d.className = 'mapcard custom on'; d.dataset.map = 'custom';
-    d.innerHTML = `<canvas width="64" height="64"></canvas>${esc(m.customName || '커스텀 맵')}<div class="mdesc">친구의 맵</div>`; box.appendChild(d);
+    d.innerHTML = `<canvas width="64" height="64"></canvas>${esc(m.customName || '커스텀 맵')}<div class="mdesc">친구의 맵</div>`; put(d);
   }
 }
 

@@ -219,7 +219,7 @@ function createRoom(c, cfg, isPublic) {
 }
 function broadcast(r, obj, except) { const s = JSON.stringify(obj); for (const c of r.clients) if (c !== except) c.send(s); }
 function roster(r) { return [...r.ents.values()].map(e => ({ id: e.id, name: e.name, color: e.color, bot: e.bot, k: e.kills, d: e.deaths, team: e.team, skin: e.skin, gskin: e.gskin, title: e.title, lv: e.lv, caps: e.caps, boss: !!e.boss, zombie: !!e.zombie, gg: e.gg || 0, hero: e.hero, rp: e.bot ? null : e.rp, wc: e.wc, charm: e.charm })); }
-function roomMsg(r) { return { t: 'room', autoAt: r.autoAt || 0, waitSince: r.waitSince || 0, customName: r.custom ? r.custom.name : null, code: r.code, host: r.hostId, cfg: r.cfg, state: r.state, endAt: r.endAt, score: r.score, players: roster(r) }; }
+function roomMsg(r) { return { t: 'room', autoAt: r.autoAt || 0, waitSince: r.waitSince || 0, customName: r.custom ? r.custom.name : null, customId: r.custom ? r.custom.id : null, code: r.code, host: r.hostId, cfg: r.cfg, state: r.state, endAt: r.endAt, score: r.score, players: roster(r) }; }
 function pushRoom(r) { broadcast(r, roomMsg(r)); }
 function meMsg(e) { return { t: 'me', hp: Math.ceil(e.hp), armor: Math.ceil(e.armor), money: e.money, primary: e.primary, secondary: e.secondary, nades: e.nades, alive: e.alive, buyUntil: e.buyUntil, respawnAt: e.respawnAt, zombie: !!e.zombie, gg: e.gg || 0, helmet: e.helmet, perks: Object.keys(e.perks), sup: e.sup, maxHp: e.maxHp, hero: e.hero, qAt: e.qAt || 0, ult: Math.floor(e.ult || 0), haste: e.hasteUntil || 0, steel: e.steelUntil || 0, invis: e.invisUntil || 0 }; }
 function clientOf(r, id) { for (const c of r.clients) if (c.id === id) return c; return null; }
@@ -1102,7 +1102,7 @@ function handle(c, m) {
         const cm = SH.mapFromData(m.custom);
         if (!cm) { c.send({ t: 'err', text: '맵 데이터가 이상해요' }); break; }
         if (cm.spawns.length < 2) { c.send({ t: 'err', text: '스폰할 평지가 부족해요 (지면 높이의 넓은 빈 땅이 필요해요)' }); break; }
-        r.custom = { name: String(m.custom.name || '내 맵').replace(/[<>&"'`]/g, '').slice(0, 16), map: cm, obj: { W: m.custom.W, H: m.custom.H, D: m.custom.D, data: m.custom.data, theme: cm.theme, name: String(m.custom.name || '내 맵').slice(0, 16) } };
+        r.custom = { id: /^[a-z0-9_-]{1,32}$/i.test(String(m.custom.id || '')) ? String(m.custom.id) : null, name: String(m.custom.name || '내 맵').replace(/[<>&"'`]/g, '').slice(0, 16), map: cm, obj: { W: m.custom.W, H: m.custom.H, D: m.custom.D, data: m.custom.data, theme: cm.theme, name: String(m.custom.name || '내 맵').slice(0, 16) } };
         m.cfg = Object.assign({}, m.cfg, { map: 'custom' });
       }
       r.cfg = fixCfg(cleanCfg(m.cfg, r.cfg));
