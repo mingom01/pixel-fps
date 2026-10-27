@@ -2782,7 +2782,12 @@ function refreshCustomCards(m) {
     d.appendChild(c); d.appendChild(document.createTextNode(ent.name));
     const sm = document.createElement('div'); sm.className = 'mdesc'; sm.textContent = '내 맵'; d.appendChild(sm);
     // 랜덤 맵/모드가 켜져 있으면 시작할 때 다른 맵으로 바뀌므로 끔 (랜덤 모드였으면 개인전으로)
-    if (host && ent.data) d.onclick = () => send({ t: 'cfg', cfg: Object.assign({}, m.cfg, { map: 'custom', rmap: false, rmode: false, mode: m.cfg.rmode ? 'ffa' : m.cfg.mode }), custom: ent });
+    if (host && ent.data) d.onclick = () => {
+      send({ t: 'cfg', cfg: Object.assign({}, m.cfg, { map: 'custom', rmap: false, rmode: false, mode: m.cfg.rmode ? 'ffa' : m.cfg.mode }), custom: ent });
+      // 5초 안에 서버가 이 맵으로 바꿨다고 알려주지 않으면 안내 (예전처럼 아무 반응 없는 것처럼 보이지 않게)
+      clearTimeout(S.customPickT);
+      S.customPickT = setTimeout(() => { const r = S.room; if (r && r.state === 'wait' && !(r.cfg.map === 'custom' && (r.customId ? r.customId === ent.id : r.customName === ent.name))) toast('맵을 서버에 보내지 못했어요. 새로고침(F5) 후 다시 골라 주세요'); }, 5000);
+    };
     put(d);
   };
   let shownCurrent = false;

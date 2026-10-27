@@ -74,8 +74,16 @@ class Client {
       this.buf = this.buf.slice(off + maskLen + len);
       if (opcode === 8) { this.close(); return; }
       if (opcode === 9) { const h = Buffer.alloc(2); h[0] = 0x8a; h[1] = payload.length; this.socket.write(Buffer.concat([h, payload])); continue; }
-      if (opcode === 1) {
-        let msg; try { msg = JSON.parse(payload.toString('utf8')); } catch (e) { continue; }
+      // 큰 메시지(예: 복사해 온 맵 데이터)는 중간 프록시(Render 등)가 여러 조각으로 나눠 보낼 수 있음:
+      // 첫 조각(opcode 1, FIN 없음) + 이어지는 조각(opcode 0) 들을 FIN 이 올 때까지 모았다가 한 번에 처리
+      const fin = (b0 & 0x80) !== 0;
+      if (opcode === 1 || opcode === 0) {
+        if (opcode === 1) this.frag = [];
+        else if (!this.frag) continue; // 시작 없이 온 이어지는 조각은 버림
+        this.frag.push(payload);
+        if (!fin) { if (this.frag.reduce((n, f) => n + f.length, 0) > 1 << 20) { this.close(); return; } continue; }
+        const whole = Buffer.concat(this.frag); this.frag = null;
+        let msg; try { msg = JSON.parse(whole.toString('utf8')); } catch (e) { continue; }
         try { handle(this, msg); } catch (e) { console.error(e); }
       }
     }
