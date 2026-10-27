@@ -19,6 +19,7 @@ import { sfxSkinShot, sfxSkinKill, sfxFinisher, sfxEquip, sfxSkinStep } from './
 import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
 import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
 import { showIncome } from './hud/income.js';
+import { initCoop, openOnline, leaveOnline, reset as coopReset, coopSet, coopMeta, coopTest, coopTick, coopMsg, isOnline, isGuest } from './editor/coop.js';
 import { initMapStore, mapsLogin, onServerMaps, onMapSaved, onMapSaveErr, savedMaps, saveMap, deleteMap, mapSyncState, MAX_MAPS } from './editor/mapStore.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
 import { SPRAY_BY, sprayCanvas } from './skins/sprays.js';
@@ -112,6 +113,7 @@ function connect() {
     wsOk = false; $('netState').textContent = '· 연결 끊김, 재접속 중…';
     if (S.inGame || S.room) { leaveGame(); showScreen('menu'); toast('서버 연결이 끊겼어요'); }
     S.room = null;
+    if (isOnline()) { coopReset(); toast('서버 연결이 끊겨서 같이 만들기가 끝났어요 (지금 맵은 그대로 있어요)'); }
     setTimeout(connect, 1500);
   };
   ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMsg(m); };
@@ -135,6 +137,7 @@ function onLoggedIn(u) {
 
 function onMsg(m, replayed) {
   if (handleAuthMsg(m)) return;
+  if (!replayed && coopMsg(m)) return; // 맵 같이 만들기
   if (S.replay && !replayed && !['rooms', 'err', 'hello', 'authed', 'rank'].includes(m.t)) return; // 리플레이 보는 중엔 실시간 게임 메시지 무시
   if (S.inGame && !S.replay) recMsg(m, serverNow());
   switch (m.t) {
@@ -412,6 +415,8 @@ function renderBotMgr() {
 
 function onRoom(m) {
   if (S.replay) return;
+  // 맵 같이 만들기 중 '다 같이 테스트' → 서버가 게임 방으로 데려옴: 에디터 닫기 (세션은 서버가 이미 정리)
+  if (ED.on) { coopReset(); exitEditor(false); }
   const wasIn = !!S.room;
   S.room = m;
   recRoom(m);
@@ -2637,6 +2642,7 @@ function edBuildScene() {
   ED.hl.visible = true;
 }
 function exitEditor(toMenu) {
+  if (isOnline()) leaveOnline(); // 방장이 나가면 같이 만들기 끝
   ED.on = false;
   if (ED.world) { scene.remove(ED.world); disposeWorld(ED.world); ED.world = null; }
   if (ED.sky) { scene.remove(ED.sky); ED.sky = null; }
@@ -2664,13 +2670,15 @@ function openBlockPicker() {
 function closeBlockPicker() { ED.picker = false; $('blockPicker').classList.add('hidden'); lockPointer(); }
 $('bpClose').onclick = closeBlockPicker;
 
-function edSet(x, y, z, b, noUndo) {
+// remote: 같이 만들기에서 서버가 보내준 변경 (다시 서버로 보내지 않음)
+function edSet(x, y, z, b, noUndo, remote) {
   const m = ED.map;
   if (x < 0 || z < 0 || x >= m.W || z >= m.D || y < 1 || y >= m.H) return false;
   const prev = m.get(x, y, z); if (prev === b) return false;
   m.set(x, y, z, b);
   if (!noUndo) { ED.undo.push([x, y, z, prev]); if (ED.undo.length > 400) ED.undo.shift(); }
   rebuildBlocks(ED.world, [[x, y, z]]);
+  if (!remote) coopSet(x, y, z, b);
   return true;
 }
 function edRemove() { const h = ED.hit; if (h && edSet(h.x, h.y, h.z, 0)) { A.sfxStep(1); for (let i = 0; i < 5; i++) spawnParticle(h.x + 0.5, h.y + 0.5, h.z + 0.5, (Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3, BLOCK_COLOR[ED.map.get(h.x, h.y, h.z)] || 0x999999, 0.5, 0.1, 10); } }
@@ -2697,7 +2705,7 @@ function edSave(silent) {
   if (res === 'full') { toast(`맵은 ${MAX_MAPS}개까지 저장돼요. 시작 화면에서 하나 지워주세요`); return null; }
   ED.id = ent.id;
   const bad = mapProblem(ent);
-  if (!silent) toast(bad ? `저장했어요. 하지만 아직 플레이는 못 해요: ${bad}` : res === 'cache' ? `'${ED.name}' 계정에 저장했어요 (이 기기 저장 공간은 부족해요)` : `'${ED.name}' 저장했어요`);
+  if (!silent) toast(bad ? `저장했어요. 하지만 아직 플레이는 못 해요: ${bad}` : isGuest() ? `'${ED.name}' 내 맵에 복사본으로 저장했어요` : res === 'cache' ? `'${ED.name}' 계정에 저장했어요 (이 기기 저장 공간은 부족해요)` : `'${ED.name}' 저장했어요`);
   A.sfxBuy();
   return bad ? null : ent;
 }
@@ -2710,6 +2718,8 @@ function playMyMap(ent, now) {
   send(Object.assign({ t: 'create', cfg }, joinInfo()));
 }
 function edTest() {
+  if (isGuest()) return;
+  if (isOnline()) { const ent = edSave(true); if (!ent) { const bad = mapProblem(Object.assign({ theme: ED.theme }, SH.encodeMap(ED.map))); if (bad) toast(bad); return; } coopTest(ent.id); return; } // 다 같이 테스트: 서버가 모두를 게임 방으로
   const ent = edSave(true);
   if (!ent) { const bad = mapProblem(Object.assign({ theme: ED.theme }, SH.encodeMap(ED.map))); if (bad) toast(bad); return; } // 저장 실패 안내는 edSave 가 띄움
   exitEditor(false);
@@ -2728,7 +2738,10 @@ $('edCode').onclick = edShare;
 $('edShareClose').onclick = () => $('edShare').classList.add('hidden');
 $('edShareCopy').onclick = () => { $('edShareText').select(); (navigator.clipboard ? navigator.clipboard.writeText($('edShareText').value) : Promise.reject()).then(() => toast('코드를 복사했어요'), () => { document.execCommand('copy'); toast('코드를 복사했어요'); }); };
 $('edExit').onclick = () => { if (confirm('저장하고 나갈까요? (취소 = 저장 안 하고 나가기)')) edSave(true); exitEditor(); };
-$('edTheme').onchange = (e) => { ED.theme = e.target.value; edBuildScene(); };
+$('edTheme').onchange = (e) => { ED.theme = e.target.value; edBuildScene(); coopMeta(); };
+$('edName').onchange = () => { ED.name = ($('edName').value.trim() || '내 맵').slice(0, 16); coopMeta(); };
+$('edOnline').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); openOnline(); };
+initCoop({ send: (m) => send(m), scene, SH, ED, myId: () => S.myId, joinInfo, edSet: (...a) => edSet(...a), startEditor: (map, meta) => startEditor(map, meta), exitEditor: (t) => exitEditor(t), rebuildTheme: () => edBuildScene(), toast });
 function editorKey(e) {
   keys[e.code] = true;
   if (['Space', 'KeyC', 'Tab'].includes(e.code)) e.preventDefault();
@@ -2760,6 +2773,7 @@ function editorFrame(dt) {
   if (ED.sky) { ED.sky.position.set(ED.x, 0, ED.z); ED.sky.userData.clouds.position.x = (performance.now() / 1000 * 1.5) % 250; }
   $('clickToPlay').classList.toggle('hidden', S.locked || ED.picker || !$('edShare').classList.contains('hidden'));
   $('edPos').textContent = `x${Math.floor(ED.x)} y${Math.floor(ED.y)} z${Math.floor(ED.z)}${ED.hit ? ' · ' + (BLOCK_NAMES[m.get(ED.hit.x, ED.hit.y, ED.hit.z)] || '') : ''}`;
+  coopTick(dt);
   updateParticles(dt);
   renderer.clear();
   renderer.render(scene, camera);
