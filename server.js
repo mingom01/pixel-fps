@@ -9,6 +9,11 @@ const STORE = require('./server/store.js');
 const GIM = require('./server/gimmicks.js');
 const INCOME = require('./server/income.js');
 const USERMAPS = require('./server/maps.js');
+// 맵 같이 만들기 세션 (함수들은 아래에 선언돼 있어서 화살표로 감싸서 넘김)
+const EDIT = require('./server/editRooms.js')({
+  SH, genCode: () => genCode(), log: (t) => log(t), cleanName: (n) => cleanName(n), leaveRoom: (c) => leaveRoom(c),
+  gameCheck: (ent) => customFrom(ent).err, toGame: (host, members, ent) => editToGame(host, members, ent),
+});
 // 맵 파일 (public/js/maps/*.js) 등록
 for (const f of fs.readdirSync(path.join(__dirname, 'public', 'js', 'maps')).sort()) if (f.endsWith('.js')) require(path.join(__dirname, 'public', 'js', 'maps', f));
 
@@ -89,7 +94,7 @@ class Client {
     }
   }
   close() { if (!this.alive) return; try { this.socket.end(Buffer.from([0x88, 0x00])); } catch (e) { /* */ } this.onClose(); }
-  onClose() { if (!this.alive) return; this.alive = false; leaveRoom(this); try { this.socket.destroy(); } catch (e) { /* */ } }
+  onClose() { if (!this.alive) return; this.alive = false; leaveRoom(this); EDIT.leave(this, false); try { this.socket.destroy(); } catch (e) { /* */ } }
 }
 server.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
@@ -111,7 +116,7 @@ function cleanName(s) { return String(s || '').replace(/[<>&"'`]/g, '').trim().s
 function cleanId(s) { return String(s || 'default').replace(/[^a-z0-9_]/gi, '').slice(0, 16) || 'default'; }
 function num(v, d) { v = Number(v); return Number.isFinite(v) ? v : d; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-function genCode() { let c; do { c = String(Math.floor(1000 + Math.random() * 9000)); } while (rooms.has(c)); return c; }
+function genCode() { let c; do { c = String(Math.floor(1000 + Math.random() * 9000)); } while (rooms.has(c) || EDIT.has(c)); return c; }
 function log(s) { console.log(new Date().toLocaleTimeString() + '  ' + s); }
 const teamMode = (r) => ['tdm', 'ctf', 'spike', 'zombie', 'boss', 'ability'].includes(r.cfg.mode);
 const isAbility = (r) => r.cfg.mode === 'ability';
@@ -218,6 +223,24 @@ function fixCfg(cfg) {
   return cfg;
 }
 
+// 클라가 보낸 내 맵 → 방에 넣을 형태 ({ custom } 또는 { err })
+function customFrom(o) {
+  const cm = SH.mapFromData(o);
+  if (!cm) return { err: '맵 데이터가 이상해요' };
+  if (cm.spawns.length < 2) return { err: '스폰할 곳이 부족해요. 위가 뚫린 3×3 이상 평평한 땅이 2곳 이상 필요해요' };
+  const name = String(o.name || '내 맵').replace(/[<>&"'`]/g, '').slice(0, 16);
+  return { custom: { id: /^[a-z0-9_-]{1,32}$/i.test(String(o.id || '')) ? String(o.id) : null, name, map: cm, obj: { W: o.W, H: o.H, D: o.D, data: o.data, theme: cm.theme, name } } };
+}
+// 맵 같이 만들기 → 다 같이 테스트: 그 맵으로 게임 방을 만들고 편집하던 사람 모두 들어가서 바로 시작
+function editToGame(host, members, ent) {
+  const cu = customFrom(ent); if (cu.err) return;
+  const r = createRoom(host, { map: 'village', mode: 'ffa', bots: 5, time: 300, kills: 25, diff: 'normal' }, false);
+  r.custom = cu.custom; r.cfg.map = 'custom';
+  const hm = members.find(m => m.c === host);
+  joinRoom(host, r, hm ? hm.info : {});
+  for (const m of members) if (m.c !== host && m.c.alive) joinRoom(m.c, r, m.info);
+  startMatch(r);
+}
 function createRoom(c, cfg, isPublic) {
   const code = genCode();
   const r = { code, hostId: c.id, cfg: fixCfg(cleanCfg(cfg)), state: 'wait', ents: new Map(), clients: new Set(), projs: [], drops: new Map(), pid: 1, endAt: 0, timer: null, pub: isPublic !== false, score: [0, 0], flags: null, broken: [] };
@@ -234,7 +257,7 @@ function clientOf(r, id) { for (const c of r.clients) if (c.id === id) return c;
 function sendMe(r, e) { if (e.bot) return; const c = clientOf(r, e.id); if (c) c.send(meMsg(e)); }
 
 function joinRoom(c, r, m) {
-  leaveRoom(c);
+  leaveRoom(c); EDIT.leave(c);
   c.room = r; r.clients.add(c);
   const e = newEnt(c.id, cleanName(m.name), clamp(Math.round(num(m.color, 0)), 0, COLORS - 1), false);
   e.skin = cleanId(m.skin); e.gskin = cleanId(m.gskin); e.title = cleanId(m.title); e.lv = clamp(Math.round(num(m.lv, 1)), 1, 999);
@@ -1082,6 +1105,7 @@ function handle(c, m) {
   if (m.t === 'auth' || m.t === 'logout' || m.t === 'profile') return handleAuth(c, m);
   if (!c.user) { c.send({ t: 'needauth' }); return; }
   if (USERMAPS.handle(c, m)) return;
+  if (EDIT.handle(c, m)) return;
   const r = c.room;
   switch (m.t) {
     case 'list':
@@ -1094,7 +1118,8 @@ function handle(c, m) {
       break;
     }
     case 'join': {
-      const nr = rooms.get(String(m.code || '').trim());
+      const code = String(m.code || '').trim(), nr = rooms.get(code);
+      if (!nr && EDIT.has(code)) { leaveRoom(c); EDIT.join(c, EDIT.get(code), m); break; } // 맵 같이 만들기 코드
       if (!nr) { c.send({ t: 'err', text: '방을 찾을 수 없어요' }); break; }
       if (nr.clients.size >= MAX_ROOM) { c.send({ t: 'err', text: '방이 꽉 찼어요' }); break; }
       if (nr.cfg.ranked && nr.state !== 'wait') { c.send({ t: 'err', text: '이미 시작한 경쟁전에는 들어갈 수 없어요' }); break; }
@@ -1107,10 +1132,9 @@ function handle(c, m) {
     case 'cfg':
       if (!r || r.hostId !== c.id || r.state === 'play' || r.cfg.ranked) break;
       if (m.custom && typeof m.custom === 'object') {
-        const cm = SH.mapFromData(m.custom);
-        if (!cm) { c.send({ t: 'err', text: '맵 데이터가 이상해요' }); break; }
-        if (cm.spawns.length < 2) { c.send({ t: 'err', text: '스폰할 평지가 부족해요 (지면 높이의 넓은 빈 땅이 필요해요)' }); break; }
-        r.custom = { id: /^[a-z0-9_-]{1,32}$/i.test(String(m.custom.id || '')) ? String(m.custom.id) : null, name: String(m.custom.name || '내 맵').replace(/[<>&"'`]/g, '').slice(0, 16), map: cm, obj: { W: m.custom.W, H: m.custom.H, D: m.custom.D, data: m.custom.data, theme: cm.theme, name: String(m.custom.name || '내 맵').slice(0, 16) } };
+        const cu = customFrom(m.custom);
+        if (cu.err) { c.send({ t: 'err', text: cu.err }); break; }
+        r.custom = cu.custom;
         m.cfg = Object.assign({}, m.cfg, { map: 'custom' });
       }
       r.cfg = fixCfg(cleanCfg(m.cfg, r.cfg));

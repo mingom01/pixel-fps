@@ -420,6 +420,10 @@ td.num { text-align: right; width: 60px; }
 #editorHud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #editorHud .ed-top { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; align-items: center; pointer-events: auto; background: rgba(14, 18, 30, 0.85); border: 3px solid var(--line); padding: 6px; }
 #editorHud .ed-top input { width: 150px; padding: 4px 8px; font-size: 13px; }
+#edCoop { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 20px); background: rgba(14, 18, 30, 0.85); border: 3px solid #3ab8a8; padding: 4px 10px; font-size: 12px; pointer-events: auto; text-align: center; }
+#edCoop .ec-code { color: #7ff0e0; font-size: 14px; letter-spacing: 1px; }
+#edCoop .ec-m { margin: 0 3px; }
+#editorHud .ed-top input:disabled, #editorHud .ed-top select:disabled { opacity: 0.6; }
 #editorHud select, .ed-start select { background: #11141f; color: var(--text); border: 3px solid var(--line); font-family: inherit; padding: 4px; }
 #edCross { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px; background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat, linear-gradient(#fff, #fff) center / 100% 2px no-repeat; filter: drop-shadow(0 0 1px #000); }
 #edPos { position: absolute; left: 14px; top: 14px; font-size: 12px; color: var(--dim); text-shadow: 1px 1px 0 #000; }
