@@ -437,6 +437,8 @@ td.num { text-align: right; width: 60px; }
 .edlist { display: flex; flex-direction: column; gap: 5px; }
 .edrow { display: flex; align-items: center; gap: 8px; background: #1a2036; border: 2px solid var(--line); padding: 5px 8px; }
 .edrow .edn { font-size: 14px; flex: 1; }
+.edsync { font-size: 11px; font-weight: normal; margin-left: 6px; }
+.edlist { max-height: min(260px, 34vh); overflow-y: auto; }
 .ed-start textarea, .ed-share textarea { width: 100%; height: 70px; background: #11141f; color: var(--text); border: 3px solid var(--line); font-family: monospace; font-size: 11px; margin: 6px 0; }
 .ed-share { width: min(560px, 100%); }
 .bp-panel { width: min(760px, 100%); max-height: 88vh; overflow: auto; }

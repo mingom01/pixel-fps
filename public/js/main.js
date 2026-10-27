@@ -19,6 +19,7 @@ import { sfxSkinShot, sfxSkinKill, sfxFinisher, sfxEquip, sfxSkinStep } from './
 import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
 import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
 import { showIncome } from './hud/income.js';
+import { initMapStore, mapsLogin, onServerMaps, onMapSaved, onMapSaveErr, savedMaps, saveMap, deleteMap, mapSyncState, MAX_MAPS } from './editor/mapStore.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
 import { SPRAY_BY, sprayCanvas } from './skins/sprays.js';
 import { initAbility, heroPickerHtml, bindHeroPicker, tryAbility, onAb, onBlk, abilityHud, abilityModelFx } from './ability.js';
@@ -128,6 +129,7 @@ function onLoggedIn(u) {
   if (!$('nameIn').value.trim() && u.name) { $('nameIn').value = u.name.slice(0, 10); CFG.name = $('nameIn').value; saveCfg(); }
   updateProfileUI(); refreshPreview(); updateMissionDot();
   resetBindsCache(); crossCfg = getCross();
+  mapsLogin(u.sub);
   send({ t: 'list' });
 }
 
@@ -174,6 +176,9 @@ function onMsg(m, replayed) {
     case 'cratepick': onCratePick(m); break;
     case 'pk': onPickup(m); break;
     case 'income': showIncome(m.amt); break;
+    case 'maps': onServerMaps(m); break;
+    case 'mapsaved': onMapSaved(m); break;
+    case 'mapsaveerr': toast(onMapSaveErr(m)); break;
     case 'rank': onRank(m); break;
     case 'emote': onEmote(m); break;
     case 'spray': onSpray(m); break;
@@ -452,7 +457,7 @@ function onRoom(m) {
     $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>친구를 기다렸다가 방장이 시작해요 (시작하면 더 못 들어와요). 이기면 점수가 오르고 지면 깎여요. 킬뎃이 좋을수록·연승할수록 더 오르고, 못할수록·연패할수록 더 깎여요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
   }
   $('botsVal').textContent = m.cfg.bots;
-  document.querySelectorAll('.mapcard').forEach(c => c.classList.toggle('on', rmap ? c.dataset.map === 'random' : c.dataset.map === m.cfg.map));
+  document.querySelectorAll('.mapcard:not(.custom)').forEach(c => c.classList.toggle('on', rmap ? c.dataset.map === 'random' : c.dataset.map === m.cfg.map));
   $('timeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === m.cfg.time));
   $('killSeg').querySelectorAll('button').forEach(b => { const v = Number(b.dataset.v); b.textContent = SH.targetOf({ mode: md, kills: v }); b.classList.toggle('on', v === m.cfg.kills); });
   const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${p.rp != null && m.cfg.ranked ? rankBadge(p.rp, true) : ''}${esc(p.name)}${md === 'ability' && p.hero && SH.HEROES[p.hero] ? ` <span class="herotag" style="color:${SH.HEROES[p.hero].color}">${SH.HEROES[p.hero].name}</span>` : ''} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
@@ -2551,8 +2556,9 @@ function blockIcon(b) {
   x.drawImage(atlas.cv, (ti % ATLAS_COLS) * 16, Math.floor(ti / ATLAS_COLS) * 16, 16, 16, 0, 0, 32, 32);
   return (blockIconCache[b] = c.toDataURL());
 }
-function loadSavedMaps() { try { return JSON.parse(localStorage.getItem('pf_maps') || '[]'); } catch (e) { return []; } }
-function storeSavedMaps(list) { try { localStorage.setItem('pf_maps', JSON.stringify(list)); return true; } catch (e) { toast('저장 공간이 부족해요'); return false; } }
+// 맵 목록이 바뀌면 (다른 기기에서 불러옴·서버 저장 확인) 열려 있는 시작 창의 목록만 새로 그림
+initMapStore({ send: (m) => send(m), onChange: () => { if (!$('editorStart').classList.contains('hidden')) renderEdList(); } });
+const SYNC_TXT = { loading: '계정에서 불러오는 중…', saving: '계정에 저장하는 중…', ok: '구글 계정에 저장됨 · 다른 기기에서도 편집·플레이 가능' };
 function mapThumbOf(m) {
   const c = document.createElement('canvas'); c.width = m.W; c.height = m.D;
   const ctx = c.getContext('2d'), img = ctx.createImageData(m.W, m.D);
@@ -2569,26 +2575,20 @@ function themeName(t) { return (SH.MAPS[t] || SH.MAPS.village).name + ' 하늘';
 // 시작 창
 function openEditorStart() {
   A.initAudio();
-  const list = loadSavedMaps();
   $('edStartBody').innerHTML = `
     <div class="ptitle small">새로 만들기</div>
     <div class="row">크기 <select id="edNewSize"><option value="48">48×48 (작게)</option><option value="64" selected>64×64 (보통)</option><option value="80">80×80 (크게)</option></select>
       바닥 <select id="edNewTheme">${['village', 'desert', 'snow', 'factory', 'moon'].map(t => `<option value="${t}">${SH.MAPS[t].name} 스타일</option>`).join('')}</select>
       <button class="btn green" id="edNew">빈 맵 만들기</button></div>
     <div class="row">기존 맵 복사 <select id="edCopy">${Object.keys(SH.MAPS).filter(k => (SH.MAPS[k].kind || 'normal') === 'normal').map(k => `<option value="${k}">${SH.MAPS[k].name}</option>`).join('')}</select><button class="btn blue" id="edCopyBtn">복사해서 시작</button></div>
-    <div class="ptitle small">내 맵 (${list.length}/8)</div>
-    <div class="edlist">${list.length ? list.map(e => `<div class="edrow" data-id="${e.id}"><span class="edn">${esc(e.name)}</span><span class="dim">${e.W}×${e.D} · ${new Date(e.updated).toLocaleDateString()}</span><button class="btn tiny green" data-act="edit">편집</button><button class="btn tiny red" data-act="del">삭제</button></div>`).join('') : '<div class="dim">아직 만든 맵이 없어요</div>'}</div>
+    <div id="edListBox"></div>
     <div class="ptitle small">공유 코드로 불러오기</div>
     <textarea id="edImport" placeholder="친구에게 받은 맵 코드를 붙여넣으세요"></textarea>
     <button class="btn" id="edImportBtn">불러오기</button>`;
   $('editorStart').classList.remove('hidden');
   $('edNew').onclick = () => { const sz = +$('edNewSize').value, th = $('edNewTheme').value; startEditor(SH.blankMap(sz, sz, th), { name: '내 맵', theme: th }); };
   $('edCopyBtn').onclick = () => { const k = $('edCopy').value; startEditor(SH.getMap(k).clone(), { name: SH.MAPS[k].name + ' 수정본', theme: k }); };
-  $('edStartBody').querySelectorAll('.edrow').forEach(row => {
-    const ent = list.find(e => e.id === row.dataset.id);
-    row.querySelector('[data-act="edit"]').onclick = () => { const m = SH.mapFromData(ent); if (!m) { toast('맵을 불러올 수 없어요'); return; } startEditor(m, ent); };
-    row.querySelector('[data-act="del"]').onclick = () => { if (!confirm(`'${ent.name}' 맵을 지울까요?`)) return; storeSavedMaps(list.filter(e => e.id !== ent.id)); openEditorStart(); };
-  });
+  renderEdList();
   $('edImportBtn').onclick = () => {
     try {
       const o = JSON.parse($('edImport').value.trim().replace(/^PXM1:/, ''));
@@ -2597,6 +2597,18 @@ function openEditorStart() {
       startEditor(m, ent);
     } catch (e) { toast('코드가 올바르지 않아요'); }
   };
+}
+// 시작 창의 '내 맵' 목록 (계정에 저장된 맵)
+function renderEdList() {
+  const list = savedMaps(), box = $('edListBox'); if (!box) return;
+  box.innerHTML = `<div class="ptitle small">내 맵 (${list.length}/${MAX_MAPS}) <span class="dim edsync">${SYNC_TXT[mapSyncState()]}</span></div>
+    <div class="edlist">${list.length ? list.map(e => `<div class="edrow" data-id="${esc(e.id)}"><span class="edn">${esc(e.name)}</span><span class="dim">${e.W}×${e.D} · ${new Date(e.updated).toLocaleDateString()}</span><button class="btn tiny green" data-act="edit">편집</button><button class="btn tiny yellow" data-act="play">플레이</button><button class="btn tiny red" data-act="del">삭제</button></div>`).join('') : '<div class="dim">아직 만든 맵이 없어요</div>'}</div>`;
+  box.querySelectorAll('.edrow').forEach(row => {
+    const ent = list.find(e => e.id === row.dataset.id);
+    row.querySelector('[data-act="edit"]').onclick = () => { const m = SH.mapFromData(ent); if (!m) { toast('맵을 불러올 수 없어요'); return; } startEditor(m, ent); };
+    row.querySelector('[data-act="play"]').onclick = () => { $('editorStart').classList.add('hidden'); playMyMap(ent); };
+    row.querySelector('[data-act="del"]').onclick = () => { if (!confirm(`'${ent.name}' 맵을 지울까요? (모든 기기에서 지워져요)`)) return; deleteMap(ent.id); };
+  });
 }
 $('editorBtn').onclick = openEditorStart;
 $('edStartClose').onclick = () => $('editorStart').classList.add('hidden');
@@ -2670,26 +2682,38 @@ function edPlace() {
 }
 function edPick() { const h = ED.hit; if (h) { const b = ED.map.get(h.x, h.y, h.z); if (b && b !== SH.B.BEDROCK) { ED.pal[ED.slot] = b; renderPalette(); } } }
 function edUndo() { const u = ED.undo.pop(); if (u) edSet(u[0], u[1], u[2], u[3], true); }
+// 플레이할 수 없는 맵이면 이유, 괜찮으면 null
+function mapProblem(ent) {
+  const m = SH.mapFromData(ent);
+  if (!m) return '맵이 너무 크거나 복잡해서 불러올 수 없어요';
+  if (m.spawns.length < 2) return '스폰할 곳이 부족해요. 위가 뚫린 3×3 이상 평평한 땅이 2곳 이상 필요해요 (용암·점프대 위 제외)';
+  return null;
+}
+// 저장 (이 기기 + 구글 계정). 플레이 가능한 맵이면 저장한 맵 정보를 돌려줌
 function edSave(silent) {
   ED.name = ($('edName').value.trim() || '내 맵').slice(0, 16);
-  const enc = SH.encodeMap(ED.map);
-  const check = SH.mapFromData(Object.assign({ theme: ED.theme }, enc));
-  const list = loadSavedMaps();
-  if (!ED.id && list.length >= 8) { toast('맵은 8개까지 저장돼요. 시작 화면에서 하나 지워주세요'); return null; }
-  const ent = Object.assign({ id: ED.id || 'm' + Date.now(), name: ED.name, theme: ED.theme, updated: Date.now() }, enc);
-  const i = list.findIndex(e => e.id === ent.id); if (i >= 0) list[i] = ent; else list.unshift(ent);
-  if (!storeSavedMaps(list)) return null;
+  const ent = Object.assign({ id: ED.id || 'm' + Date.now(), name: ED.name, theme: ED.theme, updated: Date.now() }, SH.encodeMap(ED.map));
+  const res = saveMap(ent);
+  if (res === 'full') { toast(`맵은 ${MAX_MAPS}개까지 저장돼요. 시작 화면에서 하나 지워주세요`); return null; }
   ED.id = ent.id;
-  if (!silent) toast(check && check.spawns.length >= 2 ? `'${ED.name}' 저장했어요` : '저장했지만 스폰할 평지가 부족해요 (넓은 빈 땅을 남겨주세요)');
+  const bad = mapProblem(ent);
+  if (!silent) toast(bad ? `저장했어요. 하지만 아직 플레이는 못 해요: ${bad}` : res === 'cache' ? `'${ED.name}' 계정에 저장했어요 (이 기기 저장 공간은 부족해요)` : `'${ED.name}' 저장했어요`);
   A.sfxBuy();
-  return check && check.spawns.length >= 2 ? ent : null;
+  return bad ? null : ent;
+}
+// 내 맵으로 방 만들기. now = 바로 시작 (테스트), 아니면 대기실에서 모드·봇 고르기
+function playMyMap(ent, now) {
+  const bad = mapProblem(ent);
+  if (bad) { toast(bad); return; }
+  const cfg = { map: 'village', mode: 'ffa', bots: 5, time: 300, kills: 25, diff: 'normal', rmode: false, rmap: false };
+  S.afterRoom = () => { send({ t: 'cfg', cfg: Object.assign({}, cfg, { map: 'custom' }), custom: ent }); if (now) send({ t: 'start' }); };
+  send(Object.assign({ t: 'create', cfg }, joinInfo()));
 }
 function edTest() {
   const ent = edSave(true);
-  if (!ent) { toast('플레이하려면 지면 높이에 넓은 빈 땅(3×3 이상)이 몇 군데 필요해요'); return; }
+  if (!ent) { const bad = mapProblem(Object.assign({ theme: ED.theme }, SH.encodeMap(ED.map))); if (bad) toast(bad); return; } // 저장 실패 안내는 edSave 가 띄움
   exitEditor(false);
-  S.afterRoom = () => { send({ t: 'cfg', cfg: { mode: 'ffa', bots: 5, time: 300, kills: 25, diff: 'normal', map: 'custom' }, custom: ent }); send({ t: 'start' }); };
-  send(Object.assign({ t: 'create', cfg: { map: 'village', mode: 'ffa', bots: 5, time: 300, kills: 25, diff: 'normal' } }, joinInfo()));
+  playMyMap(ent, true);
 }
 function edShare() {
   const enc = SH.encodeMap(ED.map);
@@ -2747,14 +2771,15 @@ function refreshCustomCards(m) {
   box.querySelectorAll('.mapcard.custom').forEach(c => c.remove());
   const host = m.host === S.myId, md = m.cfg.mode;
   if (md === 'spike') return;
-  const saved = loadSavedMaps();
+  const saved = savedMaps();
   const add = (ent, sel) => {
     const d = document.createElement('div'); d.className = 'mapcard custom' + (sel ? ' on' : ''); d.dataset.map = 'custom';
     const c = document.createElement('canvas'); c.width = 64; c.height = 64;
     try { const mm = SH.mapFromData(ent); if (mm) { const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(mapThumbOf(mm), 0, 0, 64, 64); } } catch (e) { /* */ }
     d.appendChild(c); d.appendChild(document.createTextNode(ent.name));
     const sm = document.createElement('div'); sm.className = 'mdesc'; sm.textContent = '내 맵'; d.appendChild(sm);
-    if (host && ent.data) d.onclick = () => send({ t: 'cfg', cfg: Object.assign({}, m.cfg, { map: 'custom' }), custom: ent });
+    // 랜덤 맵/모드가 켜져 있으면 시작할 때 다른 맵으로 바뀌므로 끔 (랜덤 모드였으면 개인전으로)
+    if (host && ent.data) d.onclick = () => send({ t: 'cfg', cfg: Object.assign({}, m.cfg, { map: 'custom', rmap: false, rmode: false, mode: m.cfg.rmode ? 'ffa' : m.cfg.mode }), custom: ent });
     box.appendChild(d);
   };
   let shownCurrent = false;
