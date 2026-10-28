@@ -658,11 +658,23 @@
   // maps/*.js 에서 새 맵을 등록 (빌더 도구 공유)
   const MAPKIT = { VMap, B, G, rng, ground, border, house, roofStairs, stairs, tree, scatter, crateStack, pineTree, bigTree, mound };
   function registerMap(id, def) { MAPS[id] = def; }
+  // 공식 맵 (플레이어가 만들어 출품 → 관리자 승인): 'off_<id>' 로 등록돼서 기본 맵처럼 맵 목록·랜덤 맵에 나옴
+  // o = { id, name, theme, by, at, W, H, D, data, cb }. 하늘·안개 같은 겉모습만 테마 맵에서 빌려 옴 (기믹·중력은 X)
+  const OFF_VIS = ['sky', 'fog', 'sun', 'stars', 'noClouds', 'fogNear', 'fogFar', 'snow'];
+  function registerOfficial(o) {
+    const th = MAPS[o.theme] && (MAPS[o.theme].kind || 'normal') === 'normal' && !MAPS[o.theme].official ? MAPS[o.theme] : MAPS.village;
+    const def = { name: String(o.name || '공식 맵').slice(0, 16), official: { by: o.by || '', at: o.at || 0 }, custom: true, desc: `공식 · ${String(o.by || '').slice(0, 10)} 제작`, build: () => mapFromData(o) };
+    for (const k of OFF_VIS) if (th[k] !== undefined) def[k] = th[k];
+    const id = 'off_' + o.id;
+    MAPS[id] = def; delete mapCache[id];
+    return id;
+  }
+  function unregisterOfficial(id) { delete MAPS['off_' + id]; delete mapCache['off_' + id]; }
   const mapCache = {};
   function getMap(id) {
     if (!MAPS[id]) id = 'village';
     if (!mapCache[id]) {
-      const m = MAPS[id].build(); m.id = id; m.grav = MAPS[id].grav || 1; m.spawns = computeSpawns(m, id);
+      const m = MAPS[id].build(); m.id = id; m.grav = MAPS[id].grav || 1; m.spawns = computeSpawns(m, id, !!MAPS[id].custom); // 공식(플레이어 제작) 맵은 높은 바닥도 스폰
       // 팀 기지 (깃발 위치): 서쪽 = 레드, 동쪽 = 블루, 가운데 줄에 가까운 열린 자리
       const cz = m.D / 2, sc = (s, t) => (t ? m.W - s[0] : s[0]) + Math.abs(s[2] - cz) * 0.6;
       m.bases = [0, 1].map(t => m.spawns.slice().sort((a, b) => sc(a, t) - sc(b, t))[0]);
@@ -1114,5 +1126,5 @@
     return null;
   }
 
-  return { MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });

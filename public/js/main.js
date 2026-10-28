@@ -23,6 +23,7 @@ import { BUILD_BLOCKS } from './blocks/buildBlocks.js';
 import { initBlockStore, blocksLogin, onServerBlocks } from './blocks/blockStore.js';
 import { initBlockEditor, blockEditorOpen } from './blocks/blockEditor.js';
 import { initMyBlocks, installCb, myBlocksHtml, bindMyBlocks, onEdCb, usedCb } from './editor/myBlocks.js';
+import { initOfficial, officialMsg, submitMap, subOf, statusText } from './editor/official.js';
 import { initCoop, openOnline, leaveOnline, reset as coopReset, coopSet, coopMeta, coopTest, coopTick, coopMsg, isOnline, isGuest } from './editor/coop.js';
 import { initMapStore, mapsLogin, onServerMaps, onMapSaved, onMapSaveErr, savedMaps, saveMap, deleteMap, mapSyncState, MAX_MAPS } from './editor/mapStore.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
@@ -142,6 +143,7 @@ function onLoggedIn(u) {
 function onMsg(m, replayed) {
   if (handleAuthMsg(m)) return;
   if (!replayed && coopMsg(m)) return; // 맵 같이 만들기
+  if (!replayed && officialMsg(m)) return; // 공식 맵·출품·심사
   if (S.replay && !replayed && !['rooms', 'err', 'hello', 'authed', 'rank'].includes(m.t)) return; // 리플레이 보는 중엔 실시간 게임 메시지 무시
   if (S.inGame && !S.replay) recMsg(m, serverNow());
   switch (m.t) {
@@ -498,9 +500,9 @@ function startGame(m) {
   if (S.sky && S.mapId !== m.map) { scene.remove(S.sky); S.sky = null; }
   if (ED.on) exitEditor(false);
   const customMap = m.custom ? SH.mapFromData(m.custom) : null;
-  if (customMap && customMap.cb) installCb(customMap.cb); // 맵에 들어 있는 내가 만든 블록 그림
   if (customMap && S.sky) { scene.remove(S.sky); S.sky = null; }
   S.map = customMap || SH.getMap(m.map).clone(); S.mapId = customMap ? 'custom' : m.map;
+  if (S.map.cb) installCb(S.map.cb); // 맵에 들어 있는 내가 만든 블록 그림 (내 맵·공식 맵)
   S.mapName = customMap ? m.custom.name || '커스텀 맵' : (SH.MAPS[m.map] || {}).name;
   for (const sp of S.sprays.values()) scene.remove(sp); S.sprays.clear(); S.selfEmote = null; toggleEmoteWheel(false);
   for (const [x, y, z] of m.broken || []) S.map.set(x, y, z, 0);
@@ -2602,7 +2604,7 @@ function openEditorStart() {
   $('editorStart').classList.remove('hidden');
   $('edNew').onclick = () => { const sz = +$('edNewSize').value, th = $('edNewTheme').value; startEditor(SH.blankMap(sz, sz, th, +$('edNewH').value), { name: '내 맵', theme: th }); };
   $('edCopyBtn').onclick = () => { const k = $('edCopy').value; startEditor(SH.getMap(k).clone(), { name: SH.MAPS[k].name + ' 수정본', theme: k }); };
-  renderEdList();
+  renderEdList(); send({ t: 'mysubs' }); // 내 출품작 상태
   $('edImportBtn').onclick = () => {
     try {
       const o = JSON.parse($('edImport').value.trim().replace(/^PXM1:/, ''));
@@ -2616,11 +2618,12 @@ function openEditorStart() {
 function renderEdList() {
   const list = savedMaps(), box = $('edListBox'); if (!box) return;
   box.innerHTML = `<div class="ptitle small">내 맵 (${list.length}/${MAX_MAPS}) <span class="dim edsync">${SYNC_TXT[mapSyncState()]}</span></div>
-    <div class="edlist">${list.length ? list.map(e => `<div class="edrow" data-id="${esc(e.id)}"><span class="edn">${esc(e.name)}</span><span class="dim">${e.W}×${e.D} · ${new Date(e.updated).toLocaleDateString()}</span><button class="btn tiny green" data-act="edit">편집</button><button class="btn tiny yellow" data-act="play">플레이</button><button class="btn tiny red" data-act="del">삭제</button></div>`).join('') : '<div class="dim">아직 만든 맵이 없어요</div>'}</div>`;
+    <div class="edlist">${list.length ? list.map(e => `<div class="edrow" data-id="${esc(e.id)}"><span class="edn">${esc(e.name)}</span><span class="dim">${e.W}×${e.D} · ${new Date(e.updated).toLocaleDateString()}</span><button class="btn tiny green" data-act="edit">편집</button><button class="btn tiny yellow" data-act="play">플레이</button><button class="btn tiny purple" data-act="submit">출품</button><button class="btn tiny red" data-act="del">삭제</button>${subOf(e.id) ? `<span class="edsub s-${subOf(e.id).status}">${esc(statusText(subOf(e.id)))}</span>` : ''}</div>`).join('') : '<div class="dim">아직 만든 맵이 없어요</div>'}</div>`;
   box.querySelectorAll('.edrow').forEach(row => {
     const ent = list.find(e => e.id === row.dataset.id);
     row.querySelector('[data-act="edit"]').onclick = () => { const m = SH.mapFromData(ent); if (!m) { toast('맵을 불러올 수 없어요'); return; } startEditor(m, ent); };
     row.querySelector('[data-act="play"]').onclick = () => { $('editorStart').classList.add('hidden'); playMyMap(ent); };
+    row.querySelector('[data-act="submit"]').onclick = () => { const bad = mapProblem(ent); if (bad) { toast(bad); return; } submitMap(ent); };
     row.querySelector('[data-act="del"]').onclick = () => { if (!confirm(`'${ent.name}' 맵을 지울까요? (모든 기기에서 지워져요)`)) return; deleteMap(ent.id); };
   });
 }
@@ -2775,6 +2778,12 @@ initBlockEditor({
     for (let i = 0; i < 256; i++) { u[i * 3] = d[i * 4]; u[i * 3 + 1] = d[i * 4 + 1]; u[i * 3 + 2] = d[i * 4 + 2]; }
     return u;
   },
+});
+initOfficial({
+  send: (m) => send(m), SH, toast, myName: () => myName(), playEnt: (ent) => playMyMap(ent), thumb: (ent) => myMapThumb(ent),
+  onSubs: () => { if (!$('editorStart').classList.contains('hidden')) renderEdList(); },
+  // 공식 맵이 추가/삭제되면 대기실 맵 카드 다시 만들기
+  rebuildCards: () => { buildMapCards(); if (S.room && !S.inGame && S.room.state === 'wait') onRoom(S.room); },
 });
 $('edOnline').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); openOnline(); };
 initCoop({ onCb: (m) => onEdCb(m), send: (m) => send(m), scene, SH, ED, myId: () => S.myId, joinInfo, edSet: (...a) => edSet(...a), startEditor: (map, meta) => startEditor(map, meta), exitEditor: (t) => exitEditor(t), rebuildTheme: () => edBuildScene(), toast });
