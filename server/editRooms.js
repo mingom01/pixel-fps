@@ -11,7 +11,7 @@ module.exports = function makeEditRooms(deps) {
 
   const memberList = (s) => [...s.members.values()].map(m => ({ id: m.c.id, name: m.name, color: m.color, host: m.c.id === s.hostId }));
   const send = (s, msg, except) => { const j = JSON.stringify(msg); for (const m of s.members.values()) if (m.c !== except) m.c.send(j); };
-  const snapshot = (s) => Object.assign({ name: s.name, theme: s.theme, cb: s.map.cb || {} }, SH.encodeMap(s.map));
+  const snapshot = (s) => Object.assign({ name: s.name, theme: s.theme, cb: s.map.cb || {}, mk: s.map.mk || {} }, SH.encodeMap(s.map));
   const pushMembers = (s) => send(s, { t: 'edmembers', code: s.code, host: s.hostId, members: memberList(s) });
 
   function addMember(s, c, m) {
@@ -81,6 +81,12 @@ module.exports = function makeEditRooms(deps) {
     send(s, { t: 'edcb', id, def, by: c.id });
   }
 
+  // 스폰·깃발·힐팩·보급 표시: 바뀐 표시 목록 전체를 받아서 검사하고 모두에게 전달
+  function setMarkers(c, s, m) {
+    s.map.mk = SH.cleanMk(m.mk, s.map);
+    send(s, { t: 'edmk', mk: s.map.mk, by: c.id }, c);
+  }
+
   // 메시지 처리 (맵 편집 관련이면 true)
   function handle(c, m) {
     if (m.t === 'edopen') { deps.leaveRoom(c); open(c, m); return true; }
@@ -90,6 +96,7 @@ module.exports = function makeEditRooms(deps) {
     if (!s) return true;
     if (m.t === 'edset') setBlock(c, s, m);
     else if (m.t === 'edcb') defineBlock(c, s, m);
+    else if (m.t === 'edmk') setMarkers(c, s, m);
     else if (m.t === 'edpos') send(s, { t: 'edpos', id: c.id, p: [m.x, m.y, m.z, m.yaw].map(v => Math.round((Number(v) || 0) * 100) / 100) }, c);
     else if (m.t === 'edmeta' && c.id === s.hostId) {
       s.name = String(m.name || s.name).slice(0, 16);

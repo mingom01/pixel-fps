@@ -17,6 +17,7 @@ function clean(e) {
     id, name: String(e.name || '내 맵').slice(0, 16), theme: String(e.theme || 'village').slice(0, 16),
     updated: Number(e.updated) || Date.now(), W: e.W, H: e.H, D: e.D, data: e.data,
     cb: SH.cleanCb(e.cb), // 이 맵에 쓴 내가 만든 블록
+    mk: SH.cleanMk(e.mk, e), // 스폰·깃발·힐팩·보급 표시
   };
 }
 

@@ -234,7 +234,7 @@ function customFrom(o) {
   if (!cm) return { err: '맵 데이터가 이상해요' };
   if (cm.spawns.length < 2) return { err: '스폰할 곳이 부족해요. 위가 뚫린 3×3 이상 평평한 땅이 2곳 이상 필요해요' };
   const name = String(o.name || '내 맵').replace(/[<>&"'`]/g, '').slice(0, 16);
-  return { custom: { id: /^[a-z0-9_-]{1,32}$/i.test(String(o.id || '')) ? String(o.id) : null, name, map: cm, obj: { W: o.W, H: o.H, D: o.D, data: o.data, theme: cm.theme, name, cb: cm.cb } } };
+  return { custom: { id: /^[a-z0-9_-]{1,32}$/i.test(String(o.id || '')) ? String(o.id) : null, name, map: cm, obj: { W: o.W, H: o.H, D: o.D, data: o.data, theme: cm.theme, name, cb: cm.cb, mk: cm.mk } } };
 }
 // 맵 같이 만들기 → 다 같이 테스트: 그 맵으로 게임 방을 만들고 편집하던 사람 모두 들어가서 바로 시작
 function editToGame(host, members, ent) {
@@ -1060,8 +1060,12 @@ function crateTick(r, now) {
     r.nextCrate = now + (isBR(r) ? 20000 : 45000 + Math.random() * 15000);
     // 누구나 걸어서 닿는 낮은 땅에만 떨어뜨림
     let x = 0, z = 0, landY = 99;
-    for (let k = 0; k < 20 && landY > SH.G + 1; k++) { const sp = pick(r.map.spawns); x = sp[0] + (Math.random() - 0.5) * 3; z = sp[2] + (Math.random() - 0.5) * 3; landY = topY(r.map, x, z); }
-    if (landY > SH.G + 1) { const sp = pick(r.map.spawns); x = sp[0]; z = sp[2]; landY = topY(r.map, x, z); }
+    const spots = r.map.crateSpots || [];
+    if (spots.length) { const sp = pick(spots); x = sp[0]; z = sp[2]; landY = sp[1]; } // 에디터에서 정한 보급 자리
+    else {
+      for (let k = 0; k < 20 && landY > SH.G + 1; k++) { const sp = pick(r.map.spawns); x = sp[0] + (Math.random() - 0.5) * 3; z = sp[2] + (Math.random() - 0.5) * 3; landY = topY(r.map, x, z); }
+      if (landY > SH.G + 1) { const sp = pick(r.map.spawns); x = sp[0]; z = sp[2]; landY = topY(r.map, x, z); }
+    }
     const c = { id: 'c' + (r.pid++), x, z, landY, y: landY + 36, landAt: now + 7200, opened: false };
     r.crates.push(c);
     broadcast(r, { t: 'crate', id: c.id, x, z, landY, landAt: c.landAt });

@@ -50,7 +50,7 @@
     }
     clone() {
       const m = new VMap(this.W, this.H, this.D); m.d.set(this.d);
-      m.id = this.id; m.spawns = this.spawns; m.bases = this.bases; m.teamSpawns = this.teamSpawns; m.shops = this.shops; m.pickups = this.pickups; m.grav = this.grav; m.spike = this.spike; m.range = this.range; m.gim = this.gim; m.cb = this.cb;
+      m.id = this.id; m.spawns = this.spawns; m.bases = this.bases; m.teamSpawns = this.teamSpawns; m.shops = this.shops; m.pickups = this.pickups; m.grav = this.grav; m.spike = this.spike; m.range = this.range; m.gim = this.gim; m.cb = this.cb; m.mk = this.mk; m.crateSpots = this.crateSpots; m.theme = this.theme;
       return m;
     }
     free(x0, y0, z0, x1, y1, z1) {
@@ -673,8 +673,14 @@
   const mapCache = {};
   function getMap(id) {
     if (!MAPS[id]) id = 'village';
+    if (!mapCache[id] && MAPS[id].custom) {
+      // 공식(플레이어 제작) 맵: 스폰·깃발·힐팩·보급은 mapFromData 가 이미 정함 (에디터 표시 반영)
+      const m = MAPS[id].build() || getMap('village').clone();
+      m.id = id; m.grav = 1; m.shops = [];
+      mapCache[id] = m;
+    }
     if (!mapCache[id]) {
-      const m = MAPS[id].build(); m.id = id; m.grav = MAPS[id].grav || 1; m.spawns = computeSpawns(m, id, !!MAPS[id].custom); // 공식(플레이어 제작) 맵은 높은 바닥도 스폰
+      const m = MAPS[id].build(); m.id = id; m.grav = MAPS[id].grav || 1; m.spawns = computeSpawns(m, id);
       // 팀 기지 (깃발 위치): 서쪽 = 레드, 동쪽 = 블루, 가운데 줄에 가까운 열린 자리
       const cz = m.D / 2, sc = (s, t) => (t ? m.W - s[0] : s[0]) + Math.abs(s[2] - cz) * 0.6;
       m.bases = [0, 1].map(t => m.spawns.slice().sort((a, b) => sc(a, t) - sc(b, t))[0]);
@@ -731,6 +737,17 @@
   // 내가 만든 블록: 맵마다 200~255번을 씀. 맵 데이터의 cb = { 번호: { n: 이름, f: [6면 16×16 RGB base64], lib: 내 블록 id } }
   // 면 순서: 위, 아래, 앞(+z), 뒤(-z), 왼쪽(-x), 오른쪽(+x)
   const CB_MIN = 200, CB_MAX = 255, CB_FACE_LEN = 1024;
+  // 에디터 표시: s 개인전 스폰 · r/b 레드/블루팀 스폰 · fr/fb 레드/블루 깃발 · h 작은 힐팩 · H 큰 힐팩 · c 보급 상자
+  // 위치는 [x, y, z] = 발이 닿는 빈 칸 (바닥 블록 바로 위)
+  const MK_MAX = { s: 32, r: 32, b: 32, h: 16, H: 16, c: 16 };
+  function cleanMk(mk, m) {
+    const ok = (p) => Array.isArray(p) && p.length === 3 && p.every(Number.isInteger) && p[0] >= 0 && p[2] >= 0 && p[0] < m.W && p[2] < m.D && p[1] >= 1 && p[1] < m.H;
+    const out = { fr: null, fb: null };
+    for (const k of Object.keys(MK_MAX)) out[k] = (mk && Array.isArray(mk[k]) ? mk[k] : []).filter(ok).slice(0, MK_MAX[k]).map(p => p.slice());
+    if (mk && ok(mk.fr)) out.fr = mk.fr.slice();
+    if (mk && ok(mk.fb)) out.fb = mk.fb.slice();
+    return out;
+  }
   function cleanCb(cb) {
     const out = {};
     if (!cb || typeof cb !== 'object') return out;
@@ -752,12 +769,22 @@
     for (let i = 0; i + 2 < raw.length && p < m.d.length; i += 3) { const v = raw[i] <= MAXB || cb[raw[i]] ? raw[i] : 0, n = raw[i + 1] | (raw[i + 2] << 8); m.d.fill(v, p, Math.min(m.d.length, p + n)); p += n; }
     m.cb = cb;
     m.id = 'custom'; m.grav = 1; m.theme = MAPS[o.theme] && (MAPS[o.theme].kind || 'normal') === 'normal' ? o.theme : 'village';
-    m.spawns = computeSpawns(m, 'custom' + W + D, true);
+    // 에디터에서 놓은 표시 (스폰·깃발·힐팩·보급). 안 놓은 건 예전처럼 자동
+    const mk = m.mk = cleanMk(o.mk, m), cell = (p) => [p[0] + 0.5, p[1], p[2] + 0.5];
+    const marked = (mk.s.length ? mk.s : mk.r.concat(mk.b)).map(cell);
+    m.spawns = marked.length >= 2 ? marked : marked.concat(computeSpawns(m, 'custom' + W + D, true));
     if (m.spawns.length < 2) return m; // 호출한 쪽에서 스폰 부족 처리
     const cz = m.D / 2, sc = (s, t) => (t ? m.W - s[0] : s[0]) + Math.abs(s[2] - cz) * 0.6;
     m.bases = [0, 1].map(t => m.spawns.slice().sort((a, b) => sc(a, t) - sc(b, t))[0]);
     m.teamSpawns = [0, 1].map(t => { let l = m.spawns.filter(s => t ? s[0] > m.W * 0.55 : s[0] < m.W * 0.45); if (l.length < 2) l = m.spawns.filter(s => t ? s[0] >= m.W / 2 : s[0] < m.W / 2); if (!l.length) l = m.spawns; return l; });
-    m.shops = []; m.pickups = computePickups(m, 'custom');
+    if (mk.r.length && mk.b.length) m.teamSpawns = [mk.r.map(cell), mk.b.map(cell)];
+    if (mk.fr) m.bases[0] = cell(mk.fr);
+    if (mk.fb) m.bases[1] = cell(mk.fb);
+    m.shops = [];
+    m.pickups = mk.h.length || mk.H.length
+      ? mk.H.map(p => ['hpL', p]).concat(mk.h.map(p => ['hpS', p])).map(([kind, p], i) => ({ id: 'k' + i, kind, x: p[0] + 0.5, y: p[1], z: p[2] + 0.5 }))
+      : computePickups(m, 'custom');
+    m.crateSpots = mk.c.map(cell); // 보급 상자가 떨어질 자리 (없으면 서버가 스폰 근처에서 고름)
     return m;
   }
   function blankMap(W, D, theme, H) {
@@ -1126,5 +1153,5 @@
     return null;
   }
 
-  return { registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { MK_MAX, cleanMk, registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });

@@ -23,6 +23,7 @@ import { BUILD_BLOCKS } from './blocks/buildBlocks.js';
 import { initBlockStore, blocksLogin, onServerBlocks } from './blocks/blockStore.js';
 import { initBlockEditor, blockEditorOpen } from './blocks/blockEditor.js';
 import { initMyBlocks, installCb, myBlocksHtml, bindMyBlocks, onEdCb, usedCb } from './editor/myBlocks.js';
+import { initMarkers, MARKERS, isMarker, markerIcon, markersHtml, rebuildMarkers, clearMarkers, placeMarker, removeMarkerNear, onEdMk } from './editor/markers.js';
 import { initOfficial, officialMsg, submitMap, subOf, statusText } from './editor/official.js';
 import { initCoop, openOnline, leaveOnline, reset as coopReset, coopSet, coopMeta, coopTest, coopTick, coopMsg, isOnline, isGuest } from './editor/coop.js';
 import { initMapStore, mapsLogin, onServerMaps, onMapSaved, onMapSaveErr, savedMaps, saveMap, deleteMap, mapSyncState, MAX_MAPS } from './editor/mapStore.js';
@@ -2565,6 +2566,7 @@ const ED = { on: false, map: null, world: null, sky: null, name: '내 맵', them
 const blockIconCache = {};
 function blockIcon(b) {
   if (blockIconCache[b]) return blockIconCache[b];
+  if (isMarker(b)) return markerIcon(b); // 스폰·힐팩·보급 표시
   const f = FACES[b]; if (!f) return '';
   // 내가 만든 블록(6면)은 앞면, 기본 블록은 옆면으로 아이콘
   const ti = f.length === 6 ? f[4] : f[1], c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
@@ -2608,7 +2610,7 @@ function openEditorStart() {
   $('edImportBtn').onclick = () => {
     try {
       const o = JSON.parse($('edImport').value.trim().replace(/^PXM1:/, ''));
-      const ent = { name: String(o.n || '받은 맵').slice(0, 16), theme: o.t || 'village', W: o.W, H: o.H, D: o.D, data: o.d, cb: o.c };
+      const ent = { name: String(o.n || '받은 맵').slice(0, 16), theme: o.t || 'village', W: o.W, H: o.H, D: o.D, data: o.d, cb: o.c, mk: o.k };
       const m = SH.mapFromData(ent); if (!m) throw new Error();
       startEditor(m, ent);
     } catch (e) { toast('코드가 올바르지 않아요'); }
@@ -2633,11 +2635,12 @@ $('edStartClose').onclick = () => $('editorStart').classList.add('hidden');
 function startEditor(map, meta) {
   $('editorStart').classList.add('hidden');
   ED.cb = map.cb ? Object.assign({}, map.cb) : {}; installCb(ED.cb); // 이 맵에 쓴 내가 만든 블록
+  ED.mk = SH.cleanMk(map.mk, map); // 스폰·깃발·힐팩·보급 표시
   Object.assign(ED, { on: true, map, name: meta.name || '내 맵', theme: THEMES.includes(meta.theme) ? meta.theme : 'village', id: meta.id || null, undo: [], x: map.W / 2, y: 14, z: map.D - 3, yaw: 0, pitch: -0.4 });
   for (const s of ['menu', 'lobby']) $(s).classList.add('hidden');
   $('hud').classList.add('hidden');
   if (S.world) S.world.visible = false; if (S.sky) S.sky.visible = false;
-  edBuildScene();
+  edBuildScene(); rebuildMarkers();
   $('editorHud').classList.remove('hidden');
   $('edName').value = ED.name;
   $('edTheme').innerHTML = THEMES.map(t => `<option value="${t}" ${t === ED.theme ? 'selected' : ''}>${themeName(t)}</option>`).join('');
@@ -2656,6 +2659,7 @@ function edBuildScene() {
 }
 function exitEditor(toMenu) {
   if (isOnline()) leaveOnline(); // 방장이 나가면 같이 만들기 끝
+  clearMarkers();
   ED.on = false;
   if (ED.world) { scene.remove(ED.world); disposeWorld(ED.world); ED.world = null; }
   if (ED.sky) { scene.remove(ED.sky); ED.sky = null; }
@@ -2677,7 +2681,7 @@ function openBlockPicker() {
   if (document.pointerLockElement) document.exitPointerLock();
   const ids = Object.keys(FACES).map(Number).filter(b => b !== SH.B.BEDROCK).sort((a, b) => a - b);
   const base = ids.filter(b => b < SH.CB_MIN); // 내가 만든 블록(200~)은 위쪽 '내 블록' 칸에
-  $('bpGrid').innerHTML = myBlocksHtml() + base.map(b => `<div class="bpi" data-b="${b}" title="${BLOCK_NAMES[b] || b}"><img src="${blockIcon(b)}"><span>${BLOCK_NAMES[b] || b}</span></div>`).join('');
+  $('bpGrid').innerHTML = myBlocksHtml() + markersHtml() + '<div class="bp-sec">기본 블록</div>' + base.map(b => `<div class="bpi" data-b="${b}" title="${BLOCK_NAMES[b] || b}"><img src="${blockIcon(b)}"><span>${BLOCK_NAMES[b] || b}</span></div>`).join('');
   bindMyBlocks($('bpGrid'));
   $('bpGrid').querySelectorAll('[data-b]').forEach(d => d.onclick = () => { ED.pal[ED.slot] = +d.dataset.b; renderPalette(); closeBlockPicker(); });
   $('blockPicker').classList.remove('hidden');
@@ -2696,11 +2700,15 @@ function edSet(x, y, z, b, noUndo, remote) {
   if (!remote) coopSet(x, y, z, b);
   return true;
 }
-function edRemove() { const h = ED.hit; if (h && edSet(h.x, h.y, h.z, 0)) { A.sfxStep(1); for (let i = 0; i < 5; i++) spawnParticle(h.x + 0.5, h.y + 0.5, h.z + 0.5, (Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3, BLOCK_COLOR[ED.map.get(h.x, h.y, h.z)] || 0x999999, 0.5, 0.1, 10); } }
+function edRemove() {
+  // 표시를 들고 있으면 블록 대신 근처 표시를 지움
+  if (isMarker(ED.pal[ED.slot])) { const h = ED.hit; if (h && (removeMarkerNear(h.x + h.nx, h.y + h.ny, h.z + h.nz) || removeMarkerNear(h.x, h.y + 1, h.z))) A.sfxStep(1); return; }
+  const h = ED.hit; if (h && edSet(h.x, h.y, h.z, 0)) { A.sfxStep(1); for (let i = 0; i < 5; i++) spawnParticle(h.x + 0.5, h.y + 0.5, h.z + 0.5, (Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3, BLOCK_COLOR[ED.map.get(h.x, h.y, h.z)] || 0x999999, 0.5, 0.1, 10); } }
 function edPlace() {
   const h = ED.hit; if (!h) return;
   const x = h.x + h.nx, y = h.y + h.ny, z = h.z + h.nz;
   if (Math.floor(ED.x) === x && Math.floor(ED.z) === z && (Math.floor(ED.y) === y || Math.floor(ED.y - 1) === y)) return;
+  if (isMarker(ED.pal[ED.slot])) { if (placeMarker(ED.pal[ED.slot], x, y, z)) A.sfxPick(); return; }
   if (edSet(x, y, z, ED.pal[ED.slot])) A.sfxPick();
 }
 function edPick() { const h = ED.hit; if (h) { const b = ED.map.get(h.x, h.y, h.z); if (b && b !== SH.B.BEDROCK) { ED.pal[ED.slot] = b; renderPalette(); } } }
@@ -2726,7 +2734,7 @@ function mapProblem(ent) {
 // 저장 (이 기기 + 구글 계정). 플레이 가능한 맵이면 저장한 맵 정보를 돌려줌
 function edSave(silent) {
   ED.name = ($('edName').value.trim() || '내 맵').slice(0, 16);
-  const ent = Object.assign({ id: ED.id || 'm' + Date.now(), name: ED.name, theme: ED.theme, updated: Date.now(), cb: usedCb(ED.map, ED.cb) }, SH.encodeMap(ED.map));
+  const ent = Object.assign({ id: ED.id || 'm' + Date.now(), name: ED.name, theme: ED.theme, updated: Date.now(), cb: usedCb(ED.map, ED.cb), mk: ED.mk }, SH.encodeMap(ED.map));
   const res = saveMap(ent);
   if (res === 'full') { toast(`맵은 ${MAX_MAPS}개까지 저장돼요. 시작 화면에서 하나 지워주세요`); return null; }
   ED.id = ent.id;
@@ -2745,15 +2753,15 @@ function playMyMap(ent, now) {
 }
 function edTest() {
   if (isGuest()) return;
-  if (isOnline()) { const ent = edSave(true); if (!ent) { const bad = mapProblem(Object.assign({ theme: ED.theme, cb: ED.cb }, SH.encodeMap(ED.map))); if (bad) toast(bad); return; } coopTest(ent.id); return; } // 다 같이 테스트: 서버가 모두를 게임 방으로
+  if (isOnline()) { const ent = edSave(true); if (!ent) { const bad = mapProblem(Object.assign({ theme: ED.theme, cb: ED.cb, mk: ED.mk }, SH.encodeMap(ED.map))); if (bad) toast(bad); return; } coopTest(ent.id); return; } // 다 같이 테스트: 서버가 모두를 게임 방으로
   const ent = edSave(true);
-  if (!ent) { const bad = mapProblem(Object.assign({ theme: ED.theme, cb: ED.cb }, SH.encodeMap(ED.map))); if (bad) toast(bad); return; } // 저장 실패 안내는 edSave 가 띄움
+  if (!ent) { const bad = mapProblem(Object.assign({ theme: ED.theme, cb: ED.cb, mk: ED.mk }, SH.encodeMap(ED.map))); if (bad) toast(bad); return; } // 저장 실패 안내는 edSave 가 띄움
   exitEditor(false);
   playMyMap(ent, true);
 }
 function edShare() {
   const enc = SH.encodeMap(ED.map);
-  const code = 'PXM1:' + JSON.stringify({ n: ($('edName').value.trim() || '내 맵'), t: ED.theme, W: enc.W, H: enc.H, D: enc.D, d: enc.data, c: usedCb(ED.map, ED.cb) });
+  const code = 'PXM1:' + JSON.stringify({ n: ($('edName').value.trim() || '내 맵'), t: ED.theme, W: enc.W, H: enc.H, D: enc.D, d: enc.data, c: usedCb(ED.map, ED.cb), k: ED.mk });
   if (document.pointerLockElement) document.exitPointerLock();
   $('edShareText').value = code; $('edShare').classList.remove('hidden');
   $('edShareText').select();
@@ -2785,8 +2793,10 @@ initOfficial({
   // 공식 맵이 추가/삭제되면 대기실 맵 카드 다시 만들기
   rebuildCards: () => { buildMapCards(); if (S.room && !S.inGame && S.room.state === 'wait') onRoom(S.room); },
 });
+initMarkers({ ED, scene, SH, send: (m) => send(m), isOnline, toast });
+for (const m of MARKERS) BLOCK_NAMES[m.id] = m.name;
 $('edOnline').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); openOnline(); };
-initCoop({ onCb: (m) => onEdCb(m), send: (m) => send(m), scene, SH, ED, myId: () => S.myId, joinInfo, edSet: (...a) => edSet(...a), startEditor: (map, meta) => startEditor(map, meta), exitEditor: (t) => exitEditor(t), rebuildTheme: () => edBuildScene(), toast });
+initCoop({ onMk: (m) => onEdMk(m), onCb: (m) => onEdCb(m), send: (m) => send(m), scene, SH, ED, myId: () => S.myId, joinInfo, edSet: (...a) => edSet(...a), startEditor: (map, meta) => startEditor(map, meta), exitEditor: (t) => exitEditor(t), rebuildTheme: () => edBuildScene(), toast });
 function editorKey(e) {
   keys[e.code] = true;
   if (['Space', 'KeyC', 'Tab'].includes(e.code)) e.preventDefault();
