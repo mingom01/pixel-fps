@@ -97,6 +97,10 @@ module.exports = function makeEditRooms(deps) {
     if (m.t === 'edset') setBlock(c, s, m);
     else if (m.t === 'edcb') defineBlock(c, s, m);
     else if (m.t === 'edmk') setMarkers(c, s, m);
+    else if (m.t === 'edresize' && c.id === s.hostId) { // 방장이 맵 높이를 바꿈 (모두 같은 방식으로 자름/늘림)
+      const H = Math.max(12, Math.min(SH.MAP_MAX.H, m.H | 0));
+      if (H !== s.map.H) { s.map = SH.resizeMapH(s.map, H); send(s, { t: 'edresize', H }, c); }
+    }
     else if (m.t === 'edpos') send(s, { t: 'edpos', id: c.id, p: [m.x, m.y, m.z, m.yaw].map(v => Math.round((Number(v) || 0) * 100) / 100) }, c);
     else if (m.t === 'edmeta' && c.id === s.hostId) {
       s.name = String(m.name || s.name).slice(0, 16);
