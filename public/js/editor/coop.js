@@ -10,7 +10,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
-// deps = { send, scene, SH, ED, myId(), joinInfo(), edSet(x,y,z,b,noUndo,remote), startEditor(map, meta), exitEditor(toMenu), rebuildTheme(), toast }
+// deps = { onCb(msg), send, scene, SH, ED, myId(), joinInfo(), edSet(x,y,z,b,noUndo,remote), startEditor(map, meta), exitEditor(toMenu), rebuildTheme(), toast }
 let D = null;
 const st = { on: false, code: null, host: null, members: [], avatars: new Map(), sentAt: 0, sent: '' };
 
@@ -22,7 +22,7 @@ export const isGuest = () => st.on && st.host !== D.myId();
 export function openOnline() {
   if (st.on) return;
   const ED = D.ED;
-  D.send(Object.assign({ t: 'edopen', ent: Object.assign({ name: ED.name, theme: ED.theme }, D.SH.encodeMap(ED.map)) }, D.joinInfo()));
+  D.send(Object.assign({ t: 'edopen', ent: Object.assign({ name: ED.name, theme: ED.theme, cb: ED.cb || {} }, D.SH.encodeMap(ED.map)) }, D.joinInfo()));
 }
 export function leaveOnline() { if (st.on) D.send({ t: 'edleave' }); reset(); }
 // 세션 끝 (서버가 이미 정리한 경우: 테스트로 게임 방에 들어감, 연결 끊김)
@@ -103,6 +103,9 @@ export function coopMsg(m) {
       st.host = m.host; st.members = m.members;
       for (const [id, a] of st.avatars) if (!m.members.some(x => x.id === id)) { D.scene.remove(a.model); st.avatars.delete(id); }
       renderBar();
+      return true;
+    case 'edcb': // 내가 만든 블록이 이 맵에 등록됨 (번호는 서버가 정함)
+      if (st.on && D.ED.on) D.onCb(m);
       return true;
     case 'edset':
       if (st.on && D.ED.on) D.edSet(m.x, m.y, m.z, m.b, true, true);

@@ -11,7 +11,7 @@ module.exports = function makeEditRooms(deps) {
 
   const memberList = (s) => [...s.members.values()].map(m => ({ id: m.c.id, name: m.name, color: m.color, host: m.c.id === s.hostId }));
   const send = (s, msg, except) => { const j = JSON.stringify(msg); for (const m of s.members.values()) if (m.c !== except) m.c.send(j); };
-  const snapshot = (s) => Object.assign({ name: s.name, theme: s.theme }, SH.encodeMap(s.map));
+  const snapshot = (s) => Object.assign({ name: s.name, theme: s.theme, cb: s.map.cb || {} }, SH.encodeMap(s.map));
   const pushMembers = (s) => send(s, { t: 'edmembers', code: s.code, host: s.hostId, members: memberList(s) });
 
   function addMember(s, c, m) {
@@ -63,10 +63,22 @@ module.exports = function makeEditRooms(deps) {
     if (now - me.setT > 1000) { me.setT = now; me.setN = 0; }
     if (++me.setN > MAX_SETS_PER_SEC) return; // 너무 빠른 연속 입력은 무시
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, b = m.b | 0, map = s.map;
-    if (x < 0 || z < 0 || x >= map.W || z >= map.D || y < 1 || y >= map.H || b < 0 || b > MAXB || b === SH.B.BEDROCK) return;
+    if (x < 0 || z < 0 || x >= map.W || z >= map.D || y < 1 || y >= map.H || b < 0 || (b > MAXB && !(map.cb && map.cb[b])) || b === SH.B.BEDROCK) return;
     if (map.get(x, y, z) === b) return;
     map.set(x, y, z, b);
     send(s, { t: 'edset', x, y, z, b, by: c.id });
+  }
+
+  // 내가 만든 블록을 이 맵에 등록 (같은 '내 블록'이면 번호 재사용하고 그림만 갱신) → 모두에게 번호와 그림 전달
+  function defineBlock(c, s, m) {
+    const def = SH.cleanCb({ [SH.CB_MIN]: m.def })[SH.CB_MIN];
+    if (!def) return;
+    const cb = s.map.cb || (s.map.cb = {});
+    let id = Object.keys(cb).map(Number).find(k => def.lib && cb[k].lib === def.lib);
+    if (id == null) for (let k = SH.CB_MIN; k <= SH.CB_MAX; k++) if (!cb[k]) { id = k; break; }
+    if (id == null) { c.send({ t: 'err', text: `한 맵에는 내가 만든 블록을 ${SH.CB_MAX - SH.CB_MIN + 1}종까지 쓸 수 있어요` }); return; }
+    cb[id] = def;
+    send(s, { t: 'edcb', id, def, by: c.id });
   }
 
   // 메시지 처리 (맵 편집 관련이면 true)
@@ -77,6 +89,7 @@ module.exports = function makeEditRooms(deps) {
     if (m.t === 'edleave') { leave(c); return true; }
     if (!s) return true;
     if (m.t === 'edset') setBlock(c, s, m);
+    else if (m.t === 'edcb') defineBlock(c, s, m);
     else if (m.t === 'edpos') send(s, { t: 'edpos', id: c.id, p: [m.x, m.y, m.z, m.yaw].map(v => Math.round((Number(v) || 0) * 100) / 100) }, c);
     else if (m.t === 'edmeta' && c.id === s.hostId) {
       s.name = String(m.name || s.name).slice(0, 16);

@@ -16,6 +16,7 @@ function clean(e) {
   return {
     id, name: String(e.name || '내 맵').slice(0, 16), theme: String(e.theme || 'village').slice(0, 16),
     updated: Number(e.updated) || Date.now(), W: e.W, H: e.H, D: e.D, data: e.data,
+    cb: SH.cleanCb(e.cb), // 이 맵에 쓴 내가 만든 블록
   };
 }
 

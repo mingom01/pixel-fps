@@ -186,7 +186,10 @@ export const GLOW = new Set([B.LAMP, B.GLOWC, B.LAVA, B.JUMPPAD, B.PORTAL, B.ELE
 export const BLOCK_COLOR = {};
 
 export const ATLAS_COLS = COLS;
-export const ATLAS_ROWS = Math.ceil(TILES.length / COLS);
+// 내가 만든 블록(200~255번, 6면씩) 자리를 아틀라스 아래쪽에 미리 비워 둠 → blocks/customBlocks.js 가 그려 넣음
+const BASE_ROWS = Math.ceil(TILES.length / COLS);
+export const CUSTOM_TILE0 = BASE_ROWS * COLS;
+export const ATLAS_ROWS = BASE_ROWS + Math.ceil((window.SH.CB_MAX - window.SH.CB_MIN + 1) * 6 / COLS);
 export function makeAtlas() {
   const W = COLS * T, H = ATLAS_ROWS * T;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;

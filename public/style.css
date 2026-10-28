@@ -794,3 +794,38 @@ body.abil #killBanner { bottom: 16%; }
 #touchUI [data-b="inspect"] { left: 194px; top: 160px !important; }
 .botfill { margin-top: 6px; font-size: 12px; }
 .rk-why { font-size: 11px; color: var(--dim); }
+
+/* ---------- 블록 만들기 (blocks/blockEditor.js) ---------- */
+#blockEd { z-index: 35; background: rgba(5, 7, 12, 0.88); }
+.be { width: min(860px, 100%); max-height: calc(100vh - 24px); overflow: auto; }
+.be-sub { font-size: 12px; margin-left: 6px; }
+.be-body { display: flex; gap: 14px; flex-wrap: wrap; }
+.be-left { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+#beCanvas { width: min(320px, 80vw); height: min(320px, 80vw); image-rendering: pixelated; border: 3px solid var(--line); cursor: crosshair; touch-action: none; }
+.be-faces { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.be-face { display: flex; flex-direction: column; align-items: center; font-size: 11px; padding: 3px; border: 2px solid var(--line); background: #1a2036; cursor: pointer; }
+.be-face img { width: 32px; height: 32px; image-rendering: pixelated; }
+.be-face.on { border-color: var(--yellow); }
+.be-tools { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.be-right { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 4px; }
+.be-right input#beName { width: 100%; }
+.be-colorrow { display: flex; align-items: center; gap: 8px; }
+.be-colorrow input[type=color] { width: 54px; height: 32px; padding: 0; border: 3px solid var(--line); background: none; }
+.be-sw { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; }
+.be-sw i { display: block; aspect-ratio: 1; border: 2px solid var(--line); cursor: pointer; }
+.be-small { font-size: 11px; }
+.be-copy { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.be-copy select { background: #11141f; color: var(--text); border: 3px solid var(--line); font-family: inherit; padding: 3px; }
+.be-prev { height: 130px; display: flex; align-items: center; justify-content: center; perspective: 420px; }
+.be-cube { width: 80px; height: 80px; position: relative; transform-style: preserve-3d; animation: beSpin 7s linear infinite; }
+.be-cube img { position: absolute; inset: 0; width: 80px; height: 80px; image-rendering: pixelated; backface-visibility: hidden; }
+@keyframes beSpin { from { transform: rotateX(-24deg) rotateY(0deg); } to { transform: rotateX(-24deg) rotateY(360deg); } }
+.be-actions { display: flex; gap: 8px; margin-top: 4px; }
+/* 블록 고르기 창의 '내 블록' 칸 */
+.bp-sec { grid-column: 1 / -1; font-size: 13px; color: var(--yellow); margin: 4px 0 2px; }
+.bp-mine { grid-column: 1 / -1; display: grid; grid-template-columns: inherit; gap: inherit; }
+.bpi { position: relative; }
+.bpi.bp-new { border-style: dashed; color: #7ff0e0; }
+.bpi.bp-new b { display: block; font-size: 26px; line-height: 36px; }
+.bpi .bp-edit { position: absolute; right: 3px; top: 2px; font-style: normal; font-size: 13px; color: #7ff0e0; cursor: pointer; padding: 0 3px; background: rgba(0,0,0,0.4); }
+.bpi em { position: absolute; left: 3px; top: 2px; font-size: 10px; font-style: normal; }

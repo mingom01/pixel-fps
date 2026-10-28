@@ -9,6 +9,7 @@ const STORE = require('./server/store.js');
 const GIM = require('./server/gimmicks.js');
 const INCOME = require('./server/income.js');
 const USERMAPS = require('./server/maps.js');
+const USERBLOCKS = require('./server/blocks.js');
 // 맵 같이 만들기 세션 (함수들은 아래에 선언돼 있어서 화살표로 감싸서 넘김)
 const EDIT = require('./server/editRooms.js')({
   SH, genCode: () => genCode(), log: (t) => log(t), cleanName: (n) => cleanName(n), leaveRoom: (c) => leaveRoom(c),
@@ -229,7 +230,7 @@ function customFrom(o) {
   if (!cm) return { err: '맵 데이터가 이상해요' };
   if (cm.spawns.length < 2) return { err: '스폰할 곳이 부족해요. 위가 뚫린 3×3 이상 평평한 땅이 2곳 이상 필요해요' };
   const name = String(o.name || '내 맵').replace(/[<>&"'`]/g, '').slice(0, 16);
-  return { custom: { id: /^[a-z0-9_-]{1,32}$/i.test(String(o.id || '')) ? String(o.id) : null, name, map: cm, obj: { W: o.W, H: o.H, D: o.D, data: o.data, theme: cm.theme, name } } };
+  return { custom: { id: /^[a-z0-9_-]{1,32}$/i.test(String(o.id || '')) ? String(o.id) : null, name, map: cm, obj: { W: o.W, H: o.H, D: o.D, data: o.data, theme: cm.theme, name, cb: cm.cb } } };
 }
 // 맵 같이 만들기 → 다 같이 테스트: 그 맵으로 게임 방을 만들고 편집하던 사람 모두 들어가서 바로 시작
 function editToGame(host, members, ent) {
@@ -1105,6 +1106,7 @@ function handle(c, m) {
   if (m.t === 'auth' || m.t === 'logout' || m.t === 'profile') return handleAuth(c, m);
   if (!c.user) { c.send({ t: 'needauth' }); return; }
   if (USERMAPS.handle(c, m)) return;
+  if (USERBLOCKS.handle(c, m)) return;
   if (EDIT.handle(c, m)) return;
   const r = c.room;
   switch (m.t) {

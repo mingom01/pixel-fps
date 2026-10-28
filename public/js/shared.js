@@ -50,7 +50,7 @@
     }
     clone() {
       const m = new VMap(this.W, this.H, this.D); m.d.set(this.d);
-      m.id = this.id; m.spawns = this.spawns; m.bases = this.bases; m.teamSpawns = this.teamSpawns; m.shops = this.shops; m.pickups = this.pickups; m.grav = this.grav; m.spike = this.spike; m.range = this.range; m.gim = this.gim;
+      m.id = this.id; m.spawns = this.spawns; m.bases = this.bases; m.teamSpawns = this.teamSpawns; m.shops = this.shops; m.pickups = this.pickups; m.grav = this.grav; m.spike = this.spike; m.range = this.range; m.gim = this.gim; m.cb = this.cb;
       return m;
     }
     free(x0, y0, z0, x1, y1, z1) {
@@ -716,13 +716,29 @@
   // 저장 데이터에 있는 블록 번호 중 이보다 큰 건 공기로 읽음 (기믹 블록이 추가될 때마다 자동으로 늘어남)
   const MAXB = Math.max(...Object.values(B));
   const MAP_MAX = { W: 160, H: 64, DATA: 2000000 };
+  // 내가 만든 블록: 맵마다 200~255번을 씀. 맵 데이터의 cb = { 번호: { n: 이름, f: [6면 16×16 RGB base64], lib: 내 블록 id } }
+  // 면 순서: 위, 아래, 앞(+z), 뒤(-z), 왼쪽(-x), 오른쪽(+x)
+  const CB_MIN = 200, CB_MAX = 255, CB_FACE_LEN = 1024;
+  function cleanCb(cb) {
+    const out = {};
+    if (!cb || typeof cb !== 'object') return out;
+    for (const k of Object.keys(cb)) {
+      const id = Number(k), e = cb[k];
+      if (!Number.isInteger(id) || id < CB_MIN || id > CB_MAX || !e || !Array.isArray(e.f) || e.f.length !== 6) continue;
+      if (!e.f.every(f => typeof f === 'string' && f.length === CB_FACE_LEN && /^[A-Za-z0-9+/]+={0,2}$/.test(f))) continue;
+      out[id] = { n: String(e.n || '내 블록').slice(0, 16), f: e.f.slice(), lib: String(e.lib || '').slice(0, 32) };
+    }
+    return out;
+  }
   function mapFromData(o) {
     const W = o.W | 0, H = o.H | 0, D = o.D | 0;
     // 크기 한도: 가로·세로 160, 높이 64 (예전 맵은 이 안에 다 들어가서 그대로 읽힘)
     if (W < 16 || D < 16 || W > MAP_MAX.W || D > MAP_MAX.W || H < 12 || H > MAP_MAX.H || typeof o.data !== 'string' || o.data.length > MAP_MAX.DATA) return null;
     const m = new VMap(W, H, D), raw = fromB64(o.data);
     let p = 0;
-    for (let i = 0; i + 2 < raw.length && p < m.d.length; i += 3) { const v = raw[i] <= MAXB ? raw[i] : 0, n = raw[i + 1] | (raw[i + 2] << 8); m.d.fill(v, p, Math.min(m.d.length, p + n)); p += n; }
+    const cb = cleanCb(o.cb);
+    for (let i = 0; i + 2 < raw.length && p < m.d.length; i += 3) { const v = raw[i] <= MAXB || cb[raw[i]] ? raw[i] : 0, n = raw[i + 1] | (raw[i + 2] << 8); m.d.fill(v, p, Math.min(m.d.length, p + n)); p += n; }
+    m.cb = cb;
     m.id = 'custom'; m.grav = 1; m.theme = MAPS[o.theme] && (MAPS[o.theme].kind || 'normal') === 'normal' ? o.theme : 'village';
     m.spawns = computeSpawns(m, 'custom' + W + D, true);
     if (m.spawns.length < 2) return m; // 호출한 쪽에서 스폰 부족 처리
@@ -1098,5 +1114,5 @@
     return null;
   }
 
-  return { MAP_MAX, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });
