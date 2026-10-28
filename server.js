@@ -64,7 +64,7 @@ class Client {
   send(obj) { if (!this.alive) return; try { this.socket.write(encodeFrame(typeof obj === 'string' ? obj : JSON.stringify(obj))); } catch (e) { /* */ } }
   onData(d) {
     this.buf = Buffer.concat([this.buf, d]);
-    if (this.buf.length > 1 << 20) { this.close(); return; }
+    if (this.buf.length > 4 << 20) { this.close(); return; } // 큰 맵(160×160×64)도 한 번에 받을 수 있게 4MB
     for (;;) {
       if (this.buf.length < 2) return;
       const b0 = this.buf[0], b1 = this.buf[1], opcode = b0 & 0x0f, masked = (b1 & 0x80) !== 0;
@@ -86,7 +86,7 @@ class Client {
         if (opcode === 1) this.frag = [];
         else if (!this.frag) continue; // 시작 없이 온 이어지는 조각은 버림
         this.frag.push(payload);
-        if (!fin) { if (this.frag.reduce((n, f) => n + f.length, 0) > 1 << 20) { this.close(); return; } continue; }
+        if (!fin) { if (this.frag.reduce((n, f) => n + f.length, 0) > 4 << 20) { this.close(); return; } continue; }
         const whole = Buffer.concat(this.frag); this.frag = null;
         let msg; try { msg = JSON.parse(whole.toString('utf8')); } catch (e) { continue; }
         try { handle(this, msg); } catch (e) { console.error(e); }

@@ -2,7 +2,8 @@
 // 계정 기록(store.js)의 maps 에 들어가요. mapDel 은 지운 맵 id (다른 기기 캐시에서 되살아나지 않게)
 const STORE = require('./store.js');
 
-const MAX_MAPS = 20, MAX_DATA = 400000, MAX_TOTAL = 3 * 1024 * 1024, MAX_DEL = 200;
+const SH = require('../public/js/shared.js');
+const MAX_MAPS = 20, MAX_DATA = SH.MAP_MAX.DATA, MAX_TOTAL = 12 * 1024 * 1024, MAX_DEL = 200;
 const int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
 
 // 클라가 보낸 맵 한 개 확인 (형식·크기만, 내용은 SH.mapFromData 가 읽을 때 다시 걸러짐)
@@ -10,7 +11,7 @@ function clean(e) {
   if (!e || typeof e !== 'object') return null;
   const id = String(e.id || '');
   if (!/^[a-z0-9_-]{1,32}$/i.test(id)) return null;
-  if (!int(e.W, 16, 96) || !int(e.D, 16, 96) || !int(e.H, 12, 40)) return null;
+  if (!int(e.W, 16, SH.MAP_MAX.W) || !int(e.D, 16, SH.MAP_MAX.W) || !int(e.H, 12, SH.MAP_MAX.H)) return null;
   if (typeof e.data !== 'string' || !e.data.length || e.data.length > MAX_DATA || !/^[A-Za-z0-9+/=]+$/.test(e.data)) return null;
   return {
     id, name: String(e.name || '내 맵').slice(0, 16), theme: String(e.theme || 'village').slice(0, 16),

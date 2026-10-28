@@ -17,6 +17,8 @@
     // 기믹 블록 (맵 특수 바닥)
     LAVA: 48, JUMPPAD: 49, PORTAL: 50, CONVEYOR: 51, QUICKSAND: 52, ELECTRIC: 53, VOIDB: 54,
     BASALT: 55, NEON_P: 56, NEON_B: 57, OBSIDIAN: 58, TRAMPOLINE: 59, CLOUD: 60, MARBLE: 61,
+    // 건축 블록 (이름·텍스처는 public/js/blocks/buildBlocks.js)
+    GLASS: 62, TILE_W: 63, TILE_CK: 64, MARBLE_BRICK: 65, BIRCH: 66, CHERRY: 67, BAMBOO: 68, CON_W: 69, CON_K: 70, CON_R: 71, CON_O: 72, CON_Y: 73, CON_G: 74, CON_B: 75, CON_P: 76, IRON_DOOR: 77, BOOKSHELF: 78, KIWA: 79, DARK_BRICK: 80, SAND_BRICK: 81, GRANITE: 82, SMOOTH: 83, COPPER: 84, STEEL: 85, PARQUET: 86, CARPET: 87, WALLPAPER: 88, VENT: 89, SHUTTER: 90, PILLAR: 91,
   };
   // 밟으면 위험한 바닥 (봇 길찾기·스폰에서 제외)
   const HAZARD_FLOOR = new Set([B.LAVA, B.VOIDB, B.ELECTRIC]);
@@ -713,9 +715,11 @@
   }
   // 저장 데이터에 있는 블록 번호 중 이보다 큰 건 공기로 읽음 (기믹 블록이 추가될 때마다 자동으로 늘어남)
   const MAXB = Math.max(...Object.values(B));
+  const MAP_MAX = { W: 160, H: 64, DATA: 2000000 };
   function mapFromData(o) {
     const W = o.W | 0, H = o.H | 0, D = o.D | 0;
-    if (W < 16 || D < 16 || W > 96 || D > 96 || H < 12 || H > 40 || typeof o.data !== 'string' || o.data.length > 400000) return null;
+    // 크기 한도: 가로·세로 160, 높이 64 (예전 맵은 이 안에 다 들어가서 그대로 읽힘)
+    if (W < 16 || D < 16 || W > MAP_MAX.W || D > MAP_MAX.W || H < 12 || H > MAP_MAX.H || typeof o.data !== 'string' || o.data.length > MAP_MAX.DATA) return null;
     const m = new VMap(W, H, D), raw = fromB64(o.data);
     let p = 0;
     for (let i = 0; i + 2 < raw.length && p < m.d.length; i += 3) { const v = raw[i] <= MAXB ? raw[i] : 0, n = raw[i + 1] | (raw[i + 2] << 8); m.d.fill(v, p, Math.min(m.d.length, p + n)); p += n; }
@@ -728,8 +732,8 @@
     m.shops = []; m.pickups = computePickups(m, 'custom');
     return m;
   }
-  function blankMap(W, D, theme) {
-    const m = new VMap(W || 64, 26, D || 64);
+  function blankMap(W, D, theme, H) {
+    const m = new VMap(W || 64, H || 26, D || 64);
     if (theme === 'desert') { ground(m, B.SAND, B.SAND); border(m, B.SANDSTONE, 3, B.CHISEL, 8); }
     else if (theme === 'snow') { ground(m, B.SNOW, B.DIRT); border(m, B.STONEBRICK, 3, B.DARKWOOD, 8); }
     else if (theme === 'moon') { ground(m, B.REGOLITH, B.MOONROCK); border(m, B.MOONROCK, 3); }
@@ -1094,5 +1098,5 @@
     return null;
   }
 
-  return { HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { MAP_MAX, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });

@@ -19,6 +19,7 @@ import { sfxSkinShot, sfxSkinKill, sfxFinisher, sfxEquip, sfxSkinStep } from './
 import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
 import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
 import { showIncome } from './hud/income.js';
+import { BUILD_BLOCKS } from './blocks/buildBlocks.js';
 import { initCoop, openOnline, leaveOnline, reset as coopReset, coopSet, coopMeta, coopTest, coopTick, coopMsg, isOnline, isGuest } from './editor/coop.js';
 import { initMapStore, mapsLogin, onServerMaps, onMapSaved, onMapSaveErr, savedMaps, saveMap, deleteMap, mapSyncState, MAX_MAPS } from './editor/mapStore.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
@@ -2550,7 +2551,8 @@ function updateSelfEmoteCam(dt) {
 }
 
 /* ================= 맵 에디터 ================= */
-const BLOCK_NAMES = { 1: '잔디', 2: '흙', 3: '돌', 4: '조약돌', 5: '나무판자', 6: '통나무', 7: '나뭇잎', 8: '모래', 9: '사암', 10: '벽돌', 11: '콘크리트', 12: '철판', 13: '상자', 14: '지붕', 15: '기반암', 16: '아스팔트', 17: '자갈길', 18: '건초', 19: '선인장', 20: '빨간 컨테이너', 21: '파란 컨테이너', 22: '초록 컨테이너', 23: '무늬 사암', 24: '조명', 25: '회벽', 26: '철망', 27: '경고 줄무늬', 28: '짙은 나무', 29: '노란 컨테이너', 30: '눈', 31: '얼음', 32: '전나무 잎', 33: '이끼 돌', 34: '석재 벽돌', 35: '석탄 광석', 36: '금 광석', 37: '다이아 광석', 38: '월면토', 39: '달 바위', 40: '패널', 41: '유리창', 42: '빨간 양털', 43: '파란 양털', 44: '흰 양털', 45: '노란 양털', 46: '금 블록', 47: '네온' };
+const BLOCK_NAMES = { 1: '잔디', 2: '흙', 3: '돌', 4: '조약돌', 5: '나무판자', 6: '통나무', 7: '나뭇잎', 8: '모래', 9: '사암', 10: '벽돌', 11: '콘크리트', 12: '철판', 13: '상자', 14: '지붕', 15: '기반암', 16: '아스팔트', 17: '자갈길', 18: '건초', 19: '선인장', 20: '빨간 컨테이너', 21: '파란 컨테이너', 22: '초록 컨테이너', 23: '무늬 사암', 24: '조명', 25: '회벽', 26: '철망', 27: '경고 줄무늬', 28: '짙은 나무', 29: '노란 컨테이너', 30: '눈', 31: '얼음', 32: '전나무 잎', 33: '이끼 돌', 34: '석재 벽돌', 35: '석탄 광석', 36: '금 광석', 37: '다이아 광석', 38: '월면토', 39: '달 바위', 40: '패널', 41: '유리창', 42: '빨간 양털', 43: '파란 양털', 44: '흰 양털', 45: '노란 양털', 46: '금 블록', 47: '네온', 48: '용암', 49: '점프대', 50: '포털', 51: '컨베이어', 52: '모래늪', 53: '전기 바닥', 54: '공허', 55: '현무암', 56: '분홍 네온', 57: '파란 네온', 58: '흑요석', 59: '트램펄린', 60: '구름', 61: '대리석' };
+for (const bb of BUILD_BLOCKS) BLOCK_NAMES[SH.B[bb.key]] = bb.name; // 건축 블록 이름
 const THEMES = ['village', 'desert', 'snow', 'factory', 'moon', 'jungle', 'city', 'arena'];
 const ED = { on: false, map: null, world: null, sky: null, name: '내 맵', theme: 'village', id: null, x: 32, y: 12, z: 60, yaw: 0, pitch: -0.3, slot: 0, pal: [1, 2, 3, 4, 5, 10, 6, 7, 47], undo: [], hit: null, hl: null, picker: false };
 const blockIconCache = {};
@@ -2582,7 +2584,8 @@ function openEditorStart() {
   A.initAudio();
   $('edStartBody').innerHTML = `
     <div class="ptitle small">새로 만들기</div>
-    <div class="row">크기 <select id="edNewSize"><option value="48">48×48 (작게)</option><option value="64" selected>64×64 (보통)</option><option value="80">80×80 (크게)</option></select>
+    <div class="row">크기 <select id="edNewSize"><option value="48">48×48 (작게)</option><option value="64" selected>64×64 (보통)</option><option value="80">80×80 (크게)</option><option value="96">96×96</option><option value="128">128×128 (아주 크게)</option><option value="160">160×160 (최대)</option></select>
+      높이 <select id="edNewH"><option value="26" selected>26 (보통)</option><option value="40">40 (높게)</option><option value="64">64 (최대)</option></select>
       바닥 <select id="edNewTheme">${['village', 'desert', 'snow', 'factory', 'moon'].map(t => `<option value="${t}">${SH.MAPS[t].name} 스타일</option>`).join('')}</select>
       <button class="btn green" id="edNew">빈 맵 만들기</button></div>
     <div class="row">기존 맵 복사 <select id="edCopy">${Object.keys(SH.MAPS).filter(k => (SH.MAPS[k].kind || 'normal') === 'normal').map(k => `<option value="${k}">${SH.MAPS[k].name}</option>`).join('')}</select><button class="btn blue" id="edCopyBtn">복사해서 시작</button></div>
@@ -2591,7 +2594,7 @@ function openEditorStart() {
     <textarea id="edImport" placeholder="친구에게 받은 맵 코드를 붙여넣으세요"></textarea>
     <button class="btn" id="edImportBtn">불러오기</button>`;
   $('editorStart').classList.remove('hidden');
-  $('edNew').onclick = () => { const sz = +$('edNewSize').value, th = $('edNewTheme').value; startEditor(SH.blankMap(sz, sz, th), { name: '내 맵', theme: th }); };
+  $('edNew').onclick = () => { const sz = +$('edNewSize').value, th = $('edNewTheme').value; startEditor(SH.blankMap(sz, sz, th, +$('edNewH').value), { name: '내 맵', theme: th }); };
   $('edCopyBtn').onclick = () => { const k = $('edCopy').value; startEditor(SH.getMap(k).clone(), { name: SH.MAPS[k].name + ' 수정본', theme: k }); };
   renderEdList();
   $('edImportBtn').onclick = () => {
@@ -2691,8 +2694,19 @@ function edPlace() {
 function edPick() { const h = ED.hit; if (h) { const b = ED.map.get(h.x, h.y, h.z); if (b && b !== SH.B.BEDROCK) { ED.pal[ED.slot] = b; renderPalette(); } } }
 function edUndo() { const u = ED.undo.pop(); if (u) edSet(u[0], u[1], u[2], u[3], true); }
 // 플레이할 수 없는 맵이면 이유, 괜찮으면 null
+// 큰 맵은 읽는 데 시간이 걸려서 (160×160×64 ≈ 0.3초) 같은 맵·같은 수정본이면 결과를 기억해 둠
+const myMapCache = new Map();
+function myMapInfo(ent) {
+  const k = (ent.id || '') + ':' + (ent.updated || 0) + ':' + ent.data.length;
+  if (ent.id && myMapCache.has(k)) return myMapCache.get(k);
+  let m = null; try { m = SH.mapFromData(ent); } catch (e) { /* */ }
+  const info = { ok: !!m, spawns: m ? m.spawns.length : 0, thumb: m ? mapThumbOf(m) : null };
+  if (ent.id) { if (myMapCache.size > 40) myMapCache.clear(); myMapCache.set(k, info); }
+  return info;
+}
+const myMapThumb = (ent) => myMapInfo(ent).thumb;
 function mapProblem(ent) {
-  const m = SH.mapFromData(ent);
+  const i = myMapInfo(ent), m = i.ok ? { spawns: { length: i.spawns } } : null;
   if (!m) return '맵이 너무 크거나 복잡해서 불러올 수 없어요';
   if (m.spawns.length < 2) return '스폰할 곳이 부족해요. 위가 뚫린 3×3 이상 평평한 땅이 2곳 이상 필요해요 (용암·점프대 위 제외)';
   return null;
@@ -2792,7 +2806,7 @@ function refreshCustomCards(m) {
   const add = (ent, sel) => {
     const d = document.createElement('div'); d.className = 'mapcard custom' + (sel ? ' on' : ''); d.dataset.map = 'custom';
     const c = document.createElement('canvas'); c.width = 64; c.height = 64;
-    try { const mm = SH.mapFromData(ent); if (mm) { const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(mapThumbOf(mm), 0, 0, 64, 64); } } catch (e) { /* */ }
+    const th = myMapThumb(ent); if (th) { const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(th, 0, 0, 64, 64); }
     d.appendChild(c); d.appendChild(document.createTextNode(ent.name));
     const sm = document.createElement('div'); sm.className = 'mdesc'; sm.textContent = '내 맵'; d.appendChild(sm);
     // 랜덤 맵/모드가 켜져 있으면 시작할 때 다른 맵으로 바뀌므로 끔 (랜덤 모드였으면 개인전으로)
