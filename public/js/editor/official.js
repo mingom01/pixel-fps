@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const day = (t) => t ? new Date(t).toLocaleDateString() : '';
 
-// deps = { send, SH, toast, myName(), rebuildCards(), playEnt(ent), thumb(ent) → canvas, onSubs() }
+// deps = { send, SH, toast, myName(), rebuildCards(바뀐 맵 id 목록), playEnt(ent), thumb(ent) → canvas, onSubs() }
 let D = null, admin = false, mySubs = [];
 export function initOfficial(deps) {
   D = deps;
@@ -29,11 +29,12 @@ export function submitMap(ent) {
 export function officialMsg(m) {
   switch (m.t) {
     case 'official':
-      for (const o of m.list || []) D.SH.registerOfficial(o);
+      // 새 공식 맵, 또는 만든 사람이 고친 새 버전 (upd) → 다시 등록하면 다음 판부터 새 버전
+      const ids = (m.list || []).map(o => D.SH.registerOfficial(o));
       if (m.admin !== undefined) { admin = !!m.admin; $('adminBtn').classList.toggle('hidden', !admin); }
-      if ((m.list || []).length) D.rebuildCards();
+      if (ids.length) D.rebuildCards(ids);
       return true;
-    case 'offdel': D.SH.unregisterOfficial(m.id); D.rebuildCards(); return true;
+    case 'offdel': D.SH.unregisterOfficial(m.id); D.rebuildCards(['off_' + m.id]); return true;
     case 'mysubs': mySubs = m.list || []; D.onSubs(); return true;
     case 'submitted': D.toast(m.text); return true;
     case 'admsubs': renderAdmin(m); return true;

@@ -46,7 +46,9 @@ function handle(c, m) {
   const di = del.indexOf(e.id); if (di >= 0) del.splice(di, 1);
   STORE.save();
   c.send({ t: 'mapsaved', id: e.id });
+  if (onSaved) onSaved(c, e); // 공식 맵이 된 맵이면 공식 맵도 바꿈 (server/official.js)
   return true;
 }
 
-module.exports = { handle, MAX_MAPS };
+let onSaved = null;
+module.exports = { handle, MAX_MAPS, setOnSaved: (fn) => { onSaved = fn; } };

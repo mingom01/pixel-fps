@@ -787,6 +787,16 @@
     m.crateSpots = mk.c.map(cell); // 보급 상자가 떨어질 자리 (없으면 서버가 스폰 근처에서 고름)
     return m;
   }
+  // 이미 만든 맵의 높이 바꾸기 (에디터). 낮추면 위쪽 블록·표시는 잘림. 내가 만든 블록·테마는 그대로
+  function resizeMapH(m, H) {
+    H = Math.max(12, Math.min(MAP_MAX.H, H | 0));
+    const n = new VMap(m.W, H, m.D), h = Math.min(H, m.H);
+    for (let y = 0; y < h; y++) for (let z = 0; z < m.D; z++) for (let x = 0; x < m.W; x++) n.d[(y * m.D + z) * m.W + x] = m.get(x, y, z);
+    n.cb = m.cb; n.theme = m.theme; n.mk = m.mk ? cleanMk(m.mk, n) : m.mk;
+    return n;
+  }
+  // 높이를 h 로 낮추면 사라지는 블록 수
+  function blocksAbove(m, h) { let c = 0; for (let y = h; y < m.H; y++) for (let z = 0; z < m.D; z++) for (let x = 0; x < m.W; x++) if (m.get(x, y, z)) c++; return c; }
   function blankMap(W, D, theme, H) {
     const m = new VMap(W || 64, H || 26, D || 64);
     if (theme === 'desert') { ground(m, B.SAND, B.SAND); border(m, B.SANDSTONE, 3, B.CHISEL, 8); }
@@ -1153,5 +1163,5 @@
     return null;
   }
 
-  return { MK_MAX, cleanMk, registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { resizeMapH, blocksAbove, MK_MAX, cleanMk, registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });

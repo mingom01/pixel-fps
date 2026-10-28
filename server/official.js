@@ -14,7 +14,10 @@ let off = { list: [] }, subs = { list: [] };
 const ready = Promise.all([
   STORE.get(OFF_ID).then(d => { if (d && Array.isArray(d.list)) off = d; }),
   STORE.get(SUB_ID).then(d => { if (d && Array.isArray(d.list)) subs = d; }),
-]).then(() => { for (const o of off.list) SH.registerOfficial(o); STORE.set(OFF_ID, off); STORE.set(SUB_ID, subs); })
+]).then(() => {
+  for (const o of off.list) { if (!o.mid) { const s = subs.list.find(x => x.offId === o.id); if (s) o.mid = s.mid; } SH.registerOfficial(o); }
+  STORE.set(OFF_ID, off); STORE.set(SUB_ID, subs);
+})
   .catch(e => console.log('공식 맵 불러오기 실패: ' + e.message));
 const saveOff = () => STORE.set(OFF_ID, off);
 const saveSubs = () => STORE.set(SUB_ID, subs);
@@ -74,7 +77,7 @@ module.exports = function makeOfficial(deps) {
       if (!s) { c.send({ t: 'err', text: '이미 처리된 출품작이에요' }); return true; }
       if (m.t === 'admno') { s.status = 'rejected'; s.why = cleanName(m.why, 60); }
       else {
-        const o = Object.assign({ id: Date.now().toString(36), by: s.by, bySub: s.bySub, at: Date.now() }, s.ent);
+        const o = Object.assign({ id: Date.now().toString(36), by: s.by, bySub: s.bySub, mid: s.mid, at: Date.now() }, s.ent);
         o.name = cleanName(m.name, 16) || o.name;
         off.list.push(o); SH.registerOfficial(o); saveOff();
         s.status = 'approved'; s.offId = o.id;
@@ -94,5 +97,19 @@ module.exports = function makeOfficial(deps) {
     return true;
   }
 
-  return { handle, onLogin, isAdmin };
+  // 만든 사람이 원본 맵을 저장하면 → 공식 맵도 그 버전으로 바꾸고 모든 접속자에게 보냄
+  // (공식 맵 이름은 관리자가 정한 그대로, 진행 중인 판은 다음 판부터 새 버전)
+  function onMapSaved(c, e) {
+    const o = off.list.find(x => x.bySub === c.user.sub && x.mid === e.id);
+    if (!o) return;
+    const ent = checkEnt(e);
+    if (!ent) { c.send({ t: 'err', text: '공식 맵에는 반영 못 했어요 (스폰할 곳이 2곳 이상 필요해요)' }); return; }
+    Object.assign(o, { theme: ent.theme, W: ent.W, H: ent.H, D: ent.D, data: ent.data, cb: ent.cb, mk: ent.mk, upd: Date.now() });
+    SH.registerOfficial(o); saveOff();
+    deps.broadcastAll({ t: 'official', list: [pub(o)], upd: true });
+    deps.log(`공식 맵 수정 반영: ${o.name} (${o.by})`);
+    c.send({ t: 'submitted', mid: e.id, text: `공식 맵 '${o.name}'에도 바로 반영했어요` });
+  }
+
+  return { handle, onLogin, isAdmin, onMapSaved };
 };

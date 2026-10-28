@@ -14,6 +14,7 @@ const CLIENTS = new Set(); // 지금 접속한 모든 사람 (공식 맵 추가 
 const OFFICIAL = require('./server/official.js')({
   broadcastAll: (msg) => { const j = JSON.stringify(msg); for (const c of CLIENTS) if (c.user) c.send(j); }, log: (t) => log(t),
 });
+USERMAPS.setOnSaved((c, e) => OFFICIAL.onMapSaved(c, e));
 // 맵 같이 만들기 세션 (함수들은 아래에 선언돼 있어서 화살표로 감싸서 넘김)
 const EDIT = require('./server/editRooms.js')({
   SH, genCode: () => genCode(), log: (t) => log(t), cleanName: (n) => cleanName(n), leaveRoom: (c) => leaveRoom(c),

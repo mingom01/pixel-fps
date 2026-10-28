@@ -25,7 +25,7 @@ import { initBlockEditor, blockEditorOpen } from './blocks/blockEditor.js';
 import { initMyBlocks, installCb, myBlocksHtml, bindMyBlocks, onEdCb, usedCb } from './editor/myBlocks.js';
 import { initMarkers, MARKERS, isMarker, markerIcon, markersHtml, rebuildMarkers, clearMarkers, placeMarker, removeMarkerNear, onEdMk } from './editor/markers.js';
 import { initOfficial, officialMsg, submitMap, subOf, statusText } from './editor/official.js';
-import { initCoop, openOnline, leaveOnline, reset as coopReset, coopSet, coopMeta, coopTest, coopTick, coopMsg, isOnline, isGuest } from './editor/coop.js';
+import { initCoop, coopResize, openOnline, leaveOnline, reset as coopReset, coopSet, coopMeta, coopTest, coopTick, coopMsg, isOnline, isGuest } from './editor/coop.js';
 import { initMapStore, mapsLogin, onServerMaps, onMapSaved, onMapSaveErr, savedMaps, saveMap, deleteMap, mapSyncState, MAX_MAPS } from './editor/mapStore.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
 import { SPRAY_BY, sprayCanvas } from './skins/sprays.js';
@@ -2643,6 +2643,7 @@ function startEditor(map, meta) {
   edBuildScene(); rebuildMarkers();
   $('editorHud').classList.remove('hidden');
   $('edName').value = ED.name;
+  renderHeightSel();
   $('edTheme').innerHTML = THEMES.map(t => `<option value="${t}" ${t === ED.theme ? 'selected' : ''}>${themeName(t)}</option>`).join('');
   renderPalette();
   $('clickToPlay').classList.remove('hidden');
@@ -2773,6 +2774,25 @@ $('edShareClose').onclick = () => $('edShare').classList.add('hidden');
 $('edShareCopy').onclick = () => { $('edShareText').select(); (navigator.clipboard ? navigator.clipboard.writeText($('edShareText').value) : Promise.reject()).then(() => toast('코드를 복사했어요'), () => { document.execCommand('copy'); toast('코드를 복사했어요'); }); };
 $('edExit').onclick = () => { if (confirm('저장하고 나갈까요? (취소 = 저장 안 하고 나가기)')) edSave(true); exitEditor(); };
 $('edTheme').onchange = (e) => { ED.theme = e.target.value; edBuildScene(); coopMeta(); };
+// 맵 높이 바꾸기 (이미 만든 맵도). 낮추면 위쪽 블록이 잘려서 먼저 물어봄
+const ED_HEIGHTS = [16, 20, 26, 32, 40, 48, 56, 64];
+function renderHeightSel() {
+  const hs = ED_HEIGHTS.includes(ED.map.H) ? ED_HEIGHTS : ED_HEIGHTS.concat(ED.map.H).sort((a, b) => a - b);
+  $('edH').innerHTML = hs.map(h => `<option value="${h}" ${h === ED.map.H ? 'selected' : ''}>높이 ${h}</option>`).join('');
+}
+// remote: 같이 만들기에서 방장이 바꾼 걸 받음
+function edResize(H, remote) {
+  if (H === ED.map.H) return;
+  ED.map = SH.resizeMapH(ED.map, H); ED.mk = ED.map.mk || ED.mk; ED.undo = [];
+  ED.y = Math.min(ED.y, ED.map.H + 14);
+  edBuildScene(); rebuildMarkers(); renderHeightSel();
+  if (!remote) { coopResize(H); toast(`맵 높이를 ${H}(으)로 바꿨어요. 저장(M)하면 적용돼요`); }
+}
+$('edH').onchange = (e) => {
+  const H = +e.target.value, cut = H < ED.map.H ? SH.blocksAbove(ED.map, H) : 0;
+  if (cut && !confirm(`높이를 ${H}(으)로 낮추면 그 위에 있는 블록 ${cut}개가 사라져요. 바꿀까요?`)) { renderHeightSel(); return; }
+  edResize(H);
+};
 $('edName').onchange = () => { ED.name = ($('edName').value.trim() || '내 맵').slice(0, 16); coopMeta(); };
 initMyBlocks({ SH, ED, atlas, send: (m) => send(m), isOnline, myId: () => S.myId, names: BLOCK_NAMES, forgetIcon: (id) => { delete blockIconCache[id]; }, renderPalette: () => renderPalette(), closePicker: (noLock) => closeBlockPicker(noLock), toast });
 initBlockStore({ send: (m) => send(m), onChange: () => { if (ED.on && ED.picker) openBlockPicker(); } });
@@ -2791,12 +2811,12 @@ initOfficial({
   send: (m) => send(m), SH, toast, myName: () => myName(), playEnt: (ent) => playMyMap(ent), thumb: (ent) => myMapThumb(ent),
   onSubs: () => { if (!$('editorStart').classList.contains('hidden')) renderEdList(); },
   // 공식 맵이 추가/삭제되면 대기실 맵 카드 다시 만들기
-  rebuildCards: () => { buildMapCards(); if (S.room && !S.inGame && S.room.state === 'wait') onRoom(S.room); },
+  rebuildCards: (ids) => { for (const id of ids || []) delete thumbCache[id]; buildMapCards(); if (S.room && !S.inGame && S.room.state === 'wait') onRoom(S.room); },
 });
 initMarkers({ ED, scene, SH, send: (m) => send(m), isOnline, toast });
 for (const m of MARKERS) BLOCK_NAMES[m.id] = m.name;
 $('edOnline').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); openOnline(); };
-initCoop({ onMk: (m) => onEdMk(m), onCb: (m) => onEdCb(m), send: (m) => send(m), scene, SH, ED, myId: () => S.myId, joinInfo, edSet: (...a) => edSet(...a), startEditor: (map, meta) => startEditor(map, meta), exitEditor: (t) => exitEditor(t), rebuildTheme: () => edBuildScene(), toast });
+initCoop({ onResize: (H) => edResize(H, true), onMk: (m) => onEdMk(m), onCb: (m) => onEdCb(m), send: (m) => send(m), scene, SH, ED, myId: () => S.myId, joinInfo, edSet: (...a) => edSet(...a), startEditor: (map, meta) => startEditor(map, meta), exitEditor: (t) => exitEditor(t), rebuildTheme: () => edBuildScene(), toast });
 function editorKey(e) {
   keys[e.code] = true;
   if (['Space', 'KeyC', 'Tab'].includes(e.code)) e.preventDefault();

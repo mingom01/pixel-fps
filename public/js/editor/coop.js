@@ -10,7 +10,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
-// deps = { onMk(msg), onCb(msg), send, scene, SH, ED, myId(), joinInfo(), edSet(x,y,z,b,noUndo,remote), startEditor(map, meta), exitEditor(toMenu), rebuildTheme(), toast }
+// deps = { onResize(H), onMk(msg), onCb(msg), send, scene, SH, ED, myId(), joinInfo(), edSet(x,y,z,b,noUndo,remote), startEditor(map, meta), exitEditor(toMenu), rebuildTheme(), toast }
 let D = null;
 const st = { on: false, code: null, host: null, members: [], avatars: new Map(), sentAt: 0, sent: '' };
 
@@ -36,6 +36,7 @@ export function reset() {
 // 내가 블록을 바꾸면 서버로
 export function coopSet(x, y, z, b) { if (st.on) D.send({ t: 'edset', x, y, z, b }); }
 export function coopMeta() { if (st.on && !isGuest()) D.send({ t: 'edmeta', name: D.ED.name, theme: D.ED.theme }); }
+export function coopResize(H) { if (st.on && !isGuest()) D.send({ t: 'edresize', H }); }
 export function coopTest(id) { D.send({ t: 'edtest', id }); }
 
 // 매 프레임: 내 위치 보내기 (0.1초마다, 움직였을 때만) + 다른 사람 캐릭터 부드럽게 움직이기
@@ -75,7 +76,7 @@ function renderBar() {
   $('edTest').textContent = st.on ? '다 같이 테스트' : '테스트 플레이';
   $('edTest').classList.toggle('hidden', guest);
   $('edSave').textContent = guest ? '내 맵에 복사 저장 (M)' : '저장 (M)';
-  $('edName').disabled = guest; $('edTheme').disabled = guest;
+  $('edName').disabled = guest; $('edTheme').disabled = guest; $('edH').disabled = guest;
   bar.classList.toggle('hidden', !st.on);
   if (!st.on) { bar.innerHTML = ''; return; }
   bar.innerHTML = `<b class="ec-code">온라인 코드 ${esc(st.code)}</b> <span class="dim">${guest ? '같이 만드는 중' : '친구는 메인 화면 \'방 코드\'에 이 코드를 넣고 참가'}</span> · ${st.members.length}/8명: `
@@ -103,6 +104,9 @@ export function coopMsg(m) {
       st.host = m.host; st.members = m.members;
       for (const [id, a] of st.avatars) if (!m.members.some(x => x.id === id)) { D.scene.remove(a.model); st.avatars.delete(id); }
       renderBar();
+      return true;
+    case 'edresize': // 방장이 맵 높이를 바꿈
+      if (st.on && D.ED.on) D.onResize(m.H);
       return true;
     case 'edmk': // 스폰·힐팩·보급 표시가 바뀜
       if (st.on && D.ED.on) D.onMk(m);
