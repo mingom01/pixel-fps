@@ -28,7 +28,7 @@ const subMeta = (s) => ({ sid: s.sid, mid: s.mid, name: s.ent.name, by: s.by, at
 // 맵 확인: 형식 + 실제로 읽히고 스폰이 2곳 이상
 function checkEnt(e) {
   if (!e || typeof e !== 'object' || typeof e.data !== 'string') return null;
-  const ent = { name: cleanName(e.name, 16) || '내 맵', theme: String(e.theme || 'village').slice(0, 16), W: e.W | 0, H: e.H | 0, D: e.D | 0, data: e.data, cb: SH.cleanCb(e.cb) };
+  const ent = { name: cleanName(e.name, 16) || '내 맵', theme: String(e.theme || 'village').slice(0, 16), W: e.W | 0, H: e.H | 0, D: e.D | 0, data: e.data, cb: SH.cleanCb(e.cb), mk: SH.cleanMk(e.mk, { W: e.W | 0, H: e.H | 0, D: e.D | 0 }) };
   const m = SH.mapFromData(ent);
   if (!m || m.spawns.length < 2) return null;
   return ent;

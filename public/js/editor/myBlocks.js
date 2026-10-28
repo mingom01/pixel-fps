@@ -27,8 +27,7 @@ export function myBlocksHtml() {
       <div class="bpi bp-new" id="bpNewBlock"><b>+</b><span>새 블록 만들기</span></div>
       ${lib.map(b => `<div class="bpi" data-lib="${esc(b.id)}" title="${esc(b.name)}"><img src="${frontIcon(b.f)}"><span>${esc(b.name)}</span><i class="bp-edit" data-edit="${esc(b.id)}">✎</i></div>`).join('')}
       ${inMap.map(([id, d]) => `<div class="bpi" data-b="${id}" title="${esc(d.n)}"><img src="${frontIcon(d.f)}"><span>${esc(d.n)}</span><em class="dim">이 맵</em></div>`).join('')}
-    </div>
-    <div class="bp-sec">기본 블록</div>`;
+    </div>`;
 }
 export function bindMyBlocks(box) {
   const nb = box.querySelector('#bpNewBlock'); if (nb) nb.onclick = () => editBlock(null);
