@@ -17,6 +17,8 @@
     // 기믹 블록 (맵 특수 바닥)
     LAVA: 48, JUMPPAD: 49, PORTAL: 50, CONVEYOR: 51, QUICKSAND: 52, ELECTRIC: 53, VOIDB: 54,
     BASALT: 55, NEON_P: 56, NEON_B: 57, OBSIDIAN: 58, TRAMPOLINE: 59, CLOUD: 60, MARBLE: 61,
+    // 건축 블록 (이름·텍스처는 public/js/blocks/buildBlocks.js)
+    GLASS: 62, TILE_W: 63, TILE_CK: 64, MARBLE_BRICK: 65, BIRCH: 66, CHERRY: 67, BAMBOO: 68, CON_W: 69, CON_K: 70, CON_R: 71, CON_O: 72, CON_Y: 73, CON_G: 74, CON_B: 75, CON_P: 76, IRON_DOOR: 77, BOOKSHELF: 78, KIWA: 79, DARK_BRICK: 80, SAND_BRICK: 81, GRANITE: 82, SMOOTH: 83, COPPER: 84, STEEL: 85, PARQUET: 86, CARPET: 87, WALLPAPER: 88, VENT: 89, SHUTTER: 90, PILLAR: 91,
   };
   // 밟으면 위험한 바닥 (봇 길찾기·스폰에서 제외)
   const HAZARD_FLOOR = new Set([B.LAVA, B.VOIDB, B.ELECTRIC]);
@@ -48,7 +50,7 @@
     }
     clone() {
       const m = new VMap(this.W, this.H, this.D); m.d.set(this.d);
-      m.id = this.id; m.spawns = this.spawns; m.bases = this.bases; m.teamSpawns = this.teamSpawns; m.shops = this.shops; m.pickups = this.pickups; m.grav = this.grav; m.spike = this.spike; m.range = this.range; m.gim = this.gim;
+      m.id = this.id; m.spawns = this.spawns; m.bases = this.bases; m.teamSpawns = this.teamSpawns; m.shops = this.shops; m.pickups = this.pickups; m.grav = this.grav; m.spike = this.spike; m.range = this.range; m.gim = this.gim; m.cb = this.cb;
       return m;
     }
     free(x0, y0, z0, x1, y1, z1) {
@@ -656,11 +658,23 @@
   // maps/*.js 에서 새 맵을 등록 (빌더 도구 공유)
   const MAPKIT = { VMap, B, G, rng, ground, border, house, roofStairs, stairs, tree, scatter, crateStack, pineTree, bigTree, mound };
   function registerMap(id, def) { MAPS[id] = def; }
+  // 공식 맵 (플레이어가 만들어 출품 → 관리자 승인): 'off_<id>' 로 등록돼서 기본 맵처럼 맵 목록·랜덤 맵에 나옴
+  // o = { id, name, theme, by, at, W, H, D, data, cb }. 하늘·안개 같은 겉모습만 테마 맵에서 빌려 옴 (기믹·중력은 X)
+  const OFF_VIS = ['sky', 'fog', 'sun', 'stars', 'noClouds', 'fogNear', 'fogFar', 'snow'];
+  function registerOfficial(o) {
+    const th = MAPS[o.theme] && (MAPS[o.theme].kind || 'normal') === 'normal' && !MAPS[o.theme].official ? MAPS[o.theme] : MAPS.village;
+    const def = { name: String(o.name || '공식 맵').slice(0, 16), official: { by: o.by || '', at: o.at || 0 }, custom: true, desc: `공식 · ${String(o.by || '').slice(0, 10)} 제작`, build: () => mapFromData(o) };
+    for (const k of OFF_VIS) if (th[k] !== undefined) def[k] = th[k];
+    const id = 'off_' + o.id;
+    MAPS[id] = def; delete mapCache[id];
+    return id;
+  }
+  function unregisterOfficial(id) { delete MAPS['off_' + id]; delete mapCache['off_' + id]; }
   const mapCache = {};
   function getMap(id) {
     if (!MAPS[id]) id = 'village';
     if (!mapCache[id]) {
-      const m = MAPS[id].build(); m.id = id; m.grav = MAPS[id].grav || 1; m.spawns = computeSpawns(m, id);
+      const m = MAPS[id].build(); m.id = id; m.grav = MAPS[id].grav || 1; m.spawns = computeSpawns(m, id, !!MAPS[id].custom); // 공식(플레이어 제작) 맵은 높은 바닥도 스폰
       // 팀 기지 (깃발 위치): 서쪽 = 레드, 동쪽 = 블루, 가운데 줄에 가까운 열린 자리
       const cz = m.D / 2, sc = (s, t) => (t ? m.W - s[0] : s[0]) + Math.abs(s[2] - cz) * 0.6;
       m.bases = [0, 1].map(t => m.spawns.slice().sort((a, b) => sc(a, t) - sc(b, t))[0]);
@@ -713,12 +727,30 @@
   }
   // 저장 데이터에 있는 블록 번호 중 이보다 큰 건 공기로 읽음 (기믹 블록이 추가될 때마다 자동으로 늘어남)
   const MAXB = Math.max(...Object.values(B));
+  const MAP_MAX = { W: 160, H: 64, DATA: 2000000 };
+  // 내가 만든 블록: 맵마다 200~255번을 씀. 맵 데이터의 cb = { 번호: { n: 이름, f: [6면 16×16 RGB base64], lib: 내 블록 id } }
+  // 면 순서: 위, 아래, 앞(+z), 뒤(-z), 왼쪽(-x), 오른쪽(+x)
+  const CB_MIN = 200, CB_MAX = 255, CB_FACE_LEN = 1024;
+  function cleanCb(cb) {
+    const out = {};
+    if (!cb || typeof cb !== 'object') return out;
+    for (const k of Object.keys(cb)) {
+      const id = Number(k), e = cb[k];
+      if (!Number.isInteger(id) || id < CB_MIN || id > CB_MAX || !e || !Array.isArray(e.f) || e.f.length !== 6) continue;
+      if (!e.f.every(f => typeof f === 'string' && f.length === CB_FACE_LEN && /^[A-Za-z0-9+/]+={0,2}$/.test(f))) continue;
+      out[id] = { n: String(e.n || '내 블록').slice(0, 16), f: e.f.slice(), lib: String(e.lib || '').slice(0, 32) };
+    }
+    return out;
+  }
   function mapFromData(o) {
     const W = o.W | 0, H = o.H | 0, D = o.D | 0;
-    if (W < 16 || D < 16 || W > 96 || D > 96 || H < 12 || H > 40 || typeof o.data !== 'string' || o.data.length > 400000) return null;
+    // 크기 한도: 가로·세로 160, 높이 64 (예전 맵은 이 안에 다 들어가서 그대로 읽힘)
+    if (W < 16 || D < 16 || W > MAP_MAX.W || D > MAP_MAX.W || H < 12 || H > MAP_MAX.H || typeof o.data !== 'string' || o.data.length > MAP_MAX.DATA) return null;
     const m = new VMap(W, H, D), raw = fromB64(o.data);
     let p = 0;
-    for (let i = 0; i + 2 < raw.length && p < m.d.length; i += 3) { const v = raw[i] <= MAXB ? raw[i] : 0, n = raw[i + 1] | (raw[i + 2] << 8); m.d.fill(v, p, Math.min(m.d.length, p + n)); p += n; }
+    const cb = cleanCb(o.cb);
+    for (let i = 0; i + 2 < raw.length && p < m.d.length; i += 3) { const v = raw[i] <= MAXB || cb[raw[i]] ? raw[i] : 0, n = raw[i + 1] | (raw[i + 2] << 8); m.d.fill(v, p, Math.min(m.d.length, p + n)); p += n; }
+    m.cb = cb;
     m.id = 'custom'; m.grav = 1; m.theme = MAPS[o.theme] && (MAPS[o.theme].kind || 'normal') === 'normal' ? o.theme : 'village';
     m.spawns = computeSpawns(m, 'custom' + W + D, true);
     if (m.spawns.length < 2) return m; // 호출한 쪽에서 스폰 부족 처리
@@ -728,8 +760,8 @@
     m.shops = []; m.pickups = computePickups(m, 'custom');
     return m;
   }
-  function blankMap(W, D, theme) {
-    const m = new VMap(W || 64, 26, D || 64);
+  function blankMap(W, D, theme, H) {
+    const m = new VMap(W || 64, H || 26, D || 64);
     if (theme === 'desert') { ground(m, B.SAND, B.SAND); border(m, B.SANDSTONE, 3, B.CHISEL, 8); }
     else if (theme === 'snow') { ground(m, B.SNOW, B.DIRT); border(m, B.STONEBRICK, 3, B.DARKWOOD, 8); }
     else if (theme === 'moon') { ground(m, B.REGOLITH, B.MOONROCK); border(m, B.MOONROCK, 3); }
@@ -1094,5 +1126,5 @@
     return null;
   }
 
-  return { HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });

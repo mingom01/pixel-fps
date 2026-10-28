@@ -57,5 +57,6 @@ node server.js   →  http://localhost:8230
 | `GOOGLE_CLIENT_ID` | 구글 OAuth 클라이언트 ID |
 | `SUPABASE_URL` | Supabase Project URL (없으면 파일 저장) |
 | `SUPABASE_SECRET_KEY` | Supabase secret 키 |
+| `ADMIN_EMAILS` | 맵 심사 관리자 구글 이메일 (여러 명이면 쉼표로). 이 계정으로 로그인하면 메인 메뉴에 **맵 심사** 버튼이 생겨서 출품된 맵을 승인/거절해요 |
 | `SESSION_SECRET` | 로그인 토큰 서명용 (없으면 자동으로 만들어요) |
 | `PORT` | 포트 (기본 8230, Render 는 자동) |

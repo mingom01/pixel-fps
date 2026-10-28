@@ -23,13 +23,14 @@ function buildChunkGeom(map, X0, Z0) {
     if (!b) continue;
     const fc = FACES[b] || FACES[3];
     const glow = GLOW.has(b);
-    for (const d of DIRS) {
+    for (let di = 0; di < 6; di++) {
+      const d = DIRS[di];
       const nx = x + d.n[0], ny = y + d.n[1], nz = z + d.n[2];
       if (map.get(nx, ny, nz) !== 0) continue;
       if (ny < 0) continue;
       // 바깥 경계(맵 밖)를 향한 면은 생략
       if (nx < 0 || nz < 0 || nx >= map.W || nz >= map.D) continue;
-      const ti = fc[d.k], u0 = (ti % ATLAS_COLS) * tw + eps, v1 = 1 - Math.floor(ti / ATLAS_COLS) * th - eps, u1 = u0 + tw - eps * 2, v0 = v1 - th + eps * 2;
+      const ti = fc.length === 6 ? fc[di] : fc[d.k], u0 = (ti % ATLAS_COLS) * tw + eps, v1 = 1 - Math.floor(ti / ATLAS_COLS) * th - eps, u1 = u0 + tw - eps * 2, v0 = v1 - th + eps * 2;
       const ao = [];
       for (const c of d.v) {
         // 면 앞 레이어에서 정점 주변 3칸

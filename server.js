@@ -9,6 +9,11 @@ const STORE = require('./server/store.js');
 const GIM = require('./server/gimmicks.js');
 const INCOME = require('./server/income.js');
 const USERMAPS = require('./server/maps.js');
+const USERBLOCKS = require('./server/blocks.js');
+const CLIENTS = new Set(); // 지금 접속한 모든 사람 (공식 맵 추가 알림 등)
+const OFFICIAL = require('./server/official.js')({
+  broadcastAll: (msg) => { const j = JSON.stringify(msg); for (const c of CLIENTS) if (c.user) c.send(j); }, log: (t) => log(t),
+});
 // 맵 같이 만들기 세션 (함수들은 아래에 선언돼 있어서 화살표로 감싸서 넘김)
 const EDIT = require('./server/editRooms.js')({
   SH, genCode: () => genCode(), log: (t) => log(t), cleanName: (n) => cleanName(n), leaveRoom: (c) => leaveRoom(c),
@@ -55,7 +60,7 @@ let nextId = 1;
 class Client {
   constructor(socket) {
     this.socket = socket; this.buf = Buffer.alloc(0); this.alive = true;
-    this.id = 'p' + (nextId++); this.room = null; this.user = null;
+    this.id = 'p' + (nextId++); this.room = null; this.user = null; CLIENTS.add(this);
     socket.on('data', d => this.onData(d));
     socket.on('close', () => this.onClose());
     socket.on('error', () => this.onClose());
@@ -64,7 +69,7 @@ class Client {
   send(obj) { if (!this.alive) return; try { this.socket.write(encodeFrame(typeof obj === 'string' ? obj : JSON.stringify(obj))); } catch (e) { /* */ } }
   onData(d) {
     this.buf = Buffer.concat([this.buf, d]);
-    if (this.buf.length > 1 << 20) { this.close(); return; }
+    if (this.buf.length > 4 << 20) { this.close(); return; } // 큰 맵(160×160×64)도 한 번에 받을 수 있게 4MB
     for (;;) {
       if (this.buf.length < 2) return;
       const b0 = this.buf[0], b1 = this.buf[1], opcode = b0 & 0x0f, masked = (b1 & 0x80) !== 0;
@@ -86,7 +91,7 @@ class Client {
         if (opcode === 1) this.frag = [];
         else if (!this.frag) continue; // 시작 없이 온 이어지는 조각은 버림
         this.frag.push(payload);
-        if (!fin) { if (this.frag.reduce((n, f) => n + f.length, 0) > 1 << 20) { this.close(); return; } continue; }
+        if (!fin) { if (this.frag.reduce((n, f) => n + f.length, 0) > 4 << 20) { this.close(); return; } continue; }
         const whole = Buffer.concat(this.frag); this.frag = null;
         let msg; try { msg = JSON.parse(whole.toString('utf8')); } catch (e) { continue; }
         try { handle(this, msg); } catch (e) { console.error(e); }
@@ -94,7 +99,7 @@ class Client {
     }
   }
   close() { if (!this.alive) return; try { this.socket.end(Buffer.from([0x88, 0x00])); } catch (e) { /* */ } this.onClose(); }
-  onClose() { if (!this.alive) return; this.alive = false; leaveRoom(this); EDIT.leave(this, false); try { this.socket.destroy(); } catch (e) { /* */ } }
+  onClose() { if (!this.alive) return; this.alive = false; CLIENTS.delete(this); leaveRoom(this); EDIT.leave(this, false); try { this.socket.destroy(); } catch (e) { /* */ } }
 }
 server.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
@@ -229,7 +234,7 @@ function customFrom(o) {
   if (!cm) return { err: '맵 데이터가 이상해요' };
   if (cm.spawns.length < 2) return { err: '스폰할 곳이 부족해요. 위가 뚫린 3×3 이상 평평한 땅이 2곳 이상 필요해요' };
   const name = String(o.name || '내 맵').replace(/[<>&"'`]/g, '').slice(0, 16);
-  return { custom: { id: /^[a-z0-9_-]{1,32}$/i.test(String(o.id || '')) ? String(o.id) : null, name, map: cm, obj: { W: o.W, H: o.H, D: o.D, data: o.data, theme: cm.theme, name } } };
+  return { custom: { id: /^[a-z0-9_-]{1,32}$/i.test(String(o.id || '')) ? String(o.id) : null, name, map: cm, obj: { W: o.W, H: o.H, D: o.D, data: o.data, theme: cm.theme, name, cb: cm.cb } } };
 }
 // 맵 같이 만들기 → 다 같이 테스트: 그 맵으로 게임 방을 만들고 편집하던 사람 모두 들어가서 바로 시작
 function editToGame(host, members, ent) {
@@ -1097,6 +1102,7 @@ function handleAuth(c, m) {
     if (!c.alive) return;
     c.user = u;
     c.send({ t: 'authed', sub: u.sub, token: u.token, email: u.email, name: u.name, profile: u.profile });
+    OFFICIAL.onLogin(c); // 공식 맵 목록 + 관리자 여부
     log(`로그인: ${u.email || u.sub}`);
   }).catch(e => c.send({ t: 'autherr', text: e.message || '로그인 실패', token: !!m.token }));
 }
@@ -1105,6 +1111,8 @@ function handle(c, m) {
   if (m.t === 'auth' || m.t === 'logout' || m.t === 'profile') return handleAuth(c, m);
   if (!c.user) { c.send({ t: 'needauth' }); return; }
   if (USERMAPS.handle(c, m)) return;
+  if (USERBLOCKS.handle(c, m)) return;
+  if (OFFICIAL.handle(c, m)) return;
   if (EDIT.handle(c, m)) return;
   const r = c.room;
   switch (m.t) {

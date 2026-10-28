@@ -1,6 +1,7 @@
 // 픽셀 텍스처 생성 (16x16 블록 아틀라스, 캐릭터 스킨)
 import * as THREE from '../lib/three.module.min.js';
 import { CHAR_SKINS } from './skins/charSkins.js';
+import { BUILD_BLOCKS } from './blocks/buildBlocks.js';
 const { B } = window.SH;
 
 const T = 16, COLS = 8;
@@ -162,6 +163,9 @@ def('trampoline', (px, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T
 def('cloud', (px, r) => { noiseFill(px, r, 0xf4f8ff, 0.05, 10); });
 def('marble', (px, r) => { noiseFill(px, r, 0xeae6e0, 0.04, 10); for (let i = 0; i < 3; i++) { let x = r() * 16, y = 0; for (; y < 16; y++) { x += (r() - 0.5) * 2; px(x | 0, y, shade(0xb8b0a8, 1)); } } });
 
+// 건축 블록 텍스처
+for (const bb of BUILD_BLOCKS) for (const [name, fn] of Object.entries(bb.draw)) if (TI[name] == null) def(name, (px, r) => fn(px, r, { T, shade, noiseFill }));
+
 // 블록 → [윗면, 옆면, 아랫면]
 export const FACES = {};
 const f3 = (b, t, s, bo) => { FACES[b] = [TI[t], TI[s || t], TI[bo || t]]; };
@@ -176,12 +180,16 @@ f3(B.ORE_COAL, 'ore_coal'); f3(B.ORE_GOLD, 'ore_gold'); f3(B.ORE_DIA, 'ore_dia')
 f3(B.LAVA, 'lava'); f3(B.JUMPPAD, 'jumppad', 'jumppad_side', 'basalt'); f3(B.PORTAL, 'portal'); f3(B.CONVEYOR, 'conveyor', 'metal'); f3(B.QUICKSAND, 'quicksand'); f3(B.ELECTRIC, 'electric', 'metal');
 f3(B.VOIDB, 'voidb'); f3(B.BASALT, 'basalt'); f3(B.NEON_P, 'neon_p'); f3(B.NEON_B, 'neon_b'); f3(B.OBSIDIAN, 'obsidian'); f3(B.TRAMPOLINE, 'trampoline', 'c_blue'); f3(B.CLOUD, 'cloud'); f3(B.MARBLE, 'marble');
 f3(B.PANEL, 'panel'); f3(B.WINDOW, 'panel', 'window'); f3(B.WOOL_R, 'wool_r'); f3(B.WOOL_B, 'wool_b'); f3(B.WOOL_W, 'wool_w'); f3(B.WOOL_Y, 'wool_y'); f3(B.GOLD, 'gold'); f3(B.GLOWC, 'glowc');
+for (const bb of BUILD_BLOCKS) f3(B[bb.key], ...bb.tex);
 export const GLOW = new Set([B.LAMP, B.GLOWC, B.LAVA, B.JUMPPAD, B.PORTAL, B.ELECTRIC, B.NEON_P, B.NEON_B]);
 // 블록 대표색 (파편용)
 export const BLOCK_COLOR = {};
 
 export const ATLAS_COLS = COLS;
-export const ATLAS_ROWS = Math.ceil(TILES.length / COLS);
+// 내가 만든 블록(200~255번, 6면씩) 자리를 아틀라스 아래쪽에 미리 비워 둠 → blocks/customBlocks.js 가 그려 넣음
+const BASE_ROWS = Math.ceil(TILES.length / COLS);
+export const CUSTOM_TILE0 = BASE_ROWS * COLS;
+export const ATLAS_ROWS = BASE_ROWS + Math.ceil((window.SH.CB_MAX - window.SH.CB_MIN + 1) * 6 / COLS);
 export function makeAtlas() {
   const W = COLS * T, H = ATLAS_ROWS * T;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
