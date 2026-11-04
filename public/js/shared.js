@@ -19,6 +19,9 @@
     BASALT: 55, NEON_P: 56, NEON_B: 57, OBSIDIAN: 58, TRAMPOLINE: 59, CLOUD: 60, MARBLE: 61,
     // 건축 블록 (이름·텍스처는 public/js/blocks/buildBlocks.js)
     GLASS: 62, TILE_W: 63, TILE_CK: 64, MARBLE_BRICK: 65, BIRCH: 66, CHERRY: 67, BAMBOO: 68, CON_W: 69, CON_K: 70, CON_R: 71, CON_O: 72, CON_Y: 73, CON_G: 74, CON_B: 75, CON_P: 76, IRON_DOOR: 77, BOOKSHELF: 78, KIWA: 79, DARK_BRICK: 80, SAND_BRICK: 81, GRANITE: 82, SMOOTH: 83, COPPER: 84, STEEL: 85, PARQUET: 86, CARPET: 87, WALLPAPER: 88, VENT: 89, SHUTTER: 90, PILLAR: 91,
+    // 흐르는 물·용암 (에디터에서 마크처럼 흐름): 원천, 흐름 단계(멀어질수록 낮음), 떨어지는 줄기
+    WATER: 92, WATER_1: 93, WATER_2: 94, WATER_3: 95, WATER_4: 96, WATER_5: 97, WATER_6: 98, WATER_7: 99, WATER_F: 100,
+    LAVA_S: 101, LAVA_1: 102, LAVA_2: 103, LAVA_3: 104, LAVA_F: 105,
   };
   // 밟으면 위험한 바닥 (봇 길찾기·스폰에서 제외)
   const HAZARD_FLOOR = new Set([B.LAVA, B.VOIDB, B.ELECTRIC]);
@@ -42,7 +45,7 @@
       if (y >= this.H) return 0;
       return this.d[(y * this.D + z) * this.W + x];
     }
-    solid(x, y, z) { return this.get(x, y, z) !== 0; }
+    solid(x, y, z) { const b = this.get(x, y, z); return b !== 0 && !FL_TYPE[b]; } // 물·용암은 통과
     set(x, y, z, b) { if (this.inside(x, y, z)) this.d[(y * this.D + z) * this.W + x] = b; }
     fill(x0, y0, z0, x1, y1, z1, b) {
       if (x0 > x1) [x0, x1] = [x1, x0]; if (y0 > y1) [y0, y1] = [y1, y0]; if (z0 > z1) [z0, z1] = [z1, z0];
@@ -658,12 +661,12 @@
   // maps/*.js 에서 새 맵을 등록 (빌더 도구 공유)
   const MAPKIT = { VMap, B, G, rng, ground, border, house, roofStairs, stairs, tree, scatter, crateStack, pineTree, bigTree, mound };
   function registerMap(id, def) { MAPS[id] = def; }
-  // 공식 맵 (플레이어가 만들어 출품 → 관리자 승인): 'off_<id>' 로 등록돼서 기본 맵처럼 맵 목록·랜덤 맵에 나옴
+  // 출품 맵 (플레이어가 만들어 출품하면 바로 공개): 'off_<id>' 로 등록돼서 대기실 '출품 맵' 탭·랜덤 맵에 나옴
   // o = { id, name, theme, by, at, W, H, D, data, cb }. 하늘·안개 같은 겉모습만 테마 맵에서 빌려 옴 (기믹·중력은 X)
   const OFF_VIS = ['sky', 'fog', 'sun', 'stars', 'noClouds', 'fogNear', 'fogFar', 'snow'];
   function registerOfficial(o) {
     const th = MAPS[o.theme] && (MAPS[o.theme].kind || 'normal') === 'normal' && !MAPS[o.theme].official ? MAPS[o.theme] : MAPS.village;
-    const def = { name: String(o.name || '공식 맵').slice(0, 16), official: { by: o.by || '', at: o.at || 0 }, custom: true, desc: `공식 · ${String(o.by || '').slice(0, 10)} 제작`, build: () => mapFromData(o) };
+    const def = { name: String(o.name || '공식 맵').slice(0, 16), official: { by: o.by || '', at: o.at || 0 }, custom: true, desc: `출품 · ${String(o.by || '').slice(0, 10)} 제작`, build: () => mapFromData(o) };
     for (const k of OFF_VIS) if (th[k] !== undefined) def[k] = th[k];
     const id = 'off_' + o.id;
     MAPS[id] = def; delete mapCache[id];
@@ -733,6 +736,60 @@
   }
   // 저장 데이터에 있는 블록 번호 중 이보다 큰 건 공기로 읽음 (기믹 블록이 추가될 때마다 자동으로 늘어남)
   const MAXB = Math.max(...Object.values(B));
+  /* ---------- 흐르는 물·용암 ---------- */
+  // FL_TYPE[b]: 0 아님 / 1 물 / 2 용암,  FL_LVL[b]: 0 원천 · 1~7 흐름(멀수록 큼) · 8 떨어지는 줄기
+  const FL_TYPE = new Uint8Array(256), FL_LVL = new Uint8Array(256);
+  const FLUID = { 1: { src: B.WATER, max: 7, flow: [B.WATER_1, B.WATER_2, B.WATER_3, B.WATER_4, B.WATER_5, B.WATER_6, B.WATER_7], fall: B.WATER_F },
+    2: { src: B.LAVA_S, max: 3, flow: [B.LAVA_1, B.LAVA_2, B.LAVA_3], fall: B.LAVA_F } };
+  for (const t of [1, 2]) { const f = FLUID[t]; FL_TYPE[f.src] = t; FL_TYPE[f.fall] = t; FL_LVL[f.fall] = 8; f.flow.forEach((b, i) => { FL_TYPE[b] = t; FL_LVL[b] = i + 1; }); }
+  const isFluid = (b) => FL_TYPE[b] !== 0;
+  const isFlowing = (b) => FL_TYPE[b] !== 0 && FL_LVL[b] !== 0; // 원천이 아닌 물·용암 (원천에서 계산돼서 생김)
+  // 맵 전체의 흐르는 물·용암을 원천에서 다시 계산 (마크처럼: 아래로 떨어질 수 있으면 떨어지고, 아니면 옆으로 한 칸씩 낮아지며 퍼짐)
+  // 바뀐 칸 목록 [[x,y,z],...] 을 돌려줌. 같은 맵이면 누가 계산해도 결과가 같음 (같이 만들기에서 서버·모두가 각자 계산)
+  function settleFluids(m) {
+    const W = m.W, H = m.H, D = m.D, d = m.d, old = new Map();
+    const srcs = [[], [], []];
+    for (let i = 0; i < d.length; i++) {
+      const b = d[i]; if (!FL_TYPE[b]) continue;
+      if (FL_LVL[b]) { old.set(i, b); d[i] = 0; } else srcs[FL_TYPE[b]].push(i);
+    }
+    if (!old.size && !srcs[1].length && !srcs[2].length) return [];
+    const idx = (x, y, z) => (y * D + z) * W + x;
+    const lv = new Int8Array(d.length).fill(-1); // 칸마다 퍼지는 단계 (원천·떨어진 줄기 = 0)
+    for (const t of [1, 2]) { // 물 먼저, 그다음 용암 (서로 덮지 않음)
+      const F = FLUID[t], q = srcs[t].slice();
+      for (const i of q) lv[i] = 0;
+      // 단계가 더 낮아질 때만 다시 넣는 큐 → 결과는 '원천에서 가장 가까운 단계' 로 정해짐
+      for (let qi = 0; qi < q.length && qi < 600000; qi++) {
+        const i = q[qi], L = lv[i], x = i % W, z = Math.floor(i / W) % D, y = Math.floor(i / (W * D));
+        if (FL_TYPE[d[i]] !== t) continue;
+        // 아래가 비었으면 떨어지는 줄기 (떨어진 줄기는 원천처럼 다시 퍼짐), 아래가 액체면 옆으로 안 퍼짐
+        if (y > 1) {
+          const bi = idx(x, y - 1, z), bb = d[bi];
+          if (bb === 0 || (FL_TYPE[bb] === t && lv[bi] > 0)) { d[bi] = F.fall; lv[bi] = 0; q.push(bi); continue; }
+          if (FL_TYPE[bb]) continue;
+        }
+        const nl = L + 1; if (nl > F.max) continue;
+        for (let k = 0; k < 4; k++) {
+          const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), nz = z + (k === 2 ? 1 : k === 3 ? -1 : 0);
+          if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+          const ni = idx(nx, y, nz), nv = d[ni];
+          if (nv === 0 || (FL_TYPE[nv] === t && lv[ni] > nl)) { d[ni] = F.flow[nl - 1]; lv[ni] = nl; q.push(ni); }
+        }
+      }
+    }
+    // 바뀐 칸만 모으기 (사라진 흐름 + 새로 생긴 흐름)
+    const out = [];
+    for (const [i, b] of old) if (d[i] !== b) out.push(i);
+    for (let i = 0; i < d.length; i++) if (FL_LVL[d[i]] && FL_TYPE[d[i]] && !old.has(i)) out.push(i);
+    return out.map(i => [i % W, Math.floor(i / (W * D)), Math.floor(i / W) % D]);
+  }
+  // (x,y,z) 를 고쳤을 때 물·용암에 영향이 있으면 다시 계산 (그 칸이나 옆·위아래에 액체가 있을 때만)
+  function settleNear(m, x, y, z, b) {
+    let near = FL_TYPE[b] !== 0;
+    for (const [dx, dy, dz] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) if (!near && FL_TYPE[m.get(x + dx, y + dy, z + dz)]) near = true;
+    return near ? settleFluids(m) : [];
+  }
   const MAP_MAX = { W: 160, H: 64, DATA: 2000000 };
   // 내가 만든 블록: 맵마다 200~255번을 씀. 맵 데이터의 cb = { 번호: { n: 이름, f: [6면 16×16 RGB base64], lib: 내 블록 id } }
   // 면 순서: 위, 아래, 앞(+z), 뒤(-z), 왼쪽(-x), 오른쪽(+x)
@@ -807,7 +864,7 @@
     return m;
   }
 
-  function walkable(m, x, y, z) { return m.solid(x, y - 1, z) && !HAZARD_FLOOR.has(m.get(x, y - 1, z)) && !m.solid(x, y, z) && !m.solid(x, y + 1, z); }
+  function walkable(m, x, y, z) { return m.solid(x, y - 1, z) && !HAZARD_FLOOR.has(m.get(x, y - 1, z)) && !m.solid(x, y, z) && !m.solid(x, y + 1, z) && FL_TYPE[m.get(x, y, z)] !== 2; }
   function openSky(m, x, y, z) { for (let yy = y; yy < m.H; yy++) if (m.solid(x, yy, z)) return false; return true; }
 
   // 힐팩 / 갑옷 상자 고정 위치 (스폰 근처는 피하고 서로 멀리)
@@ -947,9 +1004,11 @@
   }
 
   // 복셀 레이캐스트 (DDA)
-  function raycast(m, ox, oy, oz, dx, dy, dz, maxD) {
+  // hitFn(블록): 맞은 걸로 칠지 (없으면 단단한 블록만 — 물·용암은 총알이 통과). 에디터는 물·용암 원천도 맞힘
+  function raycast(m, ox, oy, oz, dx, dy, dz, maxD, hitFn) {
+    const hit = hitFn ? (x, y, z) => hitFn(m.get(x, y, z)) : (x, y, z) => m.solid(x, y, z);
     let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
-    if (m.solid(x, y, z)) return { t: 0, x, y, z, nx: 0, ny: 0, nz: 0, b: m.get(x, y, z) };
+    if (hit(x, y, z)) return { t: 0, x, y, z, nx: 0, ny: 0, nz: 0, b: m.get(x, y, z) };
     const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
     const tdx = dx ? Math.abs(1 / dx) : Infinity, tdy = dy ? Math.abs(1 / dy) : Infinity, tdz = dz ? Math.abs(1 / dz) : Infinity;
     let tmx = dx > 0 ? (x + 1 - ox) / dx : dx < 0 ? (ox - x) / -dx : Infinity;
@@ -962,7 +1021,7 @@
       else { z += sz; t = tmz; tmz += tdz; nx = 0; ny = 0; nz = -sz; }
       if (t > maxD) return null;
       if (y >= m.H && dy > 0) return null;
-      if (m.solid(x, y, z)) return { t, x, y, z, nx, ny, nz, b: m.get(x, y, z) };
+      if (hit(x, y, z)) return { t, x, y, z, nx, ny, nz, b: m.get(x, y, z) };
     }
     return null;
   }
@@ -1163,5 +1222,5 @@
     return null;
   }
 
-  return { resizeMapH, blocksAbove, MK_MAX, cleanMk, registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { FL_TYPE, FL_LVL, FLUID, isFluid, isFlowing, settleFluids, settleNear, resizeMapH, blocksAbove, MK_MAX, cleanMk, registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });

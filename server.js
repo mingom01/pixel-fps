@@ -209,6 +209,7 @@ function cleanCfg(c, old) {
     // 랜덤: 매 판 시작할 때 모드/맵을 새로 뽑음
     rmode: c.rmode != null ? !!c.rmode : !!old.rmode,
     rmap: c.rmap != null ? !!c.rmap : !!old.rmap,
+    rpool: ['o', 's'].includes(c.rpool) ? c.rpool : old.rpool === 's' ? 's' : 'o', // 랜덤 맵: 공식 맵(o) / 출품 맵(s) 중에서
     ranked: !!old.ranked, // 경쟁전 방은 서버가 정함 (사용자가 못 바꿈)
   };
 }
@@ -219,7 +220,14 @@ function rollRandom(r) {
   if (c.mode === 'practice') return;
   if (c.rmode) c.mode = pick(RANDOM_MODES);
   const want = c.mode === 'spike' ? 'spike' : 'normal';
-  if (c.rmap || c.rmode || mapKind(c.map) !== want) c.map = pick(Object.keys(SH.MAPS).filter(id => mapKind(id) === want));
+  if (c.rmap || c.rmode || mapKind(c.map) !== want) {
+    // 후보: 랜덤 모드·빠른 시작은 공식+출품 섞기, 랜덤 맵 카드는 그 탭(공식/출품) 맵만, 경쟁전은 공식 맵만
+    const isSub = (id) => !!(SH.MAPS[id] && SH.MAPS[id].official);
+    const all = Object.keys(SH.MAPS).filter(id => mapKind(id) === want);
+    let pool = c.ranked ? all.filter(id => !isSub(id)) : c.rmode ? all : c.rmap ? all.filter(id => isSub(id) === (c.rpool === 's')) : all.filter(id => !isSub(id));
+    if (!pool.length) pool = all.filter(id => !isSub(id)); // 출품 맵이 하나도 없으면 공식 맵에서
+    c.map = pick(pool);
+  }
 }
 function fixCfg(cfg) {
   const kind = cfg.map === 'custom' ? 'normal' : SH.MAPS[cfg.map].kind || 'normal';
@@ -1055,6 +1063,15 @@ function rollLoot() {
   for (const [k, w] of LOOT) { if ((x -= w) < 0) return k; }
   return 'money';
 }
+// 흐르는 용암 안에 있으면 초당 30 피해 (예전 '용암 바닥' 블록은 기믹 쪽에서 따로)
+function fluidTick(r, dt) {
+  const m = r.map, LAVA = 2;
+  for (const e of r.ents.values()) {
+    if (!e.alive || e.boss) continue;
+    const fx = Math.floor(e.x), fz = Math.floor(e.z);
+    if (SH.FL_TYPE[m.get(fx, Math.floor(e.y + 0.3), fz)] === LAVA || SH.FL_TYPE[m.get(fx, Math.floor(e.y + 1.2), fz)] === LAVA) damage(r, e, null, 30 * dt, 'lava', 'body', true);
+  }
+}
 function crateTick(r, now) {
   if (isSpike(r) || isPractice(r) || isGG(r)) return;
   if (now >= r.nextCrate && r.crates.filter(c => !c.opened).length < 2) {
@@ -1789,6 +1806,8 @@ setInterval(() => {
     strikeTick(r, now);
     if (r.state !== 'play') continue;
     GIM.tick(r, now, dt);
+    if (r.state !== 'play') continue;
+    fluidTick(r, dt);
     if (r.state !== 'play') continue;
     if (isSpike(r)) { spikeTick(r, now); if (r.state !== 'play') continue; }
     crateTick(r, now);

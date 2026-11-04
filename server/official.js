@@ -1,32 +1,38 @@
-// 맵 출품 → 관리자 심사 → 공식 맵
-// - 누구나 '내 맵'을 출품 (한 사람당 심사 중 3개까지, 같은 맵은 다시 내면 바뀜)
-// - 관리자(환경변수 ADMIN_EMAILS 에 적힌 구글 이메일)가 미리 플레이해 보고 승인/거절
-// - 승인된 맵은 'off_<id>' 로 서버·모든 접속자에게 등록 → 맵 목록과 랜덤 맵에 나옴
-// 저장: 계정 저장소(store.js)의 '__official' (공식 맵), '__submits' (출품 목록)
+// 출품 맵: 플레이어가 '내 맵'을 출품하면 승인 없이 바로 모두가 플레이 (대기실 '출품 맵' 탭 + 빠른 시작·랜덤 모드)
+// - 같은 맵을 다시 출품하거나 만든 사람이 원본을 저장하면 새 버전으로 바로 바뀜
+// - 만든 사람은 '출품 취소', 관리자(환경변수 ADMIN_EMAILS 의 구글 이메일)는 문제 있는 맵을 내릴 수 있음
+// - 맵 id 는 'off_<id>' (예전에 '공식 맵'으로 승인된 맵도 그대로 출품 맵이 됨)
+// 저장: 계정 저장소(store.js)의 '__official' (출품 맵 목록). '__submits' 는 예전 심사 기록 (남아 있던 심사 대기 맵은 바로 공개)
 const STORE = require('./store.js');
 const SH = require('../public/js/shared.js');
 
 const OFF_ID = '__official', SUB_ID = '__submits';
-const MAX_PENDING_PER_USER = 3, MAX_PENDING = 100;
+const MAX_TOTAL = 300; // 서버 저장 공간 보호용 전체 한도 (한 사람당 제한은 없음)
 const ADMINS = String(process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
-let off = { list: [] }, subs = { list: [] };
+let off = { list: [] };
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
 const ready = Promise.all([
   STORE.get(OFF_ID).then(d => { if (d && Array.isArray(d.list)) off = d; }),
-  STORE.get(SUB_ID).then(d => { if (d && Array.isArray(d.list)) subs = d; }),
-]).then(() => {
-  for (const o of off.list) { if (!o.mid) { const s = subs.list.find(x => x.offId === o.id); if (s) o.mid = s.mid; } SH.registerOfficial(o); }
+  STORE.get(SUB_ID).then(d => d && Array.isArray(d.list) ? d : { list: [] }),
+]).then(([, subs]) => {
+  // 예전 기록 정리: 승인된 맵에 원본 맵 id 연결, 심사 대기 중이던 맵은 바로 공개
+  for (const o of off.list) if (!o.mid) { const s = subs.list.find(x => x.offId === o.id); if (s) o.mid = s.mid; }
+  for (const s of subs.list) {
+    if (s.status !== 'pending' || !s.ent) continue;
+    if (!off.list.some(o => o.bySub === s.bySub && o.mid === s.mid)) off.list.push(Object.assign({ id: newId(), by: s.by, bySub: s.bySub, mid: s.mid, at: s.at || Date.now() }, s.ent));
+    s.status = 'approved';
+  }
+  for (const o of off.list) SH.registerOfficial(o);
   STORE.set(OFF_ID, off); STORE.set(SUB_ID, subs);
-})
-  .catch(e => console.log('공식 맵 불러오기 실패: ' + e.message));
+}).catch(e => console.log('출품 맵 불러오기 실패: ' + e.message));
 const saveOff = () => STORE.set(OFF_ID, off);
-const saveSubs = () => STORE.set(SUB_ID, subs);
 
 const isAdmin = (c) => !!(c.user && c.user.email && ADMINS.includes(String(c.user.email).toLowerCase()));
 const cleanName = (s, n) => String(s || '').replace(/[<>&"'`]/g, '').trim().slice(0, n);
 // 접속자에게 보낼 때는 구글 계정 id(bySub)를 빼고
 const pub = (o) => { const r = Object.assign({}, o); delete r.bySub; return r; };
-const subMeta = (s) => ({ sid: s.sid, mid: s.mid, name: s.ent.name, by: s.by, at: s.at, status: s.status, W: s.ent.W, H: s.ent.H, D: s.ent.D, offId: s.offId || null, why: s.why || '' });
+const meta = (o) => ({ id: o.id, mid: o.mid, name: o.name, by: o.by, at: o.at, upd: o.upd || o.at, W: o.W, H: o.H, D: o.D });
 
 // 맵 확인: 형식 + 실제로 읽히고 스폰이 2곳 이상
 function checkEnt(e) {
@@ -39,76 +45,61 @@ function checkEnt(e) {
 
 // deps: { broadcastAll(msg), log }
 module.exports = function makeOfficial(deps) {
-  // 로그인 직후: 공식 맵 목록 + 관리자 여부
+  const mine = (c) => off.list.filter(o => o.bySub === c.user.sub).map(meta);
+  // 로그인 직후: 출품 맵 목록 + 관리자 여부
   function onLogin(c) {
     ready.then(() => { c.send({ t: 'official', list: off.list.map(pub), admin: isAdmin(c) }); });
   }
+  function publish(o) { SH.registerOfficial(o); saveOff(); deps.broadcastAll({ t: 'official', list: [pub(o)], upd: true }); }
+  function remove(o, why) {
+    off.list = off.list.filter(x => x !== o); SH.unregisterOfficial(o.id); saveOff();
+    deps.broadcastAll({ t: 'offdel', id: o.id }); deps.log(`출품 맵 내림: ${o.name} (${why})`);
+  }
 
   function handle(c, m) {
-    if (!['submit', 'mysubs', 'admsubs', 'admok', 'admno', 'admdel'].includes(m.t)) return false;
+    if (!['submit', 'unsubmit', 'mysubs', 'admsubs', 'admdel'].includes(m.t)) return false;
     if (!c.user) return true;
-    const sub = c.user.sub;
     if (m.t === 'submit') {
       const ent = checkEnt(m.ent), mid = String(m.ent && m.ent.id || '').slice(0, 32);
       if (!ent || !mid) { c.send({ t: 'err', text: '출품할 수 없는 맵이에요 (스폰할 곳이 2곳 이상 필요해요)' }); return true; }
-      const mine = subs.list.filter(s => s.bySub === sub && s.status === 'pending');
-      const same = mine.find(s => s.mid === mid);
-      if (!same && mine.length >= MAX_PENDING_PER_USER) { c.send({ t: 'err', text: `심사 중인 맵은 ${MAX_PENDING_PER_USER}개까지예요` }); return true; }
-      if (!same && subs.list.filter(s => s.status === 'pending').length >= MAX_PENDING) { c.send({ t: 'err', text: '출품이 너무 많이 밀려 있어요. 나중에 다시 해 주세요' }); return true; }
       const by = cleanName(m.by || c.user.name, 10) || '플레이어';
-      if (same) Object.assign(same, { ent, by, at: Date.now() });
-      else subs.list.unshift({ sid: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), mid, bySub: sub, by, at: Date.now(), status: 'pending', ent });
-      if (subs.list.length > 300) subs.list = subs.list.filter(s => s.status === 'pending').concat(subs.list.filter(s => s.status !== 'pending').slice(0, 100));
-      saveSubs();
-      deps.log(`맵 출품: ${ent.name} (${by})`);
-      c.send({ t: 'submitted', mid, text: same ? `'${ent.name}' 출품작을 지금 버전으로 바꿨어요` : `'${ent.name}' 맵을 출품했어요! 관리자가 승인하면 공식 맵이 돼요` });
-      c.send({ t: 'mysubs', list: subs.list.filter(s => s.bySub === sub).map(subMeta) });
-      return true;
-    }
-    if (m.t === 'mysubs') { c.send({ t: 'mysubs', list: subs.list.filter(s => s.bySub === sub).map(subMeta) }); return true; }
-    // 여기부터 관리자만
-    if (!isAdmin(c)) { c.send({ t: 'err', text: '관리자만 할 수 있어요' }); return true; }
-    if (m.t === 'admsubs') {
-      c.send({ t: 'admsubs', pending: subs.list.filter(s => s.status === 'pending').map(s => Object.assign(subMeta(s), { ent: s.ent })), done: subs.list.filter(s => s.status !== 'pending').slice(0, 30).map(subMeta), official: off.list.map(o => ({ id: o.id, name: o.name, by: o.by, at: o.at })) });
-      return true;
-    }
-    if (m.t === 'admok' || m.t === 'admno') {
-      const s = subs.list.find(x => x.sid === m.sid && x.status === 'pending');
-      if (!s) { c.send({ t: 'err', text: '이미 처리된 출품작이에요' }); return true; }
-      if (m.t === 'admno') { s.status = 'rejected'; s.why = cleanName(m.why, 60); }
+      let o = off.list.find(x => x.bySub === c.user.sub && x.mid === mid);
+      if (o) Object.assign(o, ent, { by, upd: Date.now() });
       else {
-        const o = Object.assign({ id: Date.now().toString(36), by: s.by, bySub: s.bySub, mid: s.mid, at: Date.now() }, s.ent);
-        o.name = cleanName(m.name, 16) || o.name;
-        off.list.push(o); SH.registerOfficial(o); saveOff();
-        s.status = 'approved'; s.offId = o.id;
-        deps.broadcastAll({ t: 'official', list: [pub(o)] });
-        deps.log(`공식 맵 승인: ${o.name} (${o.by})`);
+        if (off.list.length >= MAX_TOTAL) { c.send({ t: 'err', text: '출품 맵이 너무 많아서 지금은 더 올릴 수 없어요' }); return true; }
+        o = Object.assign({ id: newId(), by, bySub: c.user.sub, mid, at: Date.now() }, ent);
+        off.list.push(o);
       }
-      saveSubs();
-      handle(c, { t: 'admsubs' });
+      publish(o);
+      deps.log(`맵 출품: ${o.name} (${by})`);
+      c.send({ t: 'submitted', mid, text: `'${o.name}' 맵을 출품했어요! 이제 모두가 '출품 맵'에서 플레이할 수 있어요` });
+      c.send({ t: 'mysubs', list: mine(c) });
       return true;
     }
-    if (m.t === 'admdel') {
-      const i = off.list.findIndex(o => o.id === m.id);
-      if (i >= 0) { const o = off.list.splice(i, 1)[0]; SH.unregisterOfficial(o.id); saveOff(); deps.broadcastAll({ t: 'offdel', id: o.id }); deps.log(`공식 맵 내림: ${o.name}`); }
-      handle(c, { t: 'admsubs' });
+    if (m.t === 'unsubmit') {
+      const o = off.list.find(x => x.bySub === c.user.sub && x.mid === String(m.mid || ''));
+      if (o) { remove(o, '만든 사람이 취소'); c.send({ t: 'submitted', mid: o.mid, text: `'${o.name}' 출품을 취소했어요` }); }
+      c.send({ t: 'mysubs', list: mine(c) });
       return true;
     }
+    if (m.t === 'mysubs') { c.send({ t: 'mysubs', list: mine(c) }); return true; }
+    // 여기부터 관리자만: 출품 맵 목록 보기 · 내리기
+    if (!isAdmin(c)) { c.send({ t: 'err', text: '관리자만 할 수 있어요' }); return true; }
+    if (m.t === 'admdel') { const o = off.list.find(x => x.id === m.id); if (o) remove(o, '관리자'); }
+    c.send({ t: 'admsubs', list: off.list.slice().sort((a, b) => (b.upd || b.at) - (a.upd || a.at)).map(meta) });
     return true;
   }
 
-  // 만든 사람이 원본 맵을 저장하면 → 공식 맵도 그 버전으로 바꾸고 모든 접속자에게 보냄
-  // (공식 맵 이름은 관리자가 정한 그대로, 진행 중인 판은 다음 판부터 새 버전)
+  // 만든 사람이 원본 맵을 저장하면 → 출품 맵도 그 버전으로 바꾸고 모든 접속자에게 보냄 (진행 중인 판은 다음 판부터)
   function onMapSaved(c, e) {
     const o = off.list.find(x => x.bySub === c.user.sub && x.mid === e.id);
     if (!o) return;
     const ent = checkEnt(e);
-    if (!ent) { c.send({ t: 'err', text: '공식 맵에는 반영 못 했어요 (스폰할 곳이 2곳 이상 필요해요)' }); return; }
+    if (!ent) { c.send({ t: 'err', text: '출품 맵에는 반영 못 했어요 (스폰할 곳이 2곳 이상 필요해요)' }); return; }
     Object.assign(o, { theme: ent.theme, W: ent.W, H: ent.H, D: ent.D, data: ent.data, cb: ent.cb, mk: ent.mk, upd: Date.now() });
-    SH.registerOfficial(o); saveOff();
-    deps.broadcastAll({ t: 'official', list: [pub(o)], upd: true });
-    deps.log(`공식 맵 수정 반영: ${o.name} (${o.by})`);
-    c.send({ t: 'submitted', mid: e.id, text: `공식 맵 '${o.name}'에도 바로 반영했어요` });
+    publish(o);
+    deps.log(`출품 맵 수정 반영: ${o.name} (${o.by})`);
+    c.send({ t: 'submitted', mid: e.id, text: `출품 맵 '${o.name}'에도 바로 반영했어요` });
   }
 
   return { handle, onLogin, isAdmin, onMapSaved };

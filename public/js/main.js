@@ -20,11 +20,12 @@ import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
 import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
 import { showIncome } from './hud/income.js';
 import { BUILD_BLOCKS } from './blocks/buildBlocks.js';
+import { tickFluidTex } from './blocks/fluids.js';
 import { initBlockStore, blocksLogin, onServerBlocks } from './blocks/blockStore.js';
 import { initBlockEditor, blockEditorOpen } from './blocks/blockEditor.js';
 import { initMyBlocks, installCb, myBlocksHtml, bindMyBlocks, onEdCb, usedCb } from './editor/myBlocks.js';
 import { initMarkers, MARKERS, isMarker, markerIcon, markersHtml, rebuildMarkers, clearMarkers, placeMarker, removeMarkerNear, onEdMk } from './editor/markers.js';
-import { initOfficial, officialMsg, submitMap, subOf, statusText } from './editor/official.js';
+import { initOfficial, officialMsg, submitMap, unsubmitMap, subOf } from './editor/official.js';
 import { initCoop, coopResize, openOnline, leaveOnline, reset as coopReset, coopSet, coopMeta, coopTest, coopTick, coopMsg, isOnline, isGuest } from './editor/coop.js';
 import { initMapStore, mapsLogin, onServerMaps, onMapSaved, onMapSaveErr, savedMaps, saveMap, deleteMap, mapSyncState, MAX_MAPS } from './editor/mapStore.js';
 import { EMOTE_BY, applyEmote, clearEmotePose, emoteFx, emoteIcon } from './skins/emotes.js';
@@ -358,22 +359,27 @@ function mapThumb(id) {
 }
 function buildMapCards() {
   const box = $('mapCards'); box.innerHTML = '';
-  // 랜덤 맵 카드 (매 판 새로 뽑음)
-  const rd = document.createElement('div'); rd.className = 'mapcard rnd'; rd.dataset.map = 'random';
-  rd.innerHTML = '<div class="rndthumb">?</div>랜덤 맵<div class="mdesc">매 판 새로 뽑기</div>';
-  rd.onclick = () => sendCfg({ rmap: true });
-  box.appendChild(rd);
+  // 탭마다 랜덤 카드 (매 판 그 탭 맵 중에서 새로 뽑음): 공식 맵(o) / 출품 맵(s)
+  for (const [tab, rpool, desc] of [['o', 'o', '공식 맵 중에서'], ['s', 's', '출품 맵 중에서']]) {
+    const rd = document.createElement('div'); rd.className = 'mapcard rnd'; rd.dataset.map = tab === 'o' ? 'random' : 'random_s'; rd.dataset.tab = tab;
+    rd.innerHTML = `<div class="rndthumb">?</div>랜덤 맵<div class="mdesc">${desc} 매 판 뽑기</div>`;
+    rd.onclick = () => sendCfg({ rmap: true, rpool });
+    box.appendChild(rd);
+  }
   for (const id of Object.keys(SH.MAPS)) {
     if (SH.MAPS[id].kind === 'practice') continue;
-    const d = document.createElement('div'); d.className = 'mapcard'; d.dataset.map = id;
+    const d = document.createElement('div'); d.className = 'mapcard'; d.dataset.map = id; d.dataset.tab = SH.MAPS[id].official ? 's' : 'o';
     const c = document.createElement('canvas'); c.width = 64; c.height = 64; const cx2 = c.getContext('2d'); cx2.imageSmoothingEnabled = false; cx2.drawImage(mapThumb(id), 0, 0, 64, 64);
     d.appendChild(c); d.appendChild(document.createTextNode(SH.MAPS[id].name));
     if (SH.MAPS[id].desc) { const sm = document.createElement('div'); sm.className = 'mdesc'; sm.textContent = SH.MAPS[id].desc; d.appendChild(sm); }
-    d.onclick = () => sendCfg({ map: id, rmap: false });
+    // 랜덤 모드였으면 꺼짐 (켜져 있으면 시작할 때 다른 맵으로 바뀌므로), 모드는 개인전으로
+    d.onclick = () => sendCfg(S.room && S.room.cfg.rmode ? { map: id, rmap: false, rmode: false, mode: 'ffa' } : { map: id, rmap: false });
     box.appendChild(d);
   }
 }
 buildMapCards();
+// 대기실 맵 탭 (공식 맵 / 출품 맵) — 보이는 카드만 바뀌고 설정은 그대로
+$('mapTabs').querySelectorAll('button').forEach(b => b.onclick = () => { S.mapTab = b.dataset.tab; if (S.room) onRoom(S.room); });
 function sendCfg(p) { if (!S.room) return; send({ t: 'cfg', cfg: Object.assign({}, S.room.cfg, p) }); }
 document.querySelectorAll('[data-bots]').forEach(b => b.onclick = () => sendCfg({ bots: clamp(S.room.cfg.bots + Number(b.dataset.bots), 0, 11) }));
 $('timeSeg').querySelectorAll('button').forEach(b => b.onclick = () => sendCfg({ time: Number(b.dataset.v) }));
@@ -439,13 +445,19 @@ function onRoom(m) {
   $('killLbl').textContent = md === 'ctf' ? '목표 득점' : md === 'tdm' ? '팀 목표 킬' : '목표 킬';
   $('teamBtn').classList.toggle('hidden', rmode || !['tdm', 'ctf', 'spike'].includes(md) || m.state === 'play');
   // 지금 모드에 맞는 맵만 보여줌 (랜덤 모드면 랜덤 맵만)
+  // 탭: 방에 처음 들어왔을 때는 지금 고른 맵이 있는 탭으로
+  const isSubMap = (id) => id === 'custom' || !!(SH.MAPS[id] && SH.MAPS[id].official);
+  if (!wasIn || !S.mapTab) S.mapTab = (rmap && !rmode ? m.cfg.rpool === 's' : isSubMap(m.cfg.map)) ? 's' : 'o';
+  if (md === 'spike' && !rmode) S.mapTab = 'o'; // 스파이크 맵은 공식 맵에만 있음
+  $('mapTabs').classList.toggle('hidden', md === 'spike' && !rmode);
+  $('mapTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.mapTab));
   let shown = 0;
-  document.querySelectorAll('.mapcard').forEach(c => {
-    const id = c.dataset.map, k = id === 'custom' || id === 'random' ? 'normal' : SH.MAPS[id].kind || 'normal';
-    const hide = rmode ? id !== 'random' : id !== 'random' && (md === 'spike' ? k !== 'spike' : k !== 'normal');
-    c.classList.toggle('hidden', hide); if (!hide && id !== 'random') shown++;
+  document.querySelectorAll('.mapcard:not(.custom)').forEach(c => {
+    const id = c.dataset.map, rnd = id === 'random' || id === 'random_s', k = rnd ? 'normal' : SH.MAPS[id].kind || 'normal';
+    const hide = c.dataset.tab !== S.mapTab || (!rnd && (md === 'spike' && !rmode ? k !== 'spike' : k !== 'normal'));
+    c.classList.toggle('hidden', hide); if (!hide && !rnd) shown++;
   });
-  $('mapCount').textContent = rmode ? '(랜덤 모드에서는 맵도 무작위)' : `(${shown}개)`;
+  $('mapCount').textContent = rmode ? '(랜덤 모드: 공식·출품 맵 중 무작위 · 맵을 고르면 랜덤 모드가 꺼져요)' : S.mapTab === 's' ? `(출품 ${shown}개)` : `(${shown}개)`;
   refreshCustomCards(m);
   if (S.afterRoom && m.host === S.myId && m.state === 'wait') { const f = S.afterRoom; S.afterRoom = null; f(m); }
   $('cfgTime').classList.toggle('hidden', md === 'spike' || md === 'br'); $('cfgKill').classList.toggle('hidden', ['spike', 'zombie', 'br', 'boss', 'gungame'].includes(md));
@@ -470,7 +482,9 @@ function onRoom(m) {
     $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>친구를 기다렸다가 방장이 시작해요 (시작하면 더 못 들어와요). 이기면 점수가 오르고 지면 깎여요. 킬뎃이 좋을수록·연승할수록 더 오르고, 못할수록·연패할수록 더 깎여요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
   }
   $('botsVal').textContent = m.cfg.bots;
-  document.querySelectorAll('.mapcard:not(.custom)').forEach(c => c.classList.toggle('on', rmap ? c.dataset.map === 'random' : c.dataset.map === m.cfg.map));
+  // 랜덤 모드면 두 탭의 랜덤 카드 모두 켜짐 (공식+출품 섞어서), 랜덤 맵이면 고른 탭의 랜덤 카드
+  const rndOn = (id) => rmode ? id === 'random' || id === 'random_s' : id === (m.cfg.rpool === 's' ? 'random_s' : 'random');
+  document.querySelectorAll('.mapcard:not(.custom)').forEach(c => c.classList.toggle('on', rmap ? rndOn(c.dataset.map) : c.dataset.map === m.cfg.map));
   $('timeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === m.cfg.time));
   $('killSeg').querySelectorAll('button').forEach(b => { const v = Number(b.dataset.v); b.textContent = SH.targetOf({ mode: md, kills: v }); b.classList.toggle('on', v === m.cfg.kills); });
   const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${p.rp != null && m.cfg.ranked ? rankBadge(p.rp, true) : ''}${esc(p.name)}${md === 'ability' && p.hero && SH.HEROES[p.hero] ? ` <span class="herotag" style="color:${SH.HEROES[p.hero].color}">${SH.HEROES[p.hero].name}</span>` : ''} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
@@ -978,6 +992,7 @@ function startSlide() {
   A.sfxLand();
 }
 function jump() {
+  if (me.swim && !me.ground) return; // 물속에선 점프 키를 누르고 있으면 헤엄쳐 올라감 (updateMe)
   if (me.ground) { me.vy = P.JUMP; me.jumps = 1; me.ground = false; if (me.sliding) { me.sliding = false; } A.sfxJump(); }
   else if (me.jumps < 2) {
     me.vy = P.JUMP2; me.jumps = 2; A.sfxJump();
@@ -1005,7 +1020,7 @@ function updateMe(dt) {
   const wish = frozen ? null : wishDir();
   if (frozen && me.ground) { me.vx = 0; me.vz = 0; me.sliding = false; }
   const sprint = isSprinting() && !WS.reloading;
-  let speed = (me.crouch ? P.CROUCH : sprint ? P.RUN : P.WALK) * (W.speed || 1) * (WS.ads > 0.5 ? 0.62 : 1) * (me.perks.includes('perk_speed') ? 1.12 : 1) * (me.zombie ? SH.ZB.SPEED : 1) * (serverNow() < (me.haste || 0) ? 1.35 : 1);
+  let speed = (me.crouch ? P.CROUCH : sprint ? P.RUN : P.WALK) * (W.speed || 1) * (WS.ads > 0.5 ? 0.62 : 1) * (me.perks.includes('perk_speed') ? 1.12 : 1) * (me.zombie ? SH.ZB.SPEED : 1) * (serverNow() < (me.haste || 0) ? 1.35 : 1) * (me.swim === 1 ? 0.65 : me.swim === 2 ? 0.5 : 1); // 물·용암 안에선 느리게
   if (S.abil.dashT > 0) S.abil.dashT -= dt; // 돌진 중엔 감속 안 함
   if (me.sliding) {
     const f = 1 - dt * 1.4; me.vx *= f; me.vz *= f;
@@ -1019,7 +1034,16 @@ function updateMe(dt) {
       if (dl <= acc) { me.vx = tx; me.vz = tz; } else { me.vx += dx / dl * acc; me.vz += dz / dl * acc; }
     }
   }
-  me.vy -= P.GRAV * dt * (S.map.grav || 1);
+  // 물·용암 안: 천천히 가라앉고 점프 키로 위로 헤엄, 옆으로도 느려짐 (용암 피해는 서버가)
+  const fl = Math.max(SH.FL_TYPE[S.map.get(Math.floor(me.x), Math.floor(me.y + 0.3), Math.floor(me.z))], SH.FL_TYPE[S.map.get(Math.floor(me.x), Math.floor(me.y + 1.2), Math.floor(me.z))]);
+  if (fl) {
+    const k = fl === 1 ? 0.62 : 0.45;
+    if (!me.ground) { me.vx *= Math.pow(k, dt * 3); me.vz *= Math.pow(k, dt * 3); }
+    me.vy -= P.GRAV * dt * 0.25;
+    if (keys.Space) me.vy = Math.min(me.vy + 26 * dt, fl === 1 ? 3.6 : 2.4);
+    me.vy = Math.max(me.vy, fl === 1 ? -2.6 : -1.8);
+    me.jumps = 0; me.swim = fl;
+  } else { me.vy -= P.GRAV * dt * (S.map.grav || 1); me.swim = 0; }
   const wasGround = me.ground, vyBefore = me.vy;
   SH.moveBody(S.map, me, dt);
   afterMove(me);
@@ -2559,8 +2583,9 @@ function updateSelfEmoteCam(dt) {
 }
 
 /* ================= 맵 에디터 ================= */
-const BLOCK_NAMES = { 1: '잔디', 2: '흙', 3: '돌', 4: '조약돌', 5: '나무판자', 6: '통나무', 7: '나뭇잎', 8: '모래', 9: '사암', 10: '벽돌', 11: '콘크리트', 12: '철판', 13: '상자', 14: '지붕', 15: '기반암', 16: '아스팔트', 17: '자갈길', 18: '건초', 19: '선인장', 20: '빨간 컨테이너', 21: '파란 컨테이너', 22: '초록 컨테이너', 23: '무늬 사암', 24: '조명', 25: '회벽', 26: '철망', 27: '경고 줄무늬', 28: '짙은 나무', 29: '노란 컨테이너', 30: '눈', 31: '얼음', 32: '전나무 잎', 33: '이끼 돌', 34: '석재 벽돌', 35: '석탄 광석', 36: '금 광석', 37: '다이아 광석', 38: '월면토', 39: '달 바위', 40: '패널', 41: '유리창', 42: '빨간 양털', 43: '파란 양털', 44: '흰 양털', 45: '노란 양털', 46: '금 블록', 47: '네온', 48: '용암', 49: '점프대', 50: '포털', 51: '컨베이어', 52: '모래늪', 53: '전기 바닥', 54: '공허', 55: '현무암', 56: '분홍 네온', 57: '파란 네온', 58: '흑요석', 59: '트램펄린', 60: '구름', 61: '대리석' };
+const BLOCK_NAMES = { 1: '잔디', 2: '흙', 3: '돌', 4: '조약돌', 5: '나무판자', 6: '통나무', 7: '나뭇잎', 8: '모래', 9: '사암', 10: '벽돌', 11: '콘크리트', 12: '철판', 13: '상자', 14: '지붕', 15: '기반암', 16: '아스팔트', 17: '자갈길', 18: '건초', 19: '선인장', 20: '빨간 컨테이너', 21: '파란 컨테이너', 22: '초록 컨테이너', 23: '무늬 사암', 24: '조명', 25: '회벽', 26: '철망', 27: '경고 줄무늬', 28: '짙은 나무', 29: '노란 컨테이너', 30: '눈', 31: '얼음', 32: '전나무 잎', 33: '이끼 돌', 34: '석재 벽돌', 35: '석탄 광석', 36: '금 광석', 37: '다이아 광석', 38: '월면토', 39: '달 바위', 40: '패널', 41: '유리창', 42: '빨간 양털', 43: '파란 양털', 44: '흰 양털', 45: '노란 양털', 46: '금 블록', 47: '네온', 48: '용암 바닥', 49: '점프대', 50: '포털', 51: '컨베이어', 52: '모래늪', 53: '전기 바닥', 54: '공허', 55: '현무암', 56: '분홍 네온', 57: '파란 네온', 58: '흑요석', 59: '트램펄린', 60: '구름', 61: '대리석' };
 for (const bb of BUILD_BLOCKS) BLOCK_NAMES[SH.B[bb.key]] = bb.name; // 건축 블록 이름
+for (const t of [1, 2]) { const F = SH.FLUID[t]; for (const b of [F.src, F.fall, ...F.flow]) BLOCK_NAMES[b] = t === 1 ? '물' : '흐르는 용암'; }
 const THEMES = ['village', 'desert', 'snow', 'factory', 'moon', 'jungle', 'city', 'arena'];
 const ED = { on: false, map: null, world: null, sky: null, name: '내 맵', theme: 'village', id: null, x: 32, y: 12, z: 60, yaw: 0, pitch: -0.3, slot: 0, pal: [1, 2, 3, 4, 5, 10, 6, 7, 47], undo: [], hit: null, hl: null, picker: false };
 const blockIconCache = {};
@@ -2620,12 +2645,13 @@ function openEditorStart() {
 function renderEdList() {
   const list = savedMaps(), box = $('edListBox'); if (!box) return;
   box.innerHTML = `<div class="ptitle small">내 맵 (${list.length}/${MAX_MAPS}) <span class="dim edsync">${SYNC_TXT[mapSyncState()]}</span></div>
-    <div class="edlist">${list.length ? list.map(e => `<div class="edrow" data-id="${esc(e.id)}"><span class="edn">${esc(e.name)}</span><span class="dim">${e.W}×${e.D} · ${new Date(e.updated).toLocaleDateString()}</span><button class="btn tiny green" data-act="edit">편집</button><button class="btn tiny yellow" data-act="play">플레이</button><button class="btn tiny purple" data-act="submit">출품</button><button class="btn tiny red" data-act="del">삭제</button>${subOf(e.id) ? `<span class="edsub s-${subOf(e.id).status}">${esc(statusText(subOf(e.id)))}</span>` : ''}</div>`).join('') : '<div class="dim">아직 만든 맵이 없어요</div>'}</div>`;
+    <div class="edlist">${list.length ? list.map(e => `<div class="edrow" data-id="${esc(e.id)}"><span class="edn">${esc(e.name)}</span><span class="dim">${e.W}×${e.D} · ${new Date(e.updated).toLocaleDateString()}</span><button class="btn tiny green" data-act="edit">편집</button><button class="btn tiny yellow" data-act="play">플레이</button><button class="btn tiny purple" data-act="submit">${subOf(e.id) ? '출품 갱신' : '출품'}</button>${subOf(e.id) ? '<button class="btn tiny" data-act="unsubmit">출품 취소</button>' : ''}<button class="btn tiny red" data-act="del">삭제</button>${subOf(e.id) ? '<span class="edsub s-approved">출품 중 · 모두 플레이 가능</span>' : ''}</div>`).join('') : '<div class="dim">아직 만든 맵이 없어요</div>'}</div>`;
   box.querySelectorAll('.edrow').forEach(row => {
     const ent = list.find(e => e.id === row.dataset.id);
     row.querySelector('[data-act="edit"]').onclick = () => { const m = SH.mapFromData(ent); if (!m) { toast('맵을 불러올 수 없어요'); return; } startEditor(m, ent); };
     row.querySelector('[data-act="play"]').onclick = () => { $('editorStart').classList.add('hidden'); playMyMap(ent); };
     row.querySelector('[data-act="submit"]').onclick = () => { const bad = mapProblem(ent); if (bad) { toast(bad); return; } submitMap(ent); };
+    const us = row.querySelector('[data-act="unsubmit"]'); if (us) us.onclick = () => unsubmitMap(ent);
     row.querySelector('[data-act="del"]').onclick = () => { if (!confirm(`'${ent.name}' 맵을 지울까요? (모든 기기에서 지워져요)`)) return; deleteMap(ent.id); };
   });
 }
@@ -2680,7 +2706,7 @@ function renderPalette() {
 function openBlockPicker() {
   ED.picker = true;
   if (document.pointerLockElement) document.exitPointerLock();
-  const ids = Object.keys(FACES).map(Number).filter(b => b !== SH.B.BEDROCK).sort((a, b) => a - b);
+  const ids = Object.keys(FACES).map(Number).filter(b => b !== SH.B.BEDROCK && !SH.isFlowing(b)).sort((a, b) => a - b); // 흐르는 물은 원천만 목록에
   const base = ids.filter(b => b < SH.CB_MIN); // 내가 만든 블록(200~)은 위쪽 '내 블록' 칸에
   $('bpGrid').innerHTML = myBlocksHtml() + markersHtml() + '<div class="bp-sec">기본 블록</div>' + base.map(b => `<div class="bpi" data-b="${b}" title="${BLOCK_NAMES[b] || b}"><img src="${blockIcon(b)}"><span>${BLOCK_NAMES[b] || b}</span></div>`).join('');
   bindMyBlocks($('bpGrid'));
@@ -2697,7 +2723,8 @@ function edSet(x, y, z, b, noUndo, remote) {
   const prev = m.get(x, y, z); if (prev === b) return false;
   m.set(x, y, z, b);
   if (!noUndo) { ED.undo.push([x, y, z, prev]); if (ED.undo.length > 400) ED.undo.shift(); }
-  rebuildBlocks(ED.world, [[x, y, z]]);
+  // 물·용암 근처를 고쳤으면 다시 흘려서 바뀐 칸까지 다시 그림 (같이 만들기도 각자 같은 계산)
+  rebuildBlocks(ED.world, [[x, y, z], ...SH.settleNear(m, x, y, z, b === 0 ? prev : b)]);
   if (!remote) coopSet(x, y, z, b);
   return true;
 }
@@ -2808,9 +2835,11 @@ initBlockEditor({
   },
 });
 initOfficial({
-  send: (m) => send(m), SH, toast, myName: () => myName(), playEnt: (ent) => playMyMap(ent), thumb: (ent) => myMapThumb(ent),
+  send: (m) => send(m), SH, toast, myName: () => myName(), thumbOf: (id) => mapThumb(id),
+  // 관리자 미리 플레이: 그 출품 맵으로 방 만들기
+  playMapId: (id) => send(Object.assign({ t: 'create', cfg: { map: id, mode: 'ffa', bots: 5, time: 300, kills: 25, diff: 'normal', rmode: false, rmap: false } }, joinInfo())),
   onSubs: () => { if (!$('editorStart').classList.contains('hidden')) renderEdList(); },
-  // 공식 맵이 추가/삭제되면 대기실 맵 카드 다시 만들기
+  // 출품 맵이 추가/수정/삭제되면 대기실 맵 카드 다시 만들기
   rebuildCards: (ids) => { for (const id of ids || []) delete thumbCache[id]; buildMapCards(); if (S.room && !S.inGame && S.room.state === 'wait') onRoom(S.room); },
 });
 initMarkers({ ED, scene, SH, send: (m) => send(m), isOnline, toast });
@@ -2841,14 +2870,14 @@ function editorFrame(dt) {
   ED.y = clamp(ED.y, 1.5, m.H + 14);
   camera.position.set(ED.x, ED.y, ED.z); camera.rotation.set(ED.pitch, ED.yaw, 0); camera.fov = CFG.fov; camera.updateProjectionMatrix();
   const dx = -Math.sin(ED.yaw) * Math.cos(ED.pitch), dy = Math.sin(ED.pitch), dz = -Math.cos(ED.yaw) * Math.cos(ED.pitch);
-  ED.hit = SH.raycast(m, ED.x, ED.y, ED.z, dx, dy, dz, 12);
+  ED.hit = SH.raycast(m, ED.x, ED.y, ED.z, dx, dy, dz, 12, (b) => b !== 0 && !SH.isFlowing(b)); // 물·용암 원천은 겨눌 수 있음 (흐르는 물은 통과)
   if (ED.hit && (ED.hit.x < 0 || ED.hit.z < 0 || ED.hit.x >= m.W || ED.hit.z >= m.D)) ED.hit = null;
   ED.hl.visible = !!ED.hit;
   if (ED.hit) ED.hl.position.set(ED.hit.x + 0.5, ED.hit.y + 0.5, ED.hit.z + 0.5);
   if (ED.sky) { ED.sky.position.set(ED.x, 0, ED.z); ED.sky.userData.clouds.position.x = (performance.now() / 1000 * 1.5) % 250; }
   $('clickToPlay').classList.toggle('hidden', S.locked || ED.picker || !$('edShare').classList.contains('hidden'));
   $('edPos').textContent = `x${Math.floor(ED.x)} y${Math.floor(ED.y)} z${Math.floor(ED.z)}${ED.hit ? ' · ' + (BLOCK_NAMES[m.get(ED.hit.x, ED.hit.y, ED.hit.z)] || '') : ''}`;
-  coopTick(dt);
+  coopTick(dt); tickFluidTex(performance.now() / 1000); // 에디터에서도 물·용암 출렁임
   updateParticles(dt);
   renderer.clear();
   renderer.render(scene, camera);
@@ -2862,10 +2891,10 @@ function refreshCustomCards(m) {
   if (md === 'spike') return;
   const saved = savedMaps();
   // 내 맵은 랜덤 카드 바로 뒤(맨 앞쪽)에 — 맵이 많아져도 스크롤 안 하고 바로 보이게
-  let at = box.querySelector('.mapcard.rnd');
+  let at = box.querySelector('.mapcard[data-map="random_s"]');
   const put = (d) => { box.insertBefore(d, at ? at.nextSibling : box.firstChild); at = d; };
   const add = (ent, sel) => {
-    const d = document.createElement('div'); d.className = 'mapcard custom' + (sel ? ' on' : ''); d.dataset.map = 'custom';
+    const d = document.createElement('div'); d.className = 'mapcard custom' + (sel ? ' on' : '') + (S.mapTab !== 's' ? ' hidden' : ''); d.dataset.map = 'custom'; d.dataset.tab = 's';
     const c = document.createElement('canvas'); c.width = 64; c.height = 64;
     const th = myMapThumb(ent); if (th) { const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(th, 0, 0, 64, 64); }
     d.appendChild(c); d.appendChild(document.createTextNode(ent.name));
@@ -2884,7 +2913,7 @@ function refreshCustomCards(m) {
   const isSel = (ent) => m.cfg.map === 'custom' && (m.customId ? m.customId === ent.id : m.customName === ent.name);
   for (const ent of saved) { const sel = !shownCurrent && isSel(ent); if (sel) shownCurrent = true; if (host || sel) add(ent, sel); }
   if (m.cfg.map === 'custom' && !shownCurrent) {
-    const d = document.createElement('div'); d.className = 'mapcard custom on'; d.dataset.map = 'custom';
+    const d = document.createElement('div'); d.className = 'mapcard custom on' + (S.mapTab !== 's' ? ' hidden' : ''); d.dataset.map = 'custom'; d.dataset.tab = 's';
     d.innerHTML = `<canvas width="64" height="64"></canvas>${esc(m.customName || '커스텀 맵')}<div class="mdesc">친구의 맵</div>`; put(d);
   }
 }
@@ -3503,7 +3532,7 @@ function frame(dt) {
 function loop() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
-  tickSkins(now / 1000); tickAuras(dt);
+  tickSkins(now / 1000); tickAuras(dt); tickFluidTex(now / 1000);
   if (S.inGame) updateGimmicks(dt);
   frame(dt);
   requestAnimationFrame(loop);

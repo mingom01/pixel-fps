@@ -842,3 +842,5 @@ body.abil #killBanner { bottom: 16%; }
 .adm-info .dim { font-size: 12px; }
 .adm-btns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .edrow { flex-wrap: wrap; }
+/* 대기실 맵 탭 (공식 맵 / 출품 맵) */
+.maptabs { margin: 0 0 6px; }

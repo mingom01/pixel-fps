@@ -166,6 +166,9 @@ def('marble', (px, r) => { noiseFill(px, r, 0xeae6e0, 0.04, 10); for (let i = 0;
 // 건축 블록 텍스처
 for (const bb of BUILD_BLOCKS) for (const [name, fn] of Object.entries(bb.draw)) if (TI[name] == null) def(name, (px, r) => fn(px, r, { T, shade, noiseFill }));
 
+// 물 (블록 목록 아이콘·파편 색용. 실제 화면엔 world.js 가 출렁이는 텍스처로 그림)
+def('water', (px, r) => { noiseFill(px, r, 0x3076dc, 0.08, 8); for (let y = 0; y < T; y += 4) for (let x = 0; x < T; x++) if ((x + y) % 7 < 3) px(x, y + 1, shade(0x8ac8ff, 1)); });
+
 // 블록 → [윗면, 옆면, 아랫면]
 export const FACES = {};
 const f3 = (b, t, s, bo) => { FACES[b] = [TI[t], TI[s || t], TI[bo || t]]; };
@@ -181,6 +184,8 @@ f3(B.LAVA, 'lava'); f3(B.JUMPPAD, 'jumppad', 'jumppad_side', 'basalt'); f3(B.POR
 f3(B.VOIDB, 'voidb'); f3(B.BASALT, 'basalt'); f3(B.NEON_P, 'neon_p'); f3(B.NEON_B, 'neon_b'); f3(B.OBSIDIAN, 'obsidian'); f3(B.TRAMPOLINE, 'trampoline', 'c_blue'); f3(B.CLOUD, 'cloud'); f3(B.MARBLE, 'marble');
 f3(B.PANEL, 'panel'); f3(B.WINDOW, 'panel', 'window'); f3(B.WOOL_R, 'wool_r'); f3(B.WOOL_B, 'wool_b'); f3(B.WOOL_W, 'wool_w'); f3(B.WOOL_Y, 'wool_y'); f3(B.GOLD, 'gold'); f3(B.GLOWC, 'glowc');
 for (const bb of BUILD_BLOCKS) f3(B[bb.key], ...bb.tex);
+// 흐르는 물·용암: 원천·흐름·떨어지는 줄기 모두 같은 그림 (블록 목록엔 원천만 나옴)
+for (const t of [1, 2]) { const F = window.SH.FLUID[t]; for (const b of [F.src, F.fall, ...F.flow]) f3(b, t === 1 ? 'water' : 'lava'); }
 export const GLOW = new Set([B.LAMP, B.GLOWC, B.LAVA, B.JUMPPAD, B.PORTAL, B.ELECTRIC, B.NEON_P, B.NEON_B]);
 // 블록 대표색 (파편용)
 export const BLOCK_COLOR = {};
