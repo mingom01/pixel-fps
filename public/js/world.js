@@ -2,7 +2,7 @@
 import * as THREE from '../lib/three.module.min.js';
 import { FACES, GLOW, ATLAS_COLS, ATLAS_ROWS } from './tex.js';
 import { waterTex, lavaTex } from './blocks/fluids.js';
-const { FL_TYPE, FL_LVL, FLUID } = window.SH;
+const { FL_TYPE, FL_LVL, FLUID, SEE, DECO, opaque } = window.SH;
 
 // 면: 법선, 4개 정점(블록 내 좌표), uv 방향, 밝기
 const DIRS = [
@@ -18,17 +18,17 @@ const AO = [0.5, 0.68, 0.84, 1];
 function buildChunkGeom(map, X0, Z0) {
   const pos = [], uv = [], col = [], idx = [];
   const tw = 1 / ATLAS_COLS, th = 1 / ATLAS_ROWS, eps = 0.0008;
-  const S = (x, y, z) => map.solid(x, y, z) ? 1 : 0; // 물·용암은 그림자(AO) 안 만듦
+  const S = (x, y, z) => opaque(map, x, y, z) ? 1 : 0; // 물·용암·유리·꽃은 그림자(AO) 안 만듦
   let vi = 0;
   for (let y = 0; y < map.H; y++) for (let z = Z0; z < Math.min(map.D, Z0 + CH); z++) for (let x = X0; x < Math.min(map.W, X0 + CH); x++) {
     const b = map.get(x, y, z);
-    if (!b || FL_TYPE[b]) continue; // 물·용암은 buildFluidGeom 에서
+    if (!b || FL_TYPE[b] || SEE[b] || DECO[b]) continue; // 물·용암은 buildFluidGeom, 유리·장식은 buildDecoGeom 에서
     const fc = FACES[b] || FACES[3];
     const glow = GLOW.has(b);
     for (let di = 0; di < 6; di++) {
       const d = DIRS[di];
       const nx = x + d.n[0], ny = y + d.n[1], nz = z + d.n[2];
-      if (map.solid(nx, ny, nz)) continue; // 옆이 물·용암이면 이 면도 보여야 함
+      if (opaque(map, nx, ny, nz)) continue; // 옆이 물·용암·유리·꽃이면 이 면도 보여야 함
       if (ny < 0) continue;
       // 바깥 경계(맵 밖)를 향한 면은 생략
       if (nx < 0 || nz < 0 || nx >= map.W || nz >= map.D) continue;
@@ -81,7 +81,7 @@ function buildFluidGeom(map, X0, Z0, t) {
     const h = fluidHeight(map, x, y, z, t);
     for (let di = 0; di < 6; di++) {
       const d = DIRS[di], nx = x + d.n[0], ny = y + d.n[1], nz = z + d.n[2];
-      if (map.solid(nx, ny, nz)) continue;
+      if (opaque(map, nx, ny, nz)) continue;
       if (nx < 0 || nz < 0 || nx >= map.W || nz >= map.D) continue;
       const same = FL_TYPE[map.get(nx, ny, nz)] === t;
       let y0 = 0;
@@ -108,6 +108,50 @@ function buildFluidGeom(map, X0, Z0, t) {
   g.computeBoundingSphere();
   return g;
 }
+// 유리·꽃·덩굴 (trans: 색유리만 / 아니면 투명 유리 + 장식)
+function buildDecoGeom(map, X0, Z0, trans) {
+  const pos = [], uv = [], col = [], idx = [];
+  const tw = 1 / ATLAS_COLS, th = 1 / ATLAS_ROWS, eps = 0.0008;
+  let vi = 0;
+  const quad = (pts, ti, l) => {
+    const u0 = (ti % ATLAS_COLS) * tw + eps, v1 = 1 - Math.floor(ti / ATLAS_COLS) * th - eps, u1 = u0 + tw - eps * 2, v0 = v1 - th + eps * 2;
+    const uvs = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    for (let i = 0; i < 4; i++) { pos.push(...pts[i]); uv.push(...uvs[i]); col.push(l, l, l); }
+    idx.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3); vi += 4;
+  };
+  for (let y = 0; y < map.H; y++) for (let z = Z0; z < Math.min(map.D, Z0 + CH); z++) for (let x = X0; x < Math.min(map.W, X0 + CH); x++) {
+    const b = map.get(x, y, z), see = SEE[b], deco = DECO[b];
+    if (trans ? see !== 2 : !(see === 1 || deco)) continue;
+    const fc = FACES[b] || FACES[3], glow = GLOW.has(b) ? 1.3 : 0.95;
+    if (see) { // 유리 상자: 옆이 막혔거나 같은 유리면 그 면은 안 그림
+      for (let di = 0; di < 6; di++) {
+        const d = DIRS[di], nx = x + d.n[0], ny = y + d.n[1], nz = z + d.n[2], nb = map.get(nx, ny, nz);
+        if (opaque(map, nx, ny, nz) || nb === b || (nx < 0 || nz < 0 || nx >= map.W || nz >= map.D)) continue;
+        quad(d.v.map(c => [x + c[0], y + c[1], z + c[2]]), fc[d.k], d.s);
+      }
+    } else if (deco === 4) { // 덩굴: 옆 벽에 딱 붙은 판 (벽이 없으면 십자)
+      let n = 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!opaque(map, x + dx, y, z + dz)) continue;
+        n++;
+        const o = 0.94, px = dx > 0 ? x + o : dx < 0 ? x + 1 - o : null, pz = dz > 0 ? z + o : dz < 0 ? z + 1 - o : null;
+        quad(px != null ? [[px, y, z], [px, y, z + 1], [px, y + 1, z + 1], [px, y + 1, z]] : [[x, y, pz], [x + 1, y, pz], [x + 1, y + 1, pz], [x, y + 1, pz]], fc[1], 0.9);
+      }
+      if (!n) { quad([[x + 0.15, y, z + 0.15], [x + 0.85, y, z + 0.85], [x + 0.85, y + 1, z + 0.85], [x + 0.15, y + 1, z + 0.15]], fc[1], 0.9); quad([[x + 0.85, y, z + 0.15], [x + 0.15, y, z + 0.85], [x + 0.15, y + 1, z + 0.85], [x + 0.85, y + 1, z + 0.15]], fc[1], 0.9); }
+    } else { // 꽃·풀·거미줄·횃불: 대각선 두 장 (십자)
+      quad([[x + 0.15, y, z + 0.15], [x + 0.85, y, z + 0.85], [x + 0.85, y + 1, z + 0.85], [x + 0.15, y + 1, z + 0.15]], fc[1], glow);
+      quad([[x + 0.85, y, z + 0.15], [x + 0.15, y, z + 0.85], [x + 0.15, y + 1, z + 0.85], [x + 0.85, y + 1, z + 0.15]], fc[1], glow);
+    }
+  }
+  if (!vi) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeBoundingSphere();
+  return g;
+}
 const WATER_MAT = new THREE.MeshBasicMaterial({ map: waterTex, vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide });
 const LAVA_MAT = new THREE.MeshBasicMaterial({ map: lavaTex, vertexColors: true });
 
@@ -116,7 +160,10 @@ const CH = 16;
 export function buildWorld(map, atlasTex) {
   const grp = new THREE.Group();
   const mat = new THREE.MeshBasicMaterial({ map: atlasTex, vertexColors: true });
-  grp.userData = { map, mat, chunks: new Map(), fluids: new Map() };
+  // cutMat: 투명 유리·꽃 (픽셀이 있거나 없거나), transMat: 색유리 (반투명)
+  const cutMat = new THREE.MeshBasicMaterial({ map: atlasTex, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide });
+  const transMat = new THREE.MeshBasicMaterial({ map: atlasTex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  grp.userData = { map, mat, cutMat, transMat, chunks: new Map(), fluids: new Map() };
   for (let cz = 0; cz < map.D; cz += CH) for (let cx = 0; cx < map.W; cx += CH) setChunk(grp, cx, cz);
   return grp;
 }
@@ -133,6 +180,12 @@ function setChunk(grp, cx, cz) {
     const g = buildFluidGeom(u.map, cx, cz, t); if (!g) continue;
     const fm = new THREE.Mesh(g, m); fm.matrixAutoUpdate = false; fm.renderOrder = t === 1 ? 2 : 0;
     fl.push(fm); grp.add(fm);
+  }
+  // 유리·장식 메시 (반투명 색유리는 물처럼 나중에 그림)
+  for (const [trans, m] of [[false, u.cutMat], [true, u.transMat]]) {
+    const g = buildDecoGeom(u.map, cx, cz, trans); if (!g) continue;
+    const dm = new THREE.Mesh(g, m); dm.matrixAutoUpdate = false; dm.renderOrder = trans ? 1 : 0;
+    fl.push(dm); grp.add(dm);
   }
   u.fluids.set(k, fl);
 }
