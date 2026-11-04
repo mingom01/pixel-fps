@@ -2,6 +2,7 @@
 import * as THREE from '../lib/three.module.min.js';
 import { CHAR_SKINS } from './skins/charSkins.js';
 import { BUILD_BLOCKS } from './blocks/buildBlocks.js';
+import { DECO_BLOCKS, DECO_GLOW } from './blocks/decoBlocks.js';
 const { B } = window.SH;
 
 const T = 16, COLS = 8;
@@ -14,7 +15,7 @@ function painter(img, W, ox, oy) {
   return function px(x, y, rgb) {
     if (x < 0 || y < 0 || x >= T || y >= T) return;
     const i = ((oy + y) * W + ox + x) * 4;
-    img.data[i] = rgb[0]; img.data[i + 1] = rgb[1]; img.data[i + 2] = rgb[2]; img.data[i + 3] = 255;
+    img.data[i] = rgb[0]; img.data[i + 1] = rgb[1]; img.data[i + 2] = rgb[2]; img.data[i + 3] = rgb.length > 3 ? rgb[3] : 255; // 4번째 값 = 투명도 (유리·꽃)
   };
 }
 // 노이즈 + 디더링으로 기본 채우기
@@ -164,6 +165,9 @@ def('cloud', (px, r) => { noiseFill(px, r, 0xf4f8ff, 0.05, 10); });
 def('marble', (px, r) => { noiseFill(px, r, 0xeae6e0, 0.04, 10); for (let i = 0; i < 3; i++) { let x = r() * 16, y = 0; for (; y < 16; y++) { x += (r() - 0.5) * 2; px(x | 0, y, shade(0xb8b0a8, 1)); } } });
 
 // 건축 블록 텍스처
+// 유리·꽃·장식 텍스처 (칠하지 않은 칸은 투명)
+const rgba = (c, a) => [...hex(c), a];
+for (const db of DECO_BLOCKS) for (const [name, fn] of Object.entries(db.draw)) if (TI[name] == null) def(name, (px, r) => fn(px, r, { T, shade, noiseFill, rgba }));
 for (const bb of BUILD_BLOCKS) for (const [name, fn] of Object.entries(bb.draw)) if (TI[name] == null) def(name, (px, r) => fn(px, r, { T, shade, noiseFill }));
 
 // 물 (블록 목록 아이콘·파편 색용. 실제 화면엔 world.js 가 출렁이는 텍스처로 그림)
@@ -184,9 +188,10 @@ f3(B.LAVA, 'lava'); f3(B.JUMPPAD, 'jumppad', 'jumppad_side', 'basalt'); f3(B.POR
 f3(B.VOIDB, 'voidb'); f3(B.BASALT, 'basalt'); f3(B.NEON_P, 'neon_p'); f3(B.NEON_B, 'neon_b'); f3(B.OBSIDIAN, 'obsidian'); f3(B.TRAMPOLINE, 'trampoline', 'c_blue'); f3(B.CLOUD, 'cloud'); f3(B.MARBLE, 'marble');
 f3(B.PANEL, 'panel'); f3(B.WINDOW, 'panel', 'window'); f3(B.WOOL_R, 'wool_r'); f3(B.WOOL_B, 'wool_b'); f3(B.WOOL_W, 'wool_w'); f3(B.WOOL_Y, 'wool_y'); f3(B.GOLD, 'gold'); f3(B.GLOWC, 'glowc');
 for (const bb of BUILD_BLOCKS) f3(B[bb.key], ...bb.tex);
+for (const db of DECO_BLOCKS) { f3(B[db.key], ...db.tex); if (db.top) f3(B[db.key + '_TOP'], db.top); }
 // 흐르는 물·용암: 원천·흐름·떨어지는 줄기 모두 같은 그림 (블록 목록엔 원천만 나옴)
 for (const t of [1, 2]) { const F = window.SH.FLUID[t]; for (const b of [F.src, F.fall, ...F.flow]) f3(b, t === 1 ? 'water' : 'lava'); }
-export const GLOW = new Set([B.LAMP, B.GLOWC, B.LAVA, B.JUMPPAD, B.PORTAL, B.ELECTRIC, B.NEON_P, B.NEON_B]);
+export const GLOW = new Set([B.LAMP, B.GLOWC, B.LAVA, B.JUMPPAD, B.PORTAL, B.ELECTRIC, B.NEON_P, B.NEON_B, ...DECO_GLOW.map(k => B[k])]);
 // 블록 대표색 (파편용)
 export const BLOCK_COLOR = {};
 
@@ -204,9 +209,10 @@ export function makeAtlas() {
   // 대표색
   for (const b in FACES) {
     const ti = FACES[b][0], ox = (ti % COLS) * T, oy = Math.floor(ti / COLS) * T;
-    let r = 0, g = 0, bb = 0;
-    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const i = ((oy + y) * W + ox + x) * 4; r += img.data[i]; g += img.data[i + 1]; bb += img.data[i + 2]; }
-    BLOCK_COLOR[b] = (Math.round(r / 256) << 16) | (Math.round(g / 256) << 8) | Math.round(bb / 256);
+    let r = 0, g = 0, bb = 0, n = 0;
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const i = ((oy + y) * W + ox + x) * 4; if (!img.data[i + 3]) continue; r += img.data[i]; g += img.data[i + 1]; bb += img.data[i + 2]; n++; } // 투명한 칸은 빼고
+    n = n || 1;
+    BLOCK_COLOR[b] = (Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(bb / n);
   }
   const tex = new THREE.CanvasTexture(cv);
   tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false;

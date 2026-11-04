@@ -844,3 +844,7 @@ body.abil #killBanner { bottom: 16%; }
 .edrow { flex-wrap: wrap; }
 /* 대기실 맵 탭 (공식 맵 / 출품 맵) */
 .maptabs { margin: 0 0 6px; }
+/* 물·용암 속 화면 (hud/underwater.js) */
+#underwater { position: fixed; inset: 0; pointer-events: none; z-index: 3; display: none; }
+#underwater.water { display: block; background: radial-gradient(ellipse at center, rgba(40, 110, 230, 0.16), rgba(10, 50, 150, 0.38)); }
+#underwater.lava { display: block; background: radial-gradient(ellipse at center, rgba(255, 140, 40, 0.45), rgba(180, 40, 0, 0.75)); }

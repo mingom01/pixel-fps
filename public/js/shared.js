@@ -22,6 +22,14 @@
     // 흐르는 물·용암 (에디터에서 마크처럼 흐름): 원천, 흐름 단계(멀어질수록 낮음), 떨어지는 줄기
     WATER: 92, WATER_1: 93, WATER_2: 94, WATER_3: 95, WATER_4: 96, WATER_5: 97, WATER_6: 98, WATER_7: 99, WATER_F: 100,
     LAVA_S: 101, LAVA_1: 102, LAVA_2: 103, LAVA_3: 104, LAVA_F: 105,
+    // 유리 (GLASS_C 투명, 나머지 색유리 12색)
+    GLASS_C: 106, GLASS_W: 107, GLASS_GY: 108, GLASS_K: 109, GLASS_R: 110, GLASS_O: 111, GLASS_Y: 112, GLASS_LM: 113, GLASS_G: 114, GLASS_LB: 115, GLASS_B: 116, GLASS_P: 117, GLASS_PK: 118,
+    // 한 칸 식물·꽃 (십자 모양, 통과)
+    P_GRASS: 119, P_FERN: 120, P_DANDELION: 121, P_POPPY: 122, P_ORCHID: 123, P_TULIP_R: 124, P_TULIP_P: 125, P_DAISY: 126, P_CORNFLOWER: 127, P_LILY: 128, P_MUSH_R: 129, P_MUSH_B: 130, P_DEADBUSH: 131, P_SAPLING: 132,
+    // 두 칸 꽃 (아래칸·윗칸 한 쌍)
+    T_GRASS: 133, T_GRASS_TOP: 134, T_SUNFLOWER: 135, T_SUNFLOWER_TOP: 136, T_ROSE: 137, T_ROSE_TOP: 138, T_LILAC: 139, T_LILAC_TOP: 140, T_PEONY: 141, T_PEONY_TOP: 142,
+    // 덩굴(벽에 붙음)·거미줄·횃불·랜턴 (통과)
+    VINE: 143, COBWEB: 144, TORCH: 145, LANTERN: 146,
   };
   // 밟으면 위험한 바닥 (봇 길찾기·스폰에서 제외)
   const HAZARD_FLOOR = new Set([B.LAVA, B.VOIDB, B.ELECTRIC]);
@@ -45,7 +53,7 @@
       if (y >= this.H) return 0;
       return this.d[(y * this.D + z) * this.W + x];
     }
-    solid(x, y, z) { const b = this.get(x, y, z); return b !== 0 && !FL_TYPE[b]; } // 물·용암은 통과
+    solid(x, y, z) { const b = this.get(x, y, z); return b !== 0 && !PASS[b]; } // 물·용암·꽃 같은 장식은 통과
     set(x, y, z, b) { if (this.inside(x, y, z)) this.d[(y * this.D + z) * this.W + x] = b; }
     fill(x0, y0, z0, x1, y1, z1, b) {
       if (x0 > x1) [x0, x1] = [x1, x0]; if (y0 > y1) [y0, y1] = [y1, y0]; if (z0 > z1) [z0, z1] = [z1, z0];
@@ -743,6 +751,18 @@
     2: { src: B.LAVA_S, max: 3, flow: [B.LAVA_1, B.LAVA_2, B.LAVA_3], fall: B.LAVA_F } };
   for (const t of [1, 2]) { const f = FLUID[t]; FL_TYPE[f.src] = t; FL_TYPE[f.fall] = t; FL_LVL[f.fall] = 8; f.flow.forEach((b, i) => { FL_TYPE[b] = t; FL_LVL[b] = i + 1; }); }
   const isFluid = (b) => FL_TYPE[b] !== 0;
+  /* ---------- 유리·장식 ---------- */
+  // SEE[b]: 1 투명 유리(테두리만) · 2 색유리(반투명) — 단단하지만 뒤가 보임 (옆 블록 면을 가리지 않음)
+  // DECO[b]: 1 십자 식물 · 2 두 칸 꽃 아래 · 3 두 칸 꽃 위 · 4 덩굴(옆 벽에 붙음) — 통과
+  const SEE = new Uint8Array(256), DECO = new Uint8Array(256), PASS = new Uint8Array(256);
+  SEE[B.GLASS_C] = 1;
+  for (const k of ['GLASS_W', 'GLASS_GY', 'GLASS_K', 'GLASS_R', 'GLASS_O', 'GLASS_Y', 'GLASS_LM', 'GLASS_G', 'GLASS_LB', 'GLASS_B', 'GLASS_P', 'GLASS_PK']) SEE[B[k]] = 2;
+  for (const k of ['P_GRASS', 'P_FERN', 'P_DANDELION', 'P_POPPY', 'P_ORCHID', 'P_TULIP_R', 'P_TULIP_P', 'P_DAISY', 'P_CORNFLOWER', 'P_LILY', 'P_MUSH_R', 'P_MUSH_B', 'P_DEADBUSH', 'P_SAPLING', 'COBWEB', 'TORCH', 'LANTERN']) DECO[B[k]] = 1;
+  for (const k of ['T_GRASS', 'T_SUNFLOWER', 'T_ROSE', 'T_LILAC', 'T_PEONY']) { DECO[B[k]] = 2; DECO[B[k + '_TOP']] = 3; }
+  DECO[B.VINE] = 4;
+  for (let b = 0; b < 256; b++) PASS[b] = FL_TYPE[b] || DECO[b] ? 1 : 0;
+  // 앞이 막혀서 옆 블록 면을 안 그려도 되는 블록 (단단하고 안 비침)
+  const opaque = (m, x, y, z) => { const b = m.get(x, y, z); return b !== 0 && !PASS[b] && !SEE[b]; };
   const isFlowing = (b) => FL_TYPE[b] !== 0 && FL_LVL[b] !== 0; // 원천이 아닌 물·용암 (원천에서 계산돼서 생김)
   // 맵 전체의 흐르는 물·용암을 원천에서 다시 계산 (마크처럼: 아래로 떨어질 수 있으면 떨어지고, 아니면 옆으로 한 칸씩 낮아지며 퍼짐)
   // 바뀐 칸 목록 [[x,y,z],...] 을 돌려줌. 같은 맵이면 누가 계산해도 결과가 같음 (같이 만들기에서 서버·모두가 각자 계산)
@@ -1222,5 +1242,5 @@
     return null;
   }
 
-  return { FL_TYPE, FL_LVL, FLUID, isFluid, isFlowing, settleFluids, settleNear, resizeMapH, blocksAbove, MK_MAX, cleanMk, registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
+  return { SEE, DECO, PASS, opaque, FL_TYPE, FL_LVL, FLUID, isFluid, isFlowing, settleFluids, settleNear, resizeMapH, blocksAbove, MK_MAX, cleanMk, registerOfficial, unregisterOfficial, MAP_MAX, CB_MIN, CB_MAX, CB_FACE_LEN, cleanCb, HEROES, ABIL, RANKED, MAPKIT, registerMap, floorAt, HAZARD_FLOOR, encodeMap, mapFromData, blankMap, GG_LADDER, ZB, BOSS, bossHitboxes, PICKUP, SPK, inRect, blast, MODES, TEAMS, DIFFS, targetOf, B, VMap, MAPS, getMap, G, P, rng, walkable, moveBody, bodyHits, raycast, rayBox, hitboxes, PART_MUL, WEAPONS, ITEMS, maxShotDamage, falloff, ECON, stepProjectile };
 });

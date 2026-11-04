@@ -21,6 +21,8 @@ import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
 import { showIncome } from './hud/income.js';
 import { BUILD_BLOCKS } from './blocks/buildBlocks.js';
 import { tickFluidTex } from './blocks/fluids.js';
+import { DECO_BLOCKS } from './blocks/decoBlocks.js';
+import { updateUnderwater } from './hud/underwater.js';
 import { initBlockStore, blocksLogin, onServerBlocks } from './blocks/blockStore.js';
 import { initBlockEditor, blockEditorOpen } from './blocks/blockEditor.js';
 import { initMyBlocks, installCb, myBlocksHtml, bindMyBlocks, onEdCb, usedCb } from './editor/myBlocks.js';
@@ -2586,6 +2588,7 @@ function updateSelfEmoteCam(dt) {
 const BLOCK_NAMES = { 1: '잔디', 2: '흙', 3: '돌', 4: '조약돌', 5: '나무판자', 6: '통나무', 7: '나뭇잎', 8: '모래', 9: '사암', 10: '벽돌', 11: '콘크리트', 12: '철판', 13: '상자', 14: '지붕', 15: '기반암', 16: '아스팔트', 17: '자갈길', 18: '건초', 19: '선인장', 20: '빨간 컨테이너', 21: '파란 컨테이너', 22: '초록 컨테이너', 23: '무늬 사암', 24: '조명', 25: '회벽', 26: '철망', 27: '경고 줄무늬', 28: '짙은 나무', 29: '노란 컨테이너', 30: '눈', 31: '얼음', 32: '전나무 잎', 33: '이끼 돌', 34: '석재 벽돌', 35: '석탄 광석', 36: '금 광석', 37: '다이아 광석', 38: '월면토', 39: '달 바위', 40: '패널', 41: '유리창', 42: '빨간 양털', 43: '파란 양털', 44: '흰 양털', 45: '노란 양털', 46: '금 블록', 47: '네온', 48: '용암 바닥', 49: '점프대', 50: '포털', 51: '컨베이어', 52: '모래늪', 53: '전기 바닥', 54: '공허', 55: '현무암', 56: '분홍 네온', 57: '파란 네온', 58: '흑요석', 59: '트램펄린', 60: '구름', 61: '대리석' };
 for (const bb of BUILD_BLOCKS) BLOCK_NAMES[SH.B[bb.key]] = bb.name; // 건축 블록 이름
 for (const t of [1, 2]) { const F = SH.FLUID[t]; for (const b of [F.src, F.fall, ...F.flow]) BLOCK_NAMES[b] = t === 1 ? '물' : '흐르는 용암'; }
+for (const db of DECO_BLOCKS) { BLOCK_NAMES[SH.B[db.key]] = db.name; if (db.top) BLOCK_NAMES[SH.B[db.key + '_TOP']] = db.name; } // 유리·꽃·장식
 const THEMES = ['village', 'desert', 'snow', 'factory', 'moon', 'jungle', 'city', 'arena'];
 const ED = { on: false, map: null, world: null, sky: null, name: '내 맵', theme: 'village', id: null, x: 32, y: 12, z: 60, yaw: 0, pitch: -0.3, slot: 0, pal: [1, 2, 3, 4, 5, 10, 6, 7, 47], undo: [], hit: null, hl: null, picker: false };
 const blockIconCache = {};
@@ -2706,7 +2709,7 @@ function renderPalette() {
 function openBlockPicker() {
   ED.picker = true;
   if (document.pointerLockElement) document.exitPointerLock();
-  const ids = Object.keys(FACES).map(Number).filter(b => b !== SH.B.BEDROCK && !SH.isFlowing(b)).sort((a, b) => a - b); // 흐르는 물은 원천만 목록에
+  const ids = Object.keys(FACES).map(Number).filter(b => b !== SH.B.BEDROCK && !SH.isFlowing(b) && SH.DECO[b] !== 3).sort((a, b) => a - b); // 흐르는 물은 원천만 목록에
   const base = ids.filter(b => b < SH.CB_MIN); // 내가 만든 블록(200~)은 위쪽 '내 블록' 칸에
   $('bpGrid').innerHTML = myBlocksHtml() + markersHtml() + '<div class="bp-sec">기본 블록</div>' + base.map(b => `<div class="bpi" data-b="${b}" title="${BLOCK_NAMES[b] || b}"><img src="${blockIcon(b)}"><span>${BLOCK_NAMES[b] || b}</span></div>`).join('');
   bindMyBlocks($('bpGrid'));
@@ -2731,13 +2734,22 @@ function edSet(x, y, z, b, noUndo, remote) {
 function edRemove() {
   // 표시를 들고 있으면 블록 대신 근처 표시를 지움
   if (isMarker(ED.pal[ED.slot])) { const h = ED.hit; if (h && (removeMarkerNear(h.x + h.nx, h.y + h.ny, h.z + h.nz) || removeMarkerNear(h.x, h.y + 1, h.z))) A.sfxStep(1); return; }
-  const h = ED.hit; if (h && edSet(h.x, h.y, h.z, 0)) { A.sfxStep(1); for (let i = 0; i < 5; i++) spawnParticle(h.x + 0.5, h.y + 0.5, h.z + 0.5, (Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3, BLOCK_COLOR[ED.map.get(h.x, h.y, h.z)] || 0x999999, 0.5, 0.1, 10); } }
+  const h = ED.hit;
+  // 두 칸 꽃은 아래·위 같이 지움
+  if (h) { const hb = ED.map.get(h.x, h.y, h.z); if (SH.DECO[hb] === 2 && SH.DECO[ED.map.get(h.x, h.y + 1, h.z)] === 3) edSet(h.x, h.y + 1, h.z, 0); else if (SH.DECO[hb] === 3 && SH.DECO[ED.map.get(h.x, h.y - 1, h.z)] === 2) edSet(h.x, h.y - 1, h.z, 0); }
+  if (h && edSet(h.x, h.y, h.z, 0)) { A.sfxStep(1); for (let i = 0; i < 5; i++) spawnParticle(h.x + 0.5, h.y + 0.5, h.z + 0.5, (Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3, BLOCK_COLOR[ED.map.get(h.x, h.y, h.z)] || 0x999999, 0.5, 0.1, 10); } }
 function edPlace() {
   const h = ED.hit; if (!h) return;
   const x = h.x + h.nx, y = h.y + h.ny, z = h.z + h.nz;
   if (Math.floor(ED.x) === x && Math.floor(ED.z) === z && (Math.floor(ED.y) === y || Math.floor(ED.y - 1) === y)) return;
   if (isMarker(ED.pal[ED.slot])) { if (placeMarker(ED.pal[ED.slot], x, y, z)) A.sfxPick(); return; }
-  if (edSet(x, y, z, ED.pal[ED.slot])) A.sfxPick();
+  const b = ED.pal[ED.slot];
+  if (SH.DECO[b] === 2) { // 두 칸 꽃: 위 칸이 비어 있어야 하고, 아래·위 한 쌍으로 놓음
+    if (ED.map.get(x, y + 1, z) !== 0 || y + 1 >= ED.map.H) { toast('두 칸 꽃은 위로 한 칸이 비어 있어야 해요'); return; }
+    if (edSet(x, y, z, b)) { edSet(x, y + 1, z, b + 1); A.sfxPick(); }
+    return;
+  }
+  if (edSet(x, y, z, b)) A.sfxPick();
 }
 function edPick() { const h = ED.hit; if (h) { const b = ED.map.get(h.x, h.y, h.z); if (b && b !== SH.B.BEDROCK) { ED.pal[ED.slot] = b; renderPalette(); } } }
 function edUndo() { const u = ED.undo.pop(); if (u) edSet(u[0], u[1], u[2], u[3], true); }
@@ -2879,6 +2891,7 @@ function editorFrame(dt) {
   $('edPos').textContent = `x${Math.floor(ED.x)} y${Math.floor(ED.y)} z${Math.floor(ED.z)}${ED.hit ? ' · ' + (BLOCK_NAMES[m.get(ED.hit.x, ED.hit.y, ED.hit.z)] || '') : ''}`;
   coopTick(dt); tickFluidTex(performance.now() / 1000); // 에디터에서도 물·용암 출렁임
   updateParticles(dt);
+  updateUnderwater(scene, ED.map, camera.position);
   renderer.clear();
   renderer.render(scene, camera);
 }
@@ -3510,12 +3523,14 @@ function frame(dt) {
     updateViewModel(dt);
     updateHud(dt);
     netSend(dt);
+    updateUnderwater(scene, S.map, camera.position); // 물속이면 파란빛
     renderer.clear();
     renderer.render(scene, camera);
     renderer.clearDepth();
     if ((me.alive && !S.selfEmote && !S.replay) || (S.kc && S.kc.active) || (S.replay && RP.view === 1 && RP.povOk)) renderer.render(viewScene, viewCam);
   } else {
     if (ED.on) { editorFrame(dt); return; }
+    updateUnderwater(scene, null); // 메뉴·대기실에선 물속 효과 끔
     renderer.clear();
     if (!$('menu').classList.contains('hidden') && (pv.ch || pv.gun)) {
       if (pv.ch) {
