@@ -658,12 +658,12 @@
   // maps/*.js 에서 새 맵을 등록 (빌더 도구 공유)
   const MAPKIT = { VMap, B, G, rng, ground, border, house, roofStairs, stairs, tree, scatter, crateStack, pineTree, bigTree, mound };
   function registerMap(id, def) { MAPS[id] = def; }
-  // 공식 맵 (플레이어가 만들어 출품 → 관리자 승인): 'off_<id>' 로 등록돼서 기본 맵처럼 맵 목록·랜덤 맵에 나옴
+  // 출품 맵 (플레이어가 만들어 출품하면 바로 공개): 'off_<id>' 로 등록돼서 대기실 '출품 맵' 탭·랜덤 맵에 나옴
   // o = { id, name, theme, by, at, W, H, D, data, cb }. 하늘·안개 같은 겉모습만 테마 맵에서 빌려 옴 (기믹·중력은 X)
   const OFF_VIS = ['sky', 'fog', 'sun', 'stars', 'noClouds', 'fogNear', 'fogFar', 'snow'];
   function registerOfficial(o) {
     const th = MAPS[o.theme] && (MAPS[o.theme].kind || 'normal') === 'normal' && !MAPS[o.theme].official ? MAPS[o.theme] : MAPS.village;
-    const def = { name: String(o.name || '공식 맵').slice(0, 16), official: { by: o.by || '', at: o.at || 0 }, custom: true, desc: `공식 · ${String(o.by || '').slice(0, 10)} 제작`, build: () => mapFromData(o) };
+    const def = { name: String(o.name || '공식 맵').slice(0, 16), official: { by: o.by || '', at: o.at || 0 }, custom: true, desc: `출품 · ${String(o.by || '').slice(0, 10)} 제작`, build: () => mapFromData(o) };
     for (const k of OFF_VIS) if (th[k] !== undefined) def[k] = th[k];
     const id = 'off_' + o.id;
     MAPS[id] = def; delete mapCache[id];

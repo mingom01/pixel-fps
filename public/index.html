@@ -49,7 +49,7 @@
         <div class="row"><button id="hubBtn" class="btn green grow">미션 · 업적 <span id="missionDot"></span></button><button id="rankBtn" class="btn blue grow">전적 · 랭킹</button></div>
         <button id="settingsBtn" class="btn wide">설정 <small>· 조준선 · 조작키 · 감도</small></button>
         <button id="editorBtn" class="btn wide">맵 에디터 <small>· 블록으로 나만의 맵 만들기</small></button>
-        <button id="adminBtn" class="btn wide purple hidden">맵 심사 <small>· 관리자: 출품된 맵 승인</small></button>
+        <button id="adminBtn" class="btn wide purple hidden">출품 맵 관리 <small>· 관리자: 문제 있는 맵 내리기</small></button>
         <button id="practiceBtn" class="btn blue wide">연습장 <small>· 사격장 과녁 · 허수아비 · 모든 총 무료</small></button>
         <div class="row">
           <button id="createBtn" class="btn green">방 만들기</button>
@@ -99,6 +99,7 @@
       <div class="modegrid" id="modeSeg"><button data-v="random" class="rnd">? 랜덤</button><button data-v="ffa">개인전</button><button data-v="tdm">팀 데스매치</button><button data-v="ctf">깃발 뺏기</button><button data-v="spike">스파이크</button><button data-v="zombie">좀비 감염</button><button data-v="gungame">건게임</button><button data-v="br">배틀로얄</button><button data-v="boss">보스전</button><button data-v="ability">능력전</button></div>
       <div id="modeDesc" class="dim modedesc"></div>
       <div class="ptitle small">맵 <span id="mapCount" class="dim"></span></div>
+      <div class="seg maptabs" id="mapTabs"><button data-tab="o">공식 맵</button><button data-tab="s">출품 맵</button></div>
       <div class="mapscroll"><div id="mapCards" class="mapcards"></div></div>
       <div class="cfgrow"><span>봇 수</span><div class="stepper"><button class="btn tiny" data-bots="-1">-</button><b id="botsVal">5</b><button class="btn tiny" data-bots="1">+</button></div></div>
       <div class="cfgrow"><span>봇 난이도</span><div class="seg" id="diffSeg"><button data-v="easy">쉬움</button><button data-v="normal">보통</button><button data-v="hard">어려움</button></div></div>
