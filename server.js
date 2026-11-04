@@ -1063,6 +1063,15 @@ function rollLoot() {
   for (const [k, w] of LOOT) { if ((x -= w) < 0) return k; }
   return 'money';
 }
+// 흐르는 용암 안에 있으면 초당 30 피해 (예전 '용암 바닥' 블록은 기믹 쪽에서 따로)
+function fluidTick(r, dt) {
+  const m = r.map, LAVA = 2;
+  for (const e of r.ents.values()) {
+    if (!e.alive || e.boss) continue;
+    const fx = Math.floor(e.x), fz = Math.floor(e.z);
+    if (SH.FL_TYPE[m.get(fx, Math.floor(e.y + 0.3), fz)] === LAVA || SH.FL_TYPE[m.get(fx, Math.floor(e.y + 1.2), fz)] === LAVA) damage(r, e, null, 30 * dt, 'lava', 'body', true);
+  }
+}
 function crateTick(r, now) {
   if (isSpike(r) || isPractice(r) || isGG(r)) return;
   if (now >= r.nextCrate && r.crates.filter(c => !c.opened).length < 2) {
@@ -1797,6 +1806,8 @@ setInterval(() => {
     strikeTick(r, now);
     if (r.state !== 'play') continue;
     GIM.tick(r, now, dt);
+    if (r.state !== 'play') continue;
+    fluidTick(r, dt);
     if (r.state !== 'play') continue;
     if (isSpike(r)) { spikeTick(r, now); if (r.state !== 'play') continue; }
     crateTick(r, now);

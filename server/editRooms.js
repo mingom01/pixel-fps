@@ -65,7 +65,9 @@ module.exports = function makeEditRooms(deps) {
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, b = m.b | 0, map = s.map;
     if (x < 0 || z < 0 || x >= map.W || z >= map.D || y < 1 || y >= map.H || b < 0 || (b > MAXB && !(map.cb && map.cb[b])) || b === SH.B.BEDROCK) return;
     if (map.get(x, y, z) === b) return;
+    const prev = map.get(x, y, z);
     map.set(x, y, z, b);
+    SH.settleNear(map, x, y, z, b === 0 ? prev : b); // 물·용암 다시 흘리기 (클라들도 같은 계산)
     send(s, { t: 'edset', x, y, z, b, by: c.id });
   }
 

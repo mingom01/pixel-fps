@@ -20,6 +20,7 @@ import { initSkinShop, renderSkinShop } from './ui/skinShop.js';
 import { initExtrasShop, renderExtras } from './ui/extrasShop.js';
 import { showIncome } from './hud/income.js';
 import { BUILD_BLOCKS } from './blocks/buildBlocks.js';
+import { tickFluidTex } from './blocks/fluids.js';
 import { initBlockStore, blocksLogin, onServerBlocks } from './blocks/blockStore.js';
 import { initBlockEditor, blockEditorOpen } from './blocks/blockEditor.js';
 import { initMyBlocks, installCb, myBlocksHtml, bindMyBlocks, onEdCb, usedCb } from './editor/myBlocks.js';
@@ -371,7 +372,8 @@ function buildMapCards() {
     const c = document.createElement('canvas'); c.width = 64; c.height = 64; const cx2 = c.getContext('2d'); cx2.imageSmoothingEnabled = false; cx2.drawImage(mapThumb(id), 0, 0, 64, 64);
     d.appendChild(c); d.appendChild(document.createTextNode(SH.MAPS[id].name));
     if (SH.MAPS[id].desc) { const sm = document.createElement('div'); sm.className = 'mdesc'; sm.textContent = SH.MAPS[id].desc; d.appendChild(sm); }
-    d.onclick = () => sendCfg({ map: id, rmap: false });
+    // 랜덤 모드였으면 꺼짐 (켜져 있으면 시작할 때 다른 맵으로 바뀌므로), 모드는 개인전으로
+    d.onclick = () => sendCfg(S.room && S.room.cfg.rmode ? { map: id, rmap: false, rmode: false, mode: 'ffa' } : { map: id, rmap: false });
     box.appendChild(d);
   }
 }
@@ -446,16 +448,16 @@ function onRoom(m) {
   // 탭: 방에 처음 들어왔을 때는 지금 고른 맵이 있는 탭으로
   const isSubMap = (id) => id === 'custom' || !!(SH.MAPS[id] && SH.MAPS[id].official);
   if (!wasIn || !S.mapTab) S.mapTab = (rmap && !rmode ? m.cfg.rpool === 's' : isSubMap(m.cfg.map)) ? 's' : 'o';
-  if (md === 'spike') S.mapTab = 'o'; // 스파이크 맵은 공식 맵에만 있음
-  $('mapTabs').classList.toggle('hidden', rmode || md === 'spike');
+  if (md === 'spike' && !rmode) S.mapTab = 'o'; // 스파이크 맵은 공식 맵에만 있음
+  $('mapTabs').classList.toggle('hidden', md === 'spike' && !rmode);
   $('mapTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.mapTab));
   let shown = 0;
   document.querySelectorAll('.mapcard:not(.custom)').forEach(c => {
     const id = c.dataset.map, rnd = id === 'random' || id === 'random_s', k = rnd ? 'normal' : SH.MAPS[id].kind || 'normal';
-    const hide = rmode ? id !== 'random' : c.dataset.tab !== S.mapTab || (!rnd && (md === 'spike' ? k !== 'spike' : k !== 'normal'));
+    const hide = c.dataset.tab !== S.mapTab || (!rnd && (md === 'spike' && !rmode ? k !== 'spike' : k !== 'normal'));
     c.classList.toggle('hidden', hide); if (!hide && !rnd) shown++;
   });
-  $('mapCount').textContent = rmode ? '(랜덤 모드: 공식 맵·출품 맵 중 무작위)' : S.mapTab === 's' ? `(출품 ${shown}개)` : `(${shown}개)`;
+  $('mapCount').textContent = rmode ? '(랜덤 모드: 공식·출품 맵 중 무작위 · 맵을 고르면 랜덤 모드가 꺼져요)' : S.mapTab === 's' ? `(출품 ${shown}개)` : `(${shown}개)`;
   refreshCustomCards(m);
   if (S.afterRoom && m.host === S.myId && m.state === 'wait') { const f = S.afterRoom; S.afterRoom = null; f(m); }
   $('cfgTime').classList.toggle('hidden', md === 'spike' || md === 'br'); $('cfgKill').classList.toggle('hidden', ['spike', 'zombie', 'br', 'boss', 'gungame'].includes(md));
@@ -480,8 +482,9 @@ function onRoom(m) {
     $('modeDesc').innerHTML = `<b class="rk-mode">경쟁전 · ${SH.MODES[md].name} · ${(SH.MAPS[m.cfg.map] || {}).name || ''}</b><br>친구를 기다렸다가 방장이 시작해요 (시작하면 더 못 들어와요). 이기면 점수가 오르고 지면 깎여요. 킬뎃이 좋을수록·연승할수록 더 오르고, 못할수록·연패할수록 더 깎여요. 중간에 나가면 -15점. ${MODE_DESC[md] || ''}`;
   }
   $('botsVal').textContent = m.cfg.bots;
-  const rndOn = rmode ? 'random' : m.cfg.rpool === 's' ? 'random_s' : 'random';
-  document.querySelectorAll('.mapcard:not(.custom)').forEach(c => c.classList.toggle('on', rmap ? c.dataset.map === rndOn : c.dataset.map === m.cfg.map));
+  // 랜덤 모드면 두 탭의 랜덤 카드 모두 켜짐 (공식+출품 섞어서), 랜덤 맵이면 고른 탭의 랜덤 카드
+  const rndOn = (id) => rmode ? id === 'random' || id === 'random_s' : id === (m.cfg.rpool === 's' ? 'random_s' : 'random');
+  document.querySelectorAll('.mapcard:not(.custom)').forEach(c => c.classList.toggle('on', rmap ? rndOn(c.dataset.map) : c.dataset.map === m.cfg.map));
   $('timeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === m.cfg.time));
   $('killSeg').querySelectorAll('button').forEach(b => { const v = Number(b.dataset.v); b.textContent = SH.targetOf({ mode: md, kills: v }); b.classList.toggle('on', v === m.cfg.kills); });
   const pl = (p) => `<div class="pitem ${p.team >= 0 ? 't' + p.team : ''}"><span class="sw" style="background:${hexs(PCOLORS[p.color])}"></span>${p.id === m.host ? '<span class="crown">★</span>' : ''}<span class="lv">Lv.${p.lv || 1}</span>${p.rp != null && m.cfg.ranked ? rankBadge(p.rp, true) : ''}${esc(p.name)}${md === 'ability' && p.hero && SH.HEROES[p.hero] ? ` <span class="herotag" style="color:${SH.HEROES[p.hero].color}">${SH.HEROES[p.hero].name}</span>` : ''} ${titleHtml(p.title)}${p.id === S.myId ? ' <span class="dim">(나)</span>' : ''}<span class="tag">${p.bot ? '봇' : ''}</span>${p.bot && host ? `<button class="kick" data-kick="${p.id}">빼기</button>` : ''}</div>`;
@@ -989,6 +992,7 @@ function startSlide() {
   A.sfxLand();
 }
 function jump() {
+  if (me.swim && !me.ground) return; // 물속에선 점프 키를 누르고 있으면 헤엄쳐 올라감 (updateMe)
   if (me.ground) { me.vy = P.JUMP; me.jumps = 1; me.ground = false; if (me.sliding) { me.sliding = false; } A.sfxJump(); }
   else if (me.jumps < 2) {
     me.vy = P.JUMP2; me.jumps = 2; A.sfxJump();
@@ -1016,7 +1020,7 @@ function updateMe(dt) {
   const wish = frozen ? null : wishDir();
   if (frozen && me.ground) { me.vx = 0; me.vz = 0; me.sliding = false; }
   const sprint = isSprinting() && !WS.reloading;
-  let speed = (me.crouch ? P.CROUCH : sprint ? P.RUN : P.WALK) * (W.speed || 1) * (WS.ads > 0.5 ? 0.62 : 1) * (me.perks.includes('perk_speed') ? 1.12 : 1) * (me.zombie ? SH.ZB.SPEED : 1) * (serverNow() < (me.haste || 0) ? 1.35 : 1);
+  let speed = (me.crouch ? P.CROUCH : sprint ? P.RUN : P.WALK) * (W.speed || 1) * (WS.ads > 0.5 ? 0.62 : 1) * (me.perks.includes('perk_speed') ? 1.12 : 1) * (me.zombie ? SH.ZB.SPEED : 1) * (serverNow() < (me.haste || 0) ? 1.35 : 1) * (me.swim === 1 ? 0.65 : me.swim === 2 ? 0.5 : 1); // 물·용암 안에선 느리게
   if (S.abil.dashT > 0) S.abil.dashT -= dt; // 돌진 중엔 감속 안 함
   if (me.sliding) {
     const f = 1 - dt * 1.4; me.vx *= f; me.vz *= f;
@@ -1030,7 +1034,16 @@ function updateMe(dt) {
       if (dl <= acc) { me.vx = tx; me.vz = tz; } else { me.vx += dx / dl * acc; me.vz += dz / dl * acc; }
     }
   }
-  me.vy -= P.GRAV * dt * (S.map.grav || 1);
+  // 물·용암 안: 천천히 가라앉고 점프 키로 위로 헤엄, 옆으로도 느려짐 (용암 피해는 서버가)
+  const fl = Math.max(SH.FL_TYPE[S.map.get(Math.floor(me.x), Math.floor(me.y + 0.3), Math.floor(me.z))], SH.FL_TYPE[S.map.get(Math.floor(me.x), Math.floor(me.y + 1.2), Math.floor(me.z))]);
+  if (fl) {
+    const k = fl === 1 ? 0.62 : 0.45;
+    if (!me.ground) { me.vx *= Math.pow(k, dt * 3); me.vz *= Math.pow(k, dt * 3); }
+    me.vy -= P.GRAV * dt * 0.25;
+    if (keys.Space) me.vy = Math.min(me.vy + 26 * dt, fl === 1 ? 3.6 : 2.4);
+    me.vy = Math.max(me.vy, fl === 1 ? -2.6 : -1.8);
+    me.jumps = 0; me.swim = fl;
+  } else { me.vy -= P.GRAV * dt * (S.map.grav || 1); me.swim = 0; }
   const wasGround = me.ground, vyBefore = me.vy;
   SH.moveBody(S.map, me, dt);
   afterMove(me);
@@ -2570,8 +2583,9 @@ function updateSelfEmoteCam(dt) {
 }
 
 /* ================= 맵 에디터 ================= */
-const BLOCK_NAMES = { 1: '잔디', 2: '흙', 3: '돌', 4: '조약돌', 5: '나무판자', 6: '통나무', 7: '나뭇잎', 8: '모래', 9: '사암', 10: '벽돌', 11: '콘크리트', 12: '철판', 13: '상자', 14: '지붕', 15: '기반암', 16: '아스팔트', 17: '자갈길', 18: '건초', 19: '선인장', 20: '빨간 컨테이너', 21: '파란 컨테이너', 22: '초록 컨테이너', 23: '무늬 사암', 24: '조명', 25: '회벽', 26: '철망', 27: '경고 줄무늬', 28: '짙은 나무', 29: '노란 컨테이너', 30: '눈', 31: '얼음', 32: '전나무 잎', 33: '이끼 돌', 34: '석재 벽돌', 35: '석탄 광석', 36: '금 광석', 37: '다이아 광석', 38: '월면토', 39: '달 바위', 40: '패널', 41: '유리창', 42: '빨간 양털', 43: '파란 양털', 44: '흰 양털', 45: '노란 양털', 46: '금 블록', 47: '네온', 48: '용암', 49: '점프대', 50: '포털', 51: '컨베이어', 52: '모래늪', 53: '전기 바닥', 54: '공허', 55: '현무암', 56: '분홍 네온', 57: '파란 네온', 58: '흑요석', 59: '트램펄린', 60: '구름', 61: '대리석' };
+const BLOCK_NAMES = { 1: '잔디', 2: '흙', 3: '돌', 4: '조약돌', 5: '나무판자', 6: '통나무', 7: '나뭇잎', 8: '모래', 9: '사암', 10: '벽돌', 11: '콘크리트', 12: '철판', 13: '상자', 14: '지붕', 15: '기반암', 16: '아스팔트', 17: '자갈길', 18: '건초', 19: '선인장', 20: '빨간 컨테이너', 21: '파란 컨테이너', 22: '초록 컨테이너', 23: '무늬 사암', 24: '조명', 25: '회벽', 26: '철망', 27: '경고 줄무늬', 28: '짙은 나무', 29: '노란 컨테이너', 30: '눈', 31: '얼음', 32: '전나무 잎', 33: '이끼 돌', 34: '석재 벽돌', 35: '석탄 광석', 36: '금 광석', 37: '다이아 광석', 38: '월면토', 39: '달 바위', 40: '패널', 41: '유리창', 42: '빨간 양털', 43: '파란 양털', 44: '흰 양털', 45: '노란 양털', 46: '금 블록', 47: '네온', 48: '용암 바닥', 49: '점프대', 50: '포털', 51: '컨베이어', 52: '모래늪', 53: '전기 바닥', 54: '공허', 55: '현무암', 56: '분홍 네온', 57: '파란 네온', 58: '흑요석', 59: '트램펄린', 60: '구름', 61: '대리석' };
 for (const bb of BUILD_BLOCKS) BLOCK_NAMES[SH.B[bb.key]] = bb.name; // 건축 블록 이름
+for (const t of [1, 2]) { const F = SH.FLUID[t]; for (const b of [F.src, F.fall, ...F.flow]) BLOCK_NAMES[b] = t === 1 ? '물' : '흐르는 용암'; }
 const THEMES = ['village', 'desert', 'snow', 'factory', 'moon', 'jungle', 'city', 'arena'];
 const ED = { on: false, map: null, world: null, sky: null, name: '내 맵', theme: 'village', id: null, x: 32, y: 12, z: 60, yaw: 0, pitch: -0.3, slot: 0, pal: [1, 2, 3, 4, 5, 10, 6, 7, 47], undo: [], hit: null, hl: null, picker: false };
 const blockIconCache = {};
@@ -2692,7 +2706,7 @@ function renderPalette() {
 function openBlockPicker() {
   ED.picker = true;
   if (document.pointerLockElement) document.exitPointerLock();
-  const ids = Object.keys(FACES).map(Number).filter(b => b !== SH.B.BEDROCK).sort((a, b) => a - b);
+  const ids = Object.keys(FACES).map(Number).filter(b => b !== SH.B.BEDROCK && !SH.isFlowing(b)).sort((a, b) => a - b); // 흐르는 물은 원천만 목록에
   const base = ids.filter(b => b < SH.CB_MIN); // 내가 만든 블록(200~)은 위쪽 '내 블록' 칸에
   $('bpGrid').innerHTML = myBlocksHtml() + markersHtml() + '<div class="bp-sec">기본 블록</div>' + base.map(b => `<div class="bpi" data-b="${b}" title="${BLOCK_NAMES[b] || b}"><img src="${blockIcon(b)}"><span>${BLOCK_NAMES[b] || b}</span></div>`).join('');
   bindMyBlocks($('bpGrid'));
@@ -2709,7 +2723,8 @@ function edSet(x, y, z, b, noUndo, remote) {
   const prev = m.get(x, y, z); if (prev === b) return false;
   m.set(x, y, z, b);
   if (!noUndo) { ED.undo.push([x, y, z, prev]); if (ED.undo.length > 400) ED.undo.shift(); }
-  rebuildBlocks(ED.world, [[x, y, z]]);
+  // 물·용암 근처를 고쳤으면 다시 흘려서 바뀐 칸까지 다시 그림 (같이 만들기도 각자 같은 계산)
+  rebuildBlocks(ED.world, [[x, y, z], ...SH.settleNear(m, x, y, z, b === 0 ? prev : b)]);
   if (!remote) coopSet(x, y, z, b);
   return true;
 }
@@ -2855,14 +2870,14 @@ function editorFrame(dt) {
   ED.y = clamp(ED.y, 1.5, m.H + 14);
   camera.position.set(ED.x, ED.y, ED.z); camera.rotation.set(ED.pitch, ED.yaw, 0); camera.fov = CFG.fov; camera.updateProjectionMatrix();
   const dx = -Math.sin(ED.yaw) * Math.cos(ED.pitch), dy = Math.sin(ED.pitch), dz = -Math.cos(ED.yaw) * Math.cos(ED.pitch);
-  ED.hit = SH.raycast(m, ED.x, ED.y, ED.z, dx, dy, dz, 12);
+  ED.hit = SH.raycast(m, ED.x, ED.y, ED.z, dx, dy, dz, 12, (b) => b !== 0 && !SH.isFlowing(b)); // 물·용암 원천은 겨눌 수 있음 (흐르는 물은 통과)
   if (ED.hit && (ED.hit.x < 0 || ED.hit.z < 0 || ED.hit.x >= m.W || ED.hit.z >= m.D)) ED.hit = null;
   ED.hl.visible = !!ED.hit;
   if (ED.hit) ED.hl.position.set(ED.hit.x + 0.5, ED.hit.y + 0.5, ED.hit.z + 0.5);
   if (ED.sky) { ED.sky.position.set(ED.x, 0, ED.z); ED.sky.userData.clouds.position.x = (performance.now() / 1000 * 1.5) % 250; }
   $('clickToPlay').classList.toggle('hidden', S.locked || ED.picker || !$('edShare').classList.contains('hidden'));
   $('edPos').textContent = `x${Math.floor(ED.x)} y${Math.floor(ED.y)} z${Math.floor(ED.z)}${ED.hit ? ' · ' + (BLOCK_NAMES[m.get(ED.hit.x, ED.hit.y, ED.hit.z)] || '') : ''}`;
-  coopTick(dt);
+  coopTick(dt); tickFluidTex(performance.now() / 1000); // 에디터에서도 물·용암 출렁임
   updateParticles(dt);
   renderer.clear();
   renderer.render(scene, camera);
@@ -3517,7 +3532,7 @@ function frame(dt) {
 function loop() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
-  tickSkins(now / 1000); tickAuras(dt);
+  tickSkins(now / 1000); tickAuras(dt); tickFluidTex(now / 1000);
   if (S.inGame) updateGimmicks(dt);
   frame(dt);
   requestAnimationFrame(loop);

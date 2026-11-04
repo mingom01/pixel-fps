@@ -1,6 +1,8 @@
 // 복셀 맵 → 메시 (면 컬링 + 정점 AO)
 import * as THREE from '../lib/three.module.min.js';
 import { FACES, GLOW, ATLAS_COLS, ATLAS_ROWS } from './tex.js';
+import { waterTex, lavaTex } from './blocks/fluids.js';
+const { FL_TYPE, FL_LVL, FLUID } = window.SH;
 
 // 면: 법선, 4개 정점(블록 내 좌표), uv 방향, 밝기
 const DIRS = [
@@ -16,17 +18,17 @@ const AO = [0.5, 0.68, 0.84, 1];
 function buildChunkGeom(map, X0, Z0) {
   const pos = [], uv = [], col = [], idx = [];
   const tw = 1 / ATLAS_COLS, th = 1 / ATLAS_ROWS, eps = 0.0008;
-  const S = (x, y, z) => map.get(x, y, z) !== 0 ? 1 : 0;
+  const S = (x, y, z) => map.solid(x, y, z) ? 1 : 0; // 물·용암은 그림자(AO) 안 만듦
   let vi = 0;
   for (let y = 0; y < map.H; y++) for (let z = Z0; z < Math.min(map.D, Z0 + CH); z++) for (let x = X0; x < Math.min(map.W, X0 + CH); x++) {
     const b = map.get(x, y, z);
-    if (!b) continue;
+    if (!b || FL_TYPE[b]) continue; // 물·용암은 buildFluidGeom 에서
     const fc = FACES[b] || FACES[3];
     const glow = GLOW.has(b);
     for (let di = 0; di < 6; di++) {
       const d = DIRS[di];
       const nx = x + d.n[0], ny = y + d.n[1], nz = z + d.n[2];
-      if (map.get(nx, ny, nz) !== 0) continue;
+      if (map.solid(nx, ny, nz)) continue; // 옆이 물·용암이면 이 면도 보여야 함
       if (ny < 0) continue;
       // 바깥 경계(맵 밖)를 향한 면은 생략
       if (nx < 0 || nz < 0 || nx >= map.W || nz >= map.D) continue;
@@ -64,12 +66,57 @@ function buildChunkGeom(map, X0, Z0) {
   return g;
 }
 
+// 물·용암 면 (t: 1 물, 2 용암). 높이: 원천 0.875, 흐름은 멀수록 낮게, 위에 같은 액체가 있으면 꽉 참
+function fluidHeight(map, x, y, z, t) {
+  const b = map.get(x, y, z); if (FL_TYPE[b] !== t) return 0;
+  if (FL_TYPE[map.get(x, y + 1, z)] === t) return 1;
+  const L = FL_LVL[b], max = FLUID[t].max;
+  return L === 0 || L === 8 ? 0.875 : (max + 1 - L) / (max + 1) * 0.875;
+}
+function buildFluidGeom(map, X0, Z0, t) {
+  const pos = [], uv = [], col = [], idx = [];
+  let vi = 0;
+  for (let y = 0; y < map.H; y++) for (let z = Z0; z < Math.min(map.D, Z0 + CH); z++) for (let x = X0; x < Math.min(map.W, X0 + CH); x++) {
+    if (FL_TYPE[map.get(x, y, z)] !== t) continue;
+    const h = fluidHeight(map, x, y, z, t);
+    for (let di = 0; di < 6; di++) {
+      const d = DIRS[di], nx = x + d.n[0], ny = y + d.n[1], nz = z + d.n[2];
+      if (map.solid(nx, ny, nz)) continue;
+      if (nx < 0 || nz < 0 || nx >= map.W || nz >= map.D) continue;
+      const same = FL_TYPE[map.get(nx, ny, nz)] === t;
+      let y0 = 0;
+      if (d.n[1] === 1) { if (same) continue; }
+      else if (d.n[1] === -1) { if (same) continue; }
+      else if (same) { y0 = fluidHeight(map, nx, ny, nz, t); if (y0 >= h) continue; } // 옆이 더 낮은 물이면 그 위만
+      const l = t === 2 ? 1.15 : d.s * 1.05;
+      for (let i = 0; i < 4; i++) {
+        const c = d.v[i], vy = d.n[1] ? c[1] * h : (c[1] ? h : y0);
+        pos.push(x + c[0], y + vy, z + c[2]);
+        uv.push(i === 1 || i === 2 ? 1 : 0, d.n[1] ? (i >= 2 ? 1 : 0) : vy);
+        col.push(l, l, l);
+      }
+      idx.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+      vi += 4;
+    }
+  }
+  if (!vi) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeBoundingSphere();
+  return g;
+}
+const WATER_MAT = new THREE.MeshBasicMaterial({ map: waterTex, vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide });
+const LAVA_MAT = new THREE.MeshBasicMaterial({ map: lavaTex, vertexColors: true });
+
 const CH = 16;
 // 청크(16x16 기둥) 단위 메시 그룹. 블록이 부서지면 해당 청크만 다시 만듦
 export function buildWorld(map, atlasTex) {
   const grp = new THREE.Group();
   const mat = new THREE.MeshBasicMaterial({ map: atlasTex, vertexColors: true });
-  grp.userData = { map, mat, chunks: new Map() };
+  grp.userData = { map, mat, chunks: new Map(), fluids: new Map() };
   for (let cz = 0; cz < map.D; cz += CH) for (let cx = 0; cx < map.W; cx += CH) setChunk(grp, cx, cz);
   return grp;
 }
@@ -79,6 +126,15 @@ function setChunk(grp, cx, cz) {
   const mesh = new THREE.Mesh(buildChunkGeom(u.map, cx, cz), u.mat);
   mesh.matrixAutoUpdate = false;
   u.chunks.set(k, mesh); grp.add(mesh);
+  // 물·용암 메시 (없으면 안 만듦)
+  for (const f of u.fluids.get(k) || []) { grp.remove(f); f.geometry.dispose(); }
+  const fl = [];
+  for (const [t, m] of [[1, WATER_MAT], [2, LAVA_MAT]]) {
+    const g = buildFluidGeom(u.map, cx, cz, t); if (!g) continue;
+    const fm = new THREE.Mesh(g, m); fm.matrixAutoUpdate = false; fm.renderOrder = t === 1 ? 2 : 0;
+    fl.push(fm); grp.add(fm);
+  }
+  u.fluids.set(k, fl);
 }
 // 바뀐 블록 목록 → 영향받는 청크(경계면이면 이웃까지) 재생성
 export function rebuildBlocks(grp, list) {
@@ -89,7 +145,7 @@ export function rebuildBlocks(grp, list) {
   }
   for (const k of set) { const [cx, cz] = k.split(",").map(Number); setChunk(grp, cx, cz); }
 }
-export function disposeWorld(grp) { for (const m of grp.userData.chunks.values()) m.geometry.dispose(); }
+export function disposeWorld(grp) { for (const m of grp.userData.chunks.values()) m.geometry.dispose(); for (const l of grp.userData.fluids.values()) for (const f of l) f.geometry.dispose(); }
 
 // 하늘: 그라데이션 돔 + 픽셀 구름 + 해
 export function buildSky(def) {
